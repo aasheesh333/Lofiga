@@ -2,7 +2,9 @@ name: Build App
 
 on:
   push:
+    branches: [ main ]
   pull_request:
+    branches: [ main ]
   workflow_dispatch:
 
 jobs:
@@ -10,7 +12,8 @@ jobs:
     name: Android Build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -23,6 +26,13 @@ jobs:
         with:
           distribution: 'zulu'
           java-version: '17'
+
+      - name: Setup Expo
+        uses: expo/expo-github-action@v8
+        with:
+          expo-version: latest
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
 
       - name: Install Dependencies
         run: npm ci
@@ -45,25 +55,37 @@ jobs:
             -Pandroid.injected.signing.key.alias=lofiga-release \
             -Pandroid.injected.signing.key.password=password123
 
-      - name: Upload Android Artifacts
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: android-release
-          path: |
-            android/app/build/outputs/apk/release/*.apk
-            android/app/build/outputs/bundle/release/*.aab
+          name: lofiga-release-apk
+          path: android/app/build/outputs/apk/release/app-release.apk
+
+      - name: Upload AAB
+        uses: actions/upload-artifact@v4
+        with:
+          name: lofiga-release-aab
+          path: android/app/build/outputs/bundle/release/app-release.aab
 
   ios:
     name: iOS Build
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: 'npm'
+
+      - name: Setup Expo
+        uses: expo/expo-github-action@v8
+        with:
+          expo-version: latest
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
 
       - name: Install Dependencies
         run: npm ci
@@ -83,18 +105,21 @@ jobs:
             -scheme Lofiga \
             -configuration Release \
             -sdk iphoneos \
-            -archivePath Lofiga.xcarchive \
-            archive \
+            -derivedDataPath build \
             CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_IDENTITY="" \
+            build
 
-          # Create IPA from Archive
-          mkdir Payload
-          cp -r Lofiga.xcarchive/Products/Applications/Lofiga.app Payload/
-          zip -r Lofiga.ipa Payload
+          # Create Payload directory and copy the .app
+          mkdir -p Payload
+          cp -r build/Build/Products/Release-iphoneos/Lofiga.app Payload/
+          
+          # Zip it into an IPA
+          zip -rk Lofiga.ipa Payload
 
-      - name: Upload iOS Artifacts
+      - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
-          name: ios-release
+          name: lofiga-release-ipa
           path: ios/Lofiga.ipa
