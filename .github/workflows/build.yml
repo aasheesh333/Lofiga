@@ -129,12 +129,23 @@ jobs:
       - name: Prebuild iOS
         run: npx expo prebuild --platform ios --no-install
 
+      - name: Cache Pods
+        uses: actions/cache@v3
+        with:
+          path: ios/Pods
+          key: ${{ runner.os }}-pods-${{ hashFiles('ios/Podfile.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-pods-
+
       - name: Install Pods
         run: |
           cd ios
-          pod install
+          pod install --repo-update
 
       - name: Build IPA (Unsigned)
+        env:
+          RCT_NO_LAUNCH_PACKAGER: 1
+          CI: 1
         run: |
           cd ios
           xcodebuild -workspace Lofiga.xcworkspace \
