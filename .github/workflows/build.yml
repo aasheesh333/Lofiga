@@ -43,15 +43,53 @@ jobs:
           keytool -genkeypair -v -keystore release.keystore -alias lofiga-release -keyalg RSA -keysize 2048 -validity 10000 -storepass password123 -keypass password123 -dname "CN=Lofiga, OU=Engineering, O=Bolt, L=SanFrancisco, S=CA, C=US"
           mv release.keystore android/app/
 
+      - name: Configure Android Signing
+        run: |
+          if [ -f "android/app/build.gradle" ]; then
+            echo "Appending to build.gradle"
+            cat <<EOF >> android/app/build.gradle
+          android {
+              signingConfigs {
+                  release {
+                      storeFile file('release.keystore')
+                      storePassword 'password123'
+                      keyAlias 'lofiga-release'
+                      keyPassword 'password123'
+                  }
+              }
+              buildTypes {
+                  release {
+                      signingConfig signingConfigs.release
+                  }
+              }
+          }
+          EOF
+          elif [ -f "android/app/build.gradle.kts" ]; then
+            echo "Appending to build.gradle.kts"
+            cat <<EOF >> android/app/build.gradle.kts
+          android {
+              signingConfigs {
+                  create("release") {
+                      storeFile = file("release.keystore")
+                      storePassword = "password123"
+                      keyAlias = "lofiga-release"
+                      keyPassword = "password123"
+                  }
+              }
+              buildTypes {
+                  getByName("release") {
+                      signingConfig = signingConfigs.getByName("release")
+                  }
+              }
+          }
+          EOF
+          fi
+
       - name: Build Android (APK & AAB)
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleRelease bundleRelease \
-            -Pandroid.injected.signing.store.file=release.keystore \
-            -Pandroid.injected.signing.store.password=password123 \
-            -Pandroid.injected.signing.key.alias=lofiga-release \
-            -Pandroid.injected.signing.key.password=password123
+          ./gradlew assembleRelease bundleRelease
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
