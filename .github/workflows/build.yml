@@ -33,7 +33,7 @@ jobs:
           token: ${{ secrets.EXPO_TOKEN }}
 
       - name: Install Dependencies
-        run: npm ci
+        run: npm install
 
       - name: Prebuild Android
         run: npx expo prebuild --platform android --no-install
@@ -90,7 +90,7 @@ jobs:
           token: ${{ secrets.EXPO_TOKEN }}
 
       - name: Install Dependencies
-        run: npm ci
+        run: npm install
 
       - name: Prebuild iOS
         run: npx expo prebuild --platform ios --no-install
