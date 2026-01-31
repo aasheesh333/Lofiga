@@ -41,49 +41,15 @@ jobs:
       - name: Generate Keystore
         run: |
           keytool -genkeypair -v -keystore release.keystore -alias lofiga-release -keyalg RSA -keysize 2048 -validity 10000 -storepass password123 -keypass password123 -dname "CN=Lofiga, OU=Engineering, O=Bolt, L=SanFrancisco, S=CA, C=US"
-          mv release.keystore android/app/
+          mkdir -p android/app
+          mv release.keystore android/app/release.keystore
 
-      - name: Configure Android Signing
+      - name: Configure Gradle Signing
         run: |
-          if [ -f "android/app/build.gradle" ]; then
-            echo "Appending to build.gradle"
-            cat <<EOF >> android/app/build.gradle
-          android {
-              signingConfigs {
-                  release {
-                      storeFile file('release.keystore')
-                      storePassword 'password123'
-                      keyAlias 'lofiga-release'
-                      keyPassword 'password123'
-                  }
-              }
-              buildTypes {
-                  release {
-                      signingConfig signingConfigs.release
-                  }
-              }
-          }
-          EOF
-          elif [ -f "android/app/build.gradle.kts" ]; then
-            echo "Appending to build.gradle.kts"
-            cat <<EOF >> android/app/build.gradle.kts
-          android {
-              signingConfigs {
-                  create("release") {
-                      storeFile = file("release.keystore")
-                      storePassword = "password123"
-                      keyAlias = "lofiga-release"
-                      keyPassword = "password123"
-                  }
-              }
-              buildTypes {
-                  getByName("release") {
-                      signingConfig = signingConfigs.getByName("release")
-                  }
-              }
-          }
-          EOF
-          fi
+          echo "android.injected.signing.store.file=release.keystore" >> android/gradle.properties
+          echo "android.injected.signing.store.password=password123" >> android/gradle.properties
+          echo "android.injected.signing.key.alias=lofiga-release" >> android/gradle.properties
+          echo "android.injected.signing.key.password=password123" >> android/gradle.properties
 
       - name: Build Android (APK & AAB)
         run: |
@@ -129,14 +95,6 @@ jobs:
       - name: Prebuild iOS
         run: npx expo prebuild --platform ios --no-install
 
-      - name: Cache Pods
-        uses: actions/cache@v3
-        with:
-          path: ios/Pods
-          key: ${{ runner.os }}-pods-${{ hashFiles('ios/Podfile.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-pods-
-
       - name: Install Pods
         run: |
           cd ios
@@ -152,15 +110,15 @@ jobs:
             -scheme Lofiga \
             -configuration Release \
             -sdk iphoneos \
-            -derivedDataPath build \
+            -archivePath Lofiga.xcarchive \
+            archive \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_IDENTITY="" \
-            build
+            CODE_SIGNING_IDENTITY=""
 
           # Create Payload directory and copy the .app
           mkdir -p Payload
-          cp -r build/Build/Products/Release-iphoneos/Lofiga.app Payload/
+          cp -r Lofiga.xcarchive/Products/Applications/Lofiga.app Payload/
 
           # Zip it into an IPA
           zip -rk Lofiga.ipa Payload
