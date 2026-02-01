@@ -6,65 +6,79 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
-    name: EAS Build (Android & iOS)
+  build-android:
+    name: Build Android APK & AAB
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+
     steps:
-      - name: Checkout
+      - name: Checkout Code
         uses: actions/checkout@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: "npm"
 
-      - name: Setup Expo and EAS
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: "zulu"
+          java-version: "17"
+
+      - name: Setup Expo
         uses: expo/expo-github-action@v8
         with:
           expo-version: latest
-          eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
 
       - name: Install Dependencies
-        run: npm install
+        run: npm ci --prefer-offline --no-audit
 
-      - name: Build Android APK with EAS
-        id: build-apk
-        run: |
-          echo "Starting Android APK build..."
-          eas build --platform android --profile preview --non-interactive --no-wait
-          echo "✅ Android APK build submitted to EAS"
-          echo "📱 Check build status at: https://expo.dev/accounts/$(eas whoami)/projects/lofiga/builds"
+      - name: Prebuild Android
+        run: npx expo prebuild --platform android --clean
 
-      - name: Build Android AAB with EAS
-        id: build-aab
+      - name: Setup Keystore
+        working-directory: android/app
         run: |
-          echo "Starting Android AAB build..."
-          eas build --platform android --profile production --non-interactive --no-wait
-          echo "✅ Android AAB build submitted to EAS"
+          keytool -genkeypair -v -keystore release.keystore \
+            -alias lofiga -keyalg RSA -keysize 2048 -validity 10000 \
+            -storepass lofiga2024 -keypass lofiga2024 \
+            -dname "CN=Lofiga,O=Lofiga,C=US"
 
-      - name: Build iOS IPA with EAS
-        id: build-ios
+      - name: Create gradle.properties
+        working-directory: android
         run: |
-          echo "Starting iOS build..."
-          eas build --platform ios --profile preview --non-interactive --no-wait  
-          echo "✅ iOS build submitted to EAS"
+          cat >> gradle.properties << 'EOF'
+          MYAPP_RELEASE_STORE_FILE=release.keystore
+          MYAPP_RELEASE_KEY_ALIAS=lofiga
+          MYAPP_RELEASE_STORE_PASSWORD=lofiga2024
+          MYAPP_RELEASE_KEY_PASSWORD=lofiga2024
+          org.gradle.jvmargs=-Xmx6144m -XX:MaxMetaspaceSize=512m -XX:+HeapDumpOnOutOfMemoryError
+          org.gradle.parallel=true
+          org.gradle.configureondemand=true
+          org.gradle.daemon=false
+          EOF
 
-      - name: Build Summary
+      - name: Build APK & AAB
+        working-directory: android
         run: |
-          echo "## 🎉 Builds Submitted Successfully!" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "All builds have been submitted to Expo EAS Build." >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 📥 Download Your Builds" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "1. Visit: https://expo.dev" >> $GITHUB_STEP_SUMMARY
-          echo "2. Sign in with your Expo account" >> $GITHUB_STEP_SUMMARY
-          echo "3. Navigate to the 'Lofiga' project" >> $GITHUB_STEP_SUMMARY
-          echo "4. Go to 'Builds' tab" >> $GITHUB_STEP_SUMMARY
-          echo "5. Download your APK, AAB, and IPA files" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### ⏱️ Build Times" >> $GITHUB_STEP_SUMMARY
-          echo "- Android builds: ~10-15 minutes" >> $GITHUB_STEP_SUMMARY
-          echo "- iOS builds: ~15-20 minutes" >> $GITHUB_STEP_SUMMARY
+          ./gradlew :app:assembleRelease :app:bundleRelease \
+            --no-daemon \
+            --max-workers 2 \
+            --build-cache \
+            -x lint -x lintVitalAnalyzeRelease -x lintVitalReportRelease \
+            -x lintRelease -x lintVitalRelease \
+            --stacktrace --info | tee build.log || (tail -100 build.log && exit 1)
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release-apk
+          path: android/app/build/outputs/apk/release/*.apk
+
+      - name: Upload AAB
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release-aab
+          path: android/app/build/outputs/bundle/release/*.aab
