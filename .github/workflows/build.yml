@@ -6,8 +6,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  android:
-    name: Android Build
+  build:
+    name: EAS Build (Android & iOS)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -19,13 +19,7 @@ jobs:
           node-version: 20
           cache: "npm"
 
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: "zulu"
-          java-version: "17"
-
-      - name: Setup Expo
+      - name: Setup Expo and EAS
         uses: expo/expo-github-action@v8
         with:
           expo-version: latest
@@ -35,105 +29,42 @@ jobs:
       - name: Install Dependencies
         run: npm install
 
-      - name: Prebuild Android
-        run: npx expo prebuild --platform android --no-install
-
-      - name: Generate Keystore
+      - name: Build Android APK with EAS
+        id: build-apk
         run: |
-          keytool -genkeypair -v -keystore release.keystore -alias lofiga-release -keyalg RSA -keysize 2048 -validity 10000 -storepass password123 -keypass password123 -dname "CN=Lofiga, OU=Engineering, O=Bolt, L=SanFrancisco, S=CA, C=US"
-          mkdir -p android/app
-          mv release.keystore android/app/release.keystore
+          echo "Starting Android APK build..."
+          eas build --platform android --profile preview --non-interactive --no-wait
+          echo "✅ Android APK build submitted to EAS"
+          echo "📱 Check build status at: https://expo.dev/accounts/$(eas whoami)/projects/lofiga/builds"
 
-      - name: Configure Gradle Signing
+      - name: Build Android AAB with EAS
+        id: build-aab
         run: |
-          echo "android.injected.signing.store.file=release.keystore" >> android/gradle.properties
-          echo "android.injected.signing.store.password=password123" >> android/gradle.properties
-          echo "android.injected.signing.key.alias=lofiga-release" >> android/gradle.properties
-          echo "android.injected.signing.key.password=password123" >> android/gradle.properties
+          echo "Starting Android AAB build..."
+          eas build --platform android --profile production --non-interactive --no-wait
+          echo "✅ Android AAB build submitted to EAS"
 
-      - name: Build Android (APK & AAB)
-        env:
-          GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4096m -Dorg.gradle.daemon=false"
+      - name: Build iOS IPA with EAS
+        id: build-ios
         run: |
-          cd android
-          chmod +x gradlew
-          ./gradlew assembleRelease bundleRelease \
-            --max-workers=2 \
-            --no-daemon \
-            --parallel \
-            --stacktrace \
-            -x lint \
-            -x lintVitalRelease \
-            -x test
+          echo "Starting iOS build..."
+          eas build --platform ios --profile preview --non-interactive --no-wait  
+          echo "✅ iOS build submitted to EAS"
 
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: lofiga-release-apk
-          path: android/app/build/outputs/apk/release/app-release.apk
-
-      - name: Upload AAB
-        uses: actions/upload-artifact@v4
-        with:
-          name: lofiga-release-aab
-          path: android/app/build/outputs/bundle/release/app-release.aab
-
-  ios:
-    name: iOS Build
-    runs-on: macos-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: "npm"
-
-      - name: Setup Expo
-        uses: expo/expo-github-action@v8
-        with:
-          expo-version: latest
-          eas-version: latest
-          token: ${{ secrets.EXPO_TOKEN }}
-
-      - name: Install Dependencies
-        run: npm install
-
-      - name: Prebuild iOS
-        run: npx expo prebuild --platform ios --no-install
-
-      - name: Install Pods
+      - name: Build Summary
         run: |
-          cd ios
-          pod install --repo-update
-
-      - name: Build IPA (Unsigned)
-        env:
-          RCT_NO_LAUNCH_PACKAGER: 1
-          CI: 1
-        run: |
-          cd ios
-          xcodebuild -workspace Lofiga.xcworkspace \
-            -scheme Lofiga \
-            -configuration Release \
-            -sdk iphoneos \
-            -archivePath Lofiga.xcarchive \
-            archive \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_IDENTITY=""
-
-          # Create Payload directory and copy the .app
-          mkdir -p Payload
-          cp -r Lofiga.xcarchive/Products/Applications/Lofiga.app Payload/
-
-          # Zip it into an IPA
-          zip -rk Lofiga.ipa Payload
-
-      - name: Upload IPA
-        uses: actions/upload-artifact@v4
-        with:
-          name: lofiga-release-ipa
-          path: ios/Lofiga.ipa
+          echo "## 🎉 Builds Submitted Successfully!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "All builds have been submitted to Expo EAS Build." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📥 Download Your Builds" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "1. Visit: https://expo.dev" >> $GITHUB_STEP_SUMMARY
+          echo "2. Sign in with your Expo account" >> $GITHUB_STEP_SUMMARY
+          echo "3. Navigate to the 'Lofiga' project" >> $GITHUB_STEP_SUMMARY
+          echo "4. Go to 'Builds' tab" >> $GITHUB_STEP_SUMMARY
+          echo "5. Download your APK, AAB, and IPA files" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### ⏱️ Build Times" >> $GITHUB_STEP_SUMMARY
+          echo "- Android builds: ~10-15 minutes" >> $GITHUB_STEP_SUMMARY
+          echo "- iOS builds: ~15-20 minutes" >> $GITHUB_STEP_SUMMARY
