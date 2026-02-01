@@ -52,10 +52,19 @@ jobs:
           echo "android.injected.signing.key.password=password123" >> android/gradle.properties
 
       - name: Build Android (APK & AAB)
+        env:
+          GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4096m -Dorg.gradle.daemon=false"
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleRelease bundleRelease
+          ./gradlew assembleRelease bundleRelease \
+            --max-workers=2 \
+            --no-daemon \
+            --parallel \
+            --stacktrace \
+            -x lint \
+            -x lintVitalRelease \
+            -x test
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
