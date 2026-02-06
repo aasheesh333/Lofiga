@@ -2,6 +2,8 @@ name: Build App
 
 on:
   push:
+    branches:
+      - '**'
   pull_request:
   workflow_dispatch:
 
@@ -45,6 +47,28 @@ jobs:
             -alias lofiga -keyalg RSA -keysize 2048 -validity 10000 \
             -storepass lofiga2024 -keypass lofiga2024 \
             -dname "CN=Lofiga,O=Lofiga,C=US"
+
+      - name: Configure Signing
+        working-directory: android/app
+        run: |
+          cat >> build.gradle << 'EOF'
+          
+          android {
+              signingConfigs {
+                  release {
+                      storeFile file('release.keystore')
+                      storePassword 'lofiga2024'
+                      keyAlias 'lofiga'
+                      keyPassword 'lofiga2024'
+                  }
+              }
+              buildTypes {
+                  release {
+                      signingConfig signingConfigs.release
+                  }
+              }
+          }
+          EOF
 
       - name: Create gradle.properties
         working-directory: android
