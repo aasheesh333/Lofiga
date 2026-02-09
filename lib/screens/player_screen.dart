@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'dart:math' as math;
+import 'package:lofiga/logic/audio_effects_manager.dart';
 
 class PlayerScreen extends StatefulWidget {
   final String filePath;
@@ -17,9 +18,12 @@ class PlayerScreen extends StatefulWidget {
   State<PlayerScreen> createState() => _PlayerScreenState();
 }
 
+
+
 class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderStateMixin {
   late AudioPlayer _audioPlayer;
   late AnimationController _rotationController;
+  late AudioEffectsManager _effectsManager; // Add Manager
   bool _isPlaying = false;
   Duration _duration = Duration.zero;
   Duration _position = Duration.zero;
@@ -28,6 +32,7 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
   void initState() {
     super.initState();
     _audioPlayer = AudioPlayer();
+    _effectsManager = AudioEffectsManager(_audioPlayer); // Initialize
     _rotationController = AnimationController(
       duration: const Duration(seconds: 10),
       vsync: this,
@@ -219,6 +224,23 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
                     ),
                   ),
 
+                  const SizedBox(height: 20),
+
+                  // Effects Selector
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        _buildEffectChip('Normal', AudioEffectPreset.normal),
+                        const SizedBox(width: 12),
+                        _buildEffectChip('Lofi Chill', AudioEffectPreset.lofi),
+                        const SizedBox(width: 12),
+                        _buildEffectChip('Nightcore', AudioEffectPreset.nightcore),
+                      ],
+                    ),
+                  ),
+
                   const SizedBox(height: 32),
 
                   // Progress Bar
@@ -318,6 +340,43 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildEffectChip(String label, AudioEffectPreset preset) {
+    bool isSelected = _effectsManager.currentPreset == preset;
+    return GestureDetector(
+      onTap: () async {
+        await _effectsManager.setPreset(preset);
+        setState(() {}); // Refresh UI to show selected state
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? Theme.of(context).primaryColor : Colors.white.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected ? Theme.of(context).primaryColor : Colors.white.withOpacity(0.2),
+          ),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: Theme.of(context).primaryColor.withOpacity(0.4),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  )
+                ]
+              : [],
+        ),
+        child: Text(
+          label,
+          style: GoogleFonts.splineSans(
+            color: isSelected ? Colors.white : Colors.white70,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+            fontSize: 12,
+          ),
+        ),
       ),
     );
   }
