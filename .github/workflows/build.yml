@@ -50,43 +50,52 @@ jobs:
       - name: Configure Android Signing
         working-directory: android/app
         run: |
-          if [ -f build.gradle.kts ]; then
-            cat >> build.gradle.kts << 'EOF'
-            android {
-                signingConfigs {
-                    create("release") {
-                        storeFile = file("../../release.keystore")
-                        storePassword = "lofiga2024"
-                        keyAlias = "lofiga"
-                        keyPassword = "lofiga2024"
-                    }
-                }
-                buildTypes {
-                    getByName("release") {
-                        signingConfig = signingConfigs.getByName("release")
-                    }
-                }
-            }
-            EOF
-          else
-            cat >> build.gradle << 'EOF'
-            android {
-                signingConfigs {
-                    release {
-                        storeFile file('../../release.keystore')
-                        storePassword 'lofiga2024'
-                        keyAlias 'lofiga'
-                        keyPassword 'lofiga2024'
-                    }
-                }
-                buildTypes {
-                    release {
-                        signingConfig signingConfigs.release
-                    }
-                }
-            }
-            EOF
-          fi
+          python3 -c "
+          import os
+          
+          kotlin_dsl = os.path.exists('build.gradle.kts')
+          filename = 'build.gradle.kts' if kotlin_dsl else 'build.gradle'
+          
+          content_kotlin = '''
+          android {
+              signingConfigs {
+                  create(\"release\") {
+                      storeFile = file(\"../../release.keystore\")
+                      storePassword = \"lofiga2024\"
+                      keyAlias = \"lofiga\"
+                      keyPassword = \"lofiga2024\"
+                  }
+              }
+              buildTypes {
+                  getByName(\"release\") {
+                      signingConfig = signingConfigs.getByName(\"release\")
+                  }
+              }
+          }
+          '''
+          
+          content_groovy = '''
+          android {
+              signingConfigs {
+                  release {
+                      storeFile file('../../release.keystore')
+                      storePassword 'lofiga2024'
+                      keyAlias 'lofiga'
+                      keyPassword 'lofiga2024'
+                  }
+              }
+              buildTypes {
+                  release {
+                      signingConfig signingConfigs.release
+                  }
+              }
+          }
+          '''
+          
+          with open(filename, 'a') as f:
+              f.write(content_kotlin if kotlin_dsl else content_groovy)
+          print(f'Appended signing config to {filename}')
+          "
 
       - name: Build APK (Demo Signed)
         run: flutter build apk --release
