@@ -1,4 +1,4 @@
-name: Build App
+name: Build Flutter App
 
 on:
   push:
@@ -8,19 +8,14 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-android:
-    name: Build Android APK & AAB
+  build:
+    name: Build All Platforms
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -28,27 +23,25 @@ jobs:
           distribution: "zulu"
           java-version: "17"
 
-      - name: Setup Expo
-        uses: expo/expo-github-action@v8
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
         with:
-          expo-version: latest
-          token: ${{ secrets.EXPO_TOKEN }}
+          flutter-version: '3.x'
+          channel: 'stable'
 
-      - name: Install Dependencies
-        run: npm ci --prefer-offline --no-audit
+      - name: Initialize Flutter Project
+        run: |
+          flutter create . --org com.lofiga
+          flutter pub get
 
-      - name: Prebuild Android
-        run: npx expo prebuild --platform android --clean
-
-      - name: Setup Keystore
-        working-directory: android/app
+      - name: Setup Keystore (Android)
         run: |
           keytool -genkeypair -v -keystore release.keystore \
             -alias lofiga -keyalg RSA -keysize 2048 -validity 10000 \
             -storepass lofiga2024 -keypass lofiga2024 \
             -dname "CN=Lofiga,O=Lofiga,C=US"
 
-      - name: Configure Signing
+      - name: Configure Android Signing
         working-directory: android/app
         run: |
           cat >> build.gradle << 'EOF'
@@ -56,7 +49,7 @@ jobs:
           android {
               signingConfigs {
                   release {
-                      storeFile file('release.keystore')
+                      storeFile file('../../release.keystore')
                       storePassword 'lofiga2024'
                       keyAlias 'lofiga'
                       keyPassword 'lofiga2024'
@@ -70,39 +63,62 @@ jobs:
           }
           EOF
 
-      - name: Create gradle.properties
-        working-directory: android
-        run: |
-          cat >> gradle.properties << 'EOF'
-          MYAPP_RELEASE_STORE_FILE=release.keystore
-          MYAPP_RELEASE_KEY_ALIAS=lofiga
-          MYAPP_RELEASE_STORE_PASSWORD=lofiga2024
-          MYAPP_RELEASE_KEY_PASSWORD=lofiga2024
-          org.gradle.jvmargs=-Xmx6144m -XX:MaxMetaspaceSize=512m -XX:+HeapDumpOnOutOfMemoryError
-          org.gradle.parallel=true
-          org.gradle.configureondemand=true
-          org.gradle.daemon=false
-          EOF
+      - name: Build APK (Demo Signed)
+        run: flutter build apk --release
 
-      - name: Build APK & AAB
-        working-directory: android
-        run: |
-          ./gradlew :app:assembleRelease :app:bundleRelease \
-            --no-daemon \
-            --max-workers 2 \
-            --build-cache \
-            -x lint -x lintVitalAnalyzeRelease -x lintVitalReportRelease \
-            -x lintRelease -x lintVitalRelease \
-            --stacktrace --info | tee build.log || (tail -100 build.log && exit 1)
+      - name: Build AAB (Signed)
+        run: flutter build appbundle --release
 
-      - name: Upload APK
+      - name: Upload Android Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: app-release-apk
-          path: android/app/build/outputs/apk/release/*.apk
+          name: android-builds
+          path: |
+            build/app/outputs/flutter-apk/*.apk
+            build/app/outputs/bundle/release/*.aab
 
-      - name: Upload AAB
+      - name: Build iOS (IPA - No CodeSign)
+        # Note: 'flutter build ios' requires MacOS. 
+        # Since we are on ubuntu-latest, we cannot build iOS app directly using xcodebuild.
+        # However, we can try to use 'flutter build ios --release --no-codesign' if tools allow, 
+        # BUT xcodebuild is not available on Linux.
+        # FIX: We must use a matrix or separate job for iOS if we want IPA. 
+        # For this single job on Linux, we can only build Android. 
+        # I will split the jobs.
+        run: echo "Skipping iOS on Linux runner"
+
+  build-ios:
+    name: Build iOS IPA
+    runs-on: macos-latest
+    timeout-minutes: 60
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.x'
+          channel: 'stable'
+
+      - name: Initialize Flutter Project
+        run: |
+          flutter create . --org com.lofiga
+          flutter pub get
+
+      - name: Build iOS (No Codesign)
+        run: |
+          flutter build ios --release --no-codesign
+
+      - name: Package IPA
+        run: |
+          mkdir Payload
+          mv build/ios/iphoneos/Runner.app Payload/
+          zip -r App.ipa Payload
+
+      - name: Upload iOS Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: app-release-aab
-          path: android/app/build/outputs/bundle/release/*.aab
+          name: ios-build
+          path: App.ipa
