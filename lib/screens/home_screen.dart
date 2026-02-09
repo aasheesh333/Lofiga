@@ -1,8 +1,35 @@
-import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:lofiga/screens/player_screen.dart';
+
+// ... (existing imports)
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
+
+  Future<void> _pickAudio(BuildContext context) async {
+    try {
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.audio,
+      );
+
+      if (result != null && result.files.single.path != null) {
+        String filePath = result.files.single.path!;
+        String fileName = result.files.single.name;
+        
+        if (context.mounted) {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) => PlayerScreen(filePath: filePath, fileName: fileName),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error picking file: $e')),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -19,7 +46,6 @@ class HomeScreen extends StatelessWidget {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: Theme.of(context).primaryColor.withOpacity(0.2),
-                // blur applied usually via BackdropFilter or just opacity
               ),
             ),
           ),
@@ -70,47 +96,50 @@ class HomeScreen extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     children: [
                        // Select Song Card
-                       Container(
-                         height: 200,
-                         decoration: BoxDecoration(
-                           borderRadius: BorderRadius.circular(16),
-                           color: const Color(0xFF231B2E).withOpacity(0.6),
-                           border: Border.all(color: Theme.of(context).primaryColor.withOpacity(0.3)),
-                           boxShadow: [
-                             BoxShadow(
-                               color: Theme.of(context).primaryColor.withOpacity(0.1),
-                               blurRadius: 20,
-                               spreadRadius: -5,
-                             )
-                           ],
-                         ),
-                         child: Center(
-                           child: Column(
-                             mainAxisAlignment: MainAxisAlignment.center,
-                             children: [
-                               Container(
-                                 width: 80,
-                                 height: 80,
-                                 decoration: BoxDecoration(
-                                   color: Theme.of(context).primaryColor,
-                                   shape: BoxShape.circle,
-                                   boxShadow: [
-                                     BoxShadow(color: Theme.of(context).primaryColor.withOpacity(0.4), blurRadius: 10),
-                                   ],
-                                 ),
-                                 child: const Icon(Icons.add, size: 40, color: Colors.white),
-                               ),
-                               const SizedBox(height: 16),
-                               const Text(
-                                 'Select Song',
-                                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                               ),
-                               const SizedBox(height: 8),
-                               Text(
-                                 'Tap to import audio file (MP3, WAV)',
-                                 style: TextStyle(color: Colors.grey[400], fontSize: 12),
-                               ),
+                       GestureDetector(
+                         onTap: () => _pickAudio(context),
+                         child: Container(
+                           height: 200,
+                           decoration: BoxDecoration(
+                             borderRadius: BorderRadius.circular(16),
+                             color: const Color(0xFF231B2E).withOpacity(0.6),
+                             border: Border.all(color: Theme.of(context).primaryColor.withOpacity(0.3)),
+                             boxShadow: [
+                               BoxShadow(
+                                 color: Theme.of(context).primaryColor.withOpacity(0.1),
+                                 blurRadius: 20,
+                                 spreadRadius: -5,
+                               )
                              ],
+                           ),
+                           child: Center(
+                             child: Column(
+                               mainAxisAlignment: MainAxisAlignment.center,
+                               children: [
+                                 Container(
+                                   width: 80,
+                                   height: 80,
+                                   decoration: BoxDecoration(
+                                     color: Theme.of(context).primaryColor,
+                                     shape: BoxShape.circle,
+                                     boxShadow: [
+                                       BoxShadow(color: Theme.of(context).primaryColor.withOpacity(0.4), blurRadius: 10),
+                                     ],
+                                   ),
+                                   child: const Icon(Icons.add, size: 40, color: Colors.white),
+                                 ),
+                                 const SizedBox(height: 16),
+                                 const Text(
+                                   'Select Song',
+                                   style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                                 ),
+                                 const SizedBox(height: 8),
+                                 Text(
+                                   'Tap to import audio file (MP3, WAV)',
+                                   style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                                 ),
+                               ],
+                             ),
                            ),
                          ),
                        ),
