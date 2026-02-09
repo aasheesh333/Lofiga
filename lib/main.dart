@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:lofiga/theme/app_theme.dart';
+import 'package:lofiga/logic/player_manager.dart';
 import 'package:lofiga/screens/splash_screen.dart';
 import 'package:lofiga/screens/home_screen.dart';
 
@@ -12,14 +14,17 @@ class LofigaApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Lofiga',
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.darkTheme,
-      home: const SplashScreen(),
-      routes: {
-        '/home': (context) => const HomeScreen(),
-      },
+    return ChangeNotifierProvider(
+      create: (context) => PlayerManager(),
+      child: MaterialApp(
+        title: 'Lofiga',
+        debugShowCheckedModeBanner: false,
+        theme: AppTheme.darkTheme,
+        home: const SplashScreen(),
+        routes: {
+          '/home': (context) => const HomeScreen(),
+        },
+      ),
     );
   }
 }

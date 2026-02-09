@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:lofiga/screens/player_screen.dart';
+import 'package:provider/provider.dart';
+import 'package:lofiga/logic/player_manager.dart';
+import 'package:lofiga/widgets/mini_player_bar.dart';
 import 'package:lofiga/screens/editor_screen.dart';
 import 'package:lofiga/screens/library_screen.dart';
 import 'package:lofiga/screens/settings_screen.dart';
@@ -67,10 +69,18 @@ class _HomeScreenState extends State<HomeScreen> {
            // Screen Content
            screens[_currentIndex],
 
-           // Custom Bottom Navigation Bar
-           Align(
-             alignment: Alignment.bottomCenter,
-             child: _buildGlassBottomNav(),
+           // Mini-Player Bar (Bottom)
+           Positioned(
+             left: 0,
+             right: 0,
+             bottom: 0,
+             child: Column(
+               mainAxisSize: MainAxisSize.min,
+               children: [
+                 const MiniPlayerBar(),
+                 _buildGlassBottomNav(),
+               ],
+             ),
            ),
         ],
       ),
@@ -341,13 +351,11 @@ class _HomeScreenState extends State<HomeScreen> {
           String filePath = result.files.single.path!;
           String fileName = result.files.single.name;
           
-          if (context.mounted) {
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (context) => PlayerScreen(filePath: filePath, fileName: fileName),
-              ),
-            );
-          }
+          // Load track into PlayerManager
+          final playerManager = Provider.of<PlayerManager>(context, listen: false);
+          await playerManager.loadTrack(filePath, fileName);
+          
+          // Mini-player will appear automatically
         } else {
           if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
