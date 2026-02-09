@@ -59,16 +59,17 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
           
           // Ambient Glow
           Center(
-            child: Container(
-              width: 600,
-              height: 600,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: const Color(0xFF993DF5).withOpacity(0.2),
+            child: Transform(
+              transform: Matrix4.identity(), 
+              child: Container(
+                width: 600,
+                height: 600,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: const Color(0xFF993DF5).withOpacity(0.2),
+                ),
               ),
-            // Note: Flutter doesn't have CSS blur directly on container like this easily without BackdropFilter or ImageFilter
-            // using a simple radial gradient approximation for glow
-            ).transform(Matrix4.identity()), 
+            ), 
           ),
           
           Center(
