@@ -47,15 +47,31 @@ jobs:
       - name: Check Flutter Setup
         run: flutter doctor -v
 
-      - name: Configure Android Signing
+      - name: Configure Android Signing & SDK Versions
         working-directory: android/app
         run: |
           python3 -c "
           import os
+          import re
           
           kotlin_dsl = os.path.exists('build.gradle.kts')
           filename = 'build.gradle.kts' if kotlin_dsl else 'build.gradle'
           
+          # Read file
+          with open(filename, 'r') as f:
+              content = f.read()
+          
+          # Update SDK versions (Force compileSdk 34, minSdk 23 for safe Audio/File support)
+          if kotlin_dsl:
+              content = re.sub(r'compileSdk\s*=\s*flutter.compileSdkVersion', 'compileSdk = 34', content)
+              content = re.sub(r'minSdk\s*=\s*flutter.minSdkVersion', 'minSdk = 23', content)
+              content = re.sub(r'targetSdk\s*=\s*flutter.targetSdkVersion', 'targetSdk = 34', content)
+          else:
+              content = re.sub(r'compileSdkVersion\s*flutter.compileSdkVersion', 'compileSdkVersion 34', content)
+              content = re.sub(r'minSdkVersion\s*flutter.minSdkVersion', 'minSdkVersion 23', content)
+              content = re.sub(r'targetSdkVersion\s*flutter.targetSdkVersion', 'targetSdkVersion 34', content)
+          
+          # Append Signing Config
           content_kotlin = '''
           android {
               signingConfigs {
@@ -92,9 +108,12 @@ jobs:
           }
           '''
           
-          with open(filename, 'a') as f:
-              f.write(content_kotlin if kotlin_dsl else content_groovy)
-          print(f'Appended signing config to {filename}')
+          content += (content_kotlin if kotlin_dsl else content_groovy)
+          
+          # Write back
+          with open(filename, 'w') as f:
+              f.write(content)
+          print(f'Updated SDK versions and appended signing config to {filename}')
           "
 
       - name: Build APK (Demo Signed)
