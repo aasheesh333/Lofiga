@@ -3,6 +3,8 @@ import 'package:just_audio/just_audio.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'dart:math' as math;
 import 'package:lofiga/logic/audio_effects_manager.dart';
+import 'package:lofiga/screens/export_screen.dart';
+import 'dart:ui'; // For BackdropFilter
 
 class PlayerScreen extends StatefulWidget {
   final String filePath;
@@ -18,12 +20,9 @@ class PlayerScreen extends StatefulWidget {
   State<PlayerScreen> createState() => _PlayerScreenState();
 }
 
-
-
 class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderStateMixin {
   late AudioPlayer _audioPlayer;
-  late AnimationController _rotationController;
-  late AudioEffectsManager _effectsManager; // Add Manager
+  late AudioEffectsManager _effectsManager;
   bool _isPlaying = false;
   Duration _duration = Duration.zero;
   Duration _position = Duration.zero;
@@ -32,12 +31,7 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
   void initState() {
     super.initState();
     _audioPlayer = AudioPlayer();
-    _effectsManager = AudioEffectsManager(_audioPlayer); // Initialize
-    _rotationController = AnimationController(
-      duration: const Duration(seconds: 10),
-      vsync: this,
-    );
-    
+    _effectsManager = AudioEffectsManager(_audioPlayer);
     _initAudio();
   }
 
@@ -50,11 +44,6 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
         if (mounted) {
           setState(() {
             _isPlaying = state.playing;
-            if (_isPlaying) {
-              _rotationController.repeat();
-            } else {
-              _rotationController.stop();
-            }
           });
         }
       });
@@ -81,7 +70,6 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
   @override
   void dispose() {
     _audioPlayer.dispose();
-    _rotationController.dispose();
     super.dispose();
   }
 
@@ -95,289 +83,373 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      extendBodyBehindAppBar: true,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.keyboard_arrow_down, color: Colors.white, size: 32),
-          onPressed: () => Navigator.pop(context),
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.more_vert, color: Colors.white),
-            onPressed: () {},
-          ),
-        ],
-      ),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Stack(
         children: [
-          // Background
-          Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Color(0xFF191022),
-                  Color(0xFF2E1065),
-                ],
+          // Ambient Background Glows
+          Positioned(
+            top: -100,
+            left: -50,
+            child: Container(
+              width: 350,
+              height: 350,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Theme.of(context).primaryColor.withOpacity(0.15),
+                backgroundBlendMode: BlendMode.screen,
               ),
             ),
           ),
-          
-          // Background Glow
           Positioned(
-            top: MediaQuery.of(context).size.height * 0.2,
-            left: MediaQuery.of(context).size.width * 0.1,
+            bottom: 100,
+            right: -100,
             child: Container(
               width: 300,
               height: 300,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: Theme.of(context).primaryColor.withOpacity(0.15),
+                color: Theme.of(context).colorScheme.secondary.withOpacity(0.1),
+                backgroundBlendMode: BlendMode.screen,
               ),
             ),
           ),
+          // Blur the glows
+          BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 80, sigmaY: 80),
+            child: Container(color: Colors.transparent),
+          ),
 
           SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24.0),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const SizedBox(height: 20),
-                  
-                  // Vinyl Art
-                  AnimatedBuilder(
-                    animation: _rotationController,
-                    builder: (_, child) {
-                      return Transform.rotate(
-                        angle: _rotationController.value * 2 * math.pi,
-                        child: child,
-                      );
-                    },
-                    child: Container(
-                      width: 280,
-                      height: 280,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: const Color(0xFF121212),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.5),
-                            blurRadius: 20,
-                            spreadRadius: 5,
-                          ),
-                        ],
-                        border: Border.all(color: Colors.white.withOpacity(0.1), width: 2),
-                      ),
-                      child: Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          Container(
-                            width: 100,
-                            height: 100,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              gradient: LinearGradient(
-                                colors: [
-                                  Theme.of(context).primaryColor,
-                                  Colors.purple.shade900
-                                ],
-                              ),
-                            ),
-                          ),
-                          Container(
-                            width: 15,
-                            height: 15,
-                            decoration: const BoxDecoration(
-                              color: Color(0xFF121212),
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 48),
-
-                  // Title functionality
-                  Text(
-                    widget.fileName,
-                    textAlign: TextAlign.center,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.splineSans(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Lofi Mix',
-                    style: GoogleFonts.splineSans(
-                      fontSize: 16,
-                      color: Colors.white60,
-                    ),
-                  ),
-
-                  const SizedBox(height: 20),
-
-                  // Effects Selector
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        _buildEffectChip('Normal', AudioEffectPreset.normal),
-                        const SizedBox(width: 12),
-                        _buildEffectChip('Lofi Chill', AudioEffectPreset.lofi),
-                        const SizedBox(width: 12),
-                        _buildEffectChip('Nightcore', AudioEffectPreset.nightcore),
-                      ],
-                    ),
-                  ),
-
-                  const SizedBox(height: 32),
-
-                  // Progress Bar
-                  Column(
+            child: Column(
+              children: [
+                // Top Navigation
+                Padding(
+                  padding: const EdgeInsets.all(24.0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      SliderTheme(
-                        data: SliderTheme.of(context).copyWith(
-                          activeTrackColor: Theme.of(context).primaryColor,
-                          inactiveTrackColor: Colors.white10,
-                          thumbColor: Colors.white,
-                          trackHeight: 2,
-                          thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-                          overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+                       Container(
+                        width: 40, height: 40,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.05),
+                          shape: BoxShape.circle,
                         ),
-                        child: Slider(
-                          min: 0,
-                          max: _duration.inSeconds.toDouble(),
-                          value: _position.inSeconds.toDouble().clamp(0, _duration.inSeconds.toDouble()),
-                          onChanged: (value) async {
-                            final position = Duration(seconds: value.toInt());
-                            await _audioPlayer.seek(position);
+                        child: IconButton(
+                          icon: const Icon(Icons.keyboard_arrow_down, color: Colors.white),
+                          onPressed: () => Navigator.pop(context),
+                        ),
+                      ),
+                      Text(
+                        'NOW PLAYING',
+                        style: GoogleFonts.splineSans(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 2,
+                          color: Colors.white70,
+                        ),
+                      ),
+                       Container(
+                        width: 40, height: 40,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.05),
+                          shape: BoxShape.circle,
+                        ),
+                        child: IconButton(
+                          icon: const Icon(Icons.ios_share, color: Colors.white, size: 20),
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (context) => ExportScreen(fileName: widget.fileName)),
+                            );
                           },
                         ),
                       ),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(_formatDuration(_position), style: const TextStyle(fontSize: 12, color: Colors.white54)),
-                            Text(_formatDuration(_duration), style: const TextStyle(fontSize: 12, color: Colors.white54)),
-                          ],
+                    ],
+                  ),
+                ),
+
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      // Album Art Container with Glow
+                      Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          // Glow behind
+                          Container(
+                            width: 280,
+                            height: 280,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Theme.of(context).primaryColor.withOpacity(0.4),
+                            ),
+                          ).animate().pulse(duration: const Duration(seconds: 3)), // Needs flutter_animate or custom animation, using simple container for now with manual blur in stack
+                          
+                          // Actual Art
+                          Container(
+                            width: 300,
+                            height: 300,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(40),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Theme.of(context).primaryColor.withOpacity(0.3),
+                                  blurRadius: 30,
+                                  spreadRadius: 0,
+                                ),
+                              ],
+                              gradient: LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: [
+                                  Colors.purple.shade800,
+                                  Colors.blue.shade900,
+                                ],
+                              ),
+                            ),
+                            child: const Icon(Icons.music_note, size: 120, color: Colors.white24),
+                          ),
+                        ],
+                      ),
+                      
+                      const SizedBox(height: 48),
+
+                      // Track Info
+                      Text(
+                        widget.fileName,
+                        textAlign: TextAlign.center,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.splineSans(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.white12),
+                        ),
+                        child: Text(
+                          'LOFI REMIX',
+                          style: GoogleFonts.splineSans(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1.5,
+                            color: Colors.white70,
+                          ),
+                        ),
+                      ),
+                      
+                      const SizedBox(height: 32),
+
+                      // Waveform Visualizer (Static SVG representation for now using CustomPaint)
+                      SizedBox(
+                        height: 60,
+                        width: double.infinity,
+                        child: CustomPaint(
+                          painter: WaveformPainter(color: Theme.of(context).primaryColor),
                         ),
                       ),
                     ],
                   ),
+                ),
 
-                  const SizedBox(height: 24),
-
-                  // Controls
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                // Controls Footer
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 40),
+                  child: Column(
                     children: [
-                      IconButton(
-                        icon: const Icon(Icons.shuffle, color: Colors.white54, size: 28),
-                        onPressed: () {},
+                      // Progress Bar
+                      Column(
+                        children: [
+                          SliderTheme(
+                            data: SliderTheme.of(context).copyWith(
+                              activeTrackColor: Theme.of(context).colorScheme.secondary, // Cyan
+                              inactiveTrackColor: Colors.white10,
+                              thumbColor: Colors.white,
+                              trackHeight: 4,
+                              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                              overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+                            ),
+                            child: Slider(
+                              min: 0,
+                              max: _duration.inSeconds.toDouble(),
+                              value: _position.inSeconds.toDouble().clamp(0, _duration.inSeconds.toDouble()),
+                              onChanged: (value) async {
+                                final position = Duration(seconds: value.toInt());
+                                await _audioPlayer.seek(position);
+                              },
+                            ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(_formatDuration(_position), style: GoogleFonts.splineSans(fontSize: 12, color: Colors.white38)),
+                                Text(_formatDuration(_duration), style: GoogleFonts.splineSans(fontSize: 12, color: Colors.white38)),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.skip_previous, color: Colors.white, size: 36),
-                        onPressed: () {},
-                      ),
-                      
-                      // Play/Pause Button
-                      GestureDetector(
-                        onTap: () {
-                          if (_isPlaying) {
-                            _audioPlayer.pause();
-                          } else {
-                            _audioPlayer.play();
-                          }
-                        },
-                        child: Container(
-                          width: 80,
-                          height: 80,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: Theme.of(context).primaryColor,
-                            boxShadow: [
-                              BoxShadow(
-                                color: Theme.of(context).primaryColor.withOpacity(0.4),
-                                blurRadius: 20,
+
+                      const SizedBox(height: 32),
+
+                      // Playback Controls
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.shuffle, color: Colors.white38),
+                            onPressed: () {},
+                          ),
+                          Row(
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.skip_previous, color: Colors.white, size: 32),
+                                onPressed: () {},
+                              ),
+                              const SizedBox(width: 24),
+                              GestureDetector(
+                                onTap: () {
+                                  if (_isPlaying) {
+                                    _audioPlayer.pause();
+                                  } else {
+                                    _audioPlayer.play();
+                                  }
+                                },
+                                child: Container(
+                                  width: 72,
+                                  height: 72,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: Theme.of(context).primaryColor,
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Theme.of(context).primaryColor.withOpacity(0.5),
+                                        blurRadius: 20,
+                                        spreadRadius: 2,
+                                      ),
+                                    ],
+                                  ),
+                                  child: Icon(
+                                    _isPlaying ? Icons.pause : Icons.play_arrow,
+                                    color: Colors.white,
+                                    size: 32,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 24),
+                              IconButton(
+                                icon: const Icon(Icons.skip_next, color: Colors.white, size: 32),
+                                onPressed: () {},
                               ),
                             ],
                           ),
-                          child: Icon(
-                            _isPlaying ? Icons.pause : Icons.play_arrow,
-                            color: Colors.white,
-                            size: 40,
+                          IconButton(
+                            icon: const Icon(Icons.repeat, color: Colors.white38),
+                            onPressed: () {},
+                          ),
+                        ],
+                      ),
+                      
+                      const SizedBox(height: 16),
+                      
+                      // Effects Chip (Navigates to Editor or just toggles preset)
+                      // For now, let's keep it simple as a preset toggle or indicator
+                      GestureDetector(
+                        onTap: () {
+                           // Cycle presets logic could go here or navigate to Editor
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.05),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: Colors.white10),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.tune, size: 16, color: Theme.of(context).primaryColor),
+                              const SizedBox(width: 8),
+                              Text(
+                                _effectsManager.currentPreset.toString().split('.').last.toUpperCase(), // Display current preset
+                                style: GoogleFonts.splineSans(fontSize: 10, color: Colors.white70, fontWeight: FontWeight.bold),
+                              ),
+                            ],
                           ),
                         ),
                       ),
-                      
-                      IconButton(
-                        icon: const Icon(Icons.skip_next, color: Colors.white, size: 36),
-                        onPressed: () {},
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.repeat, color: Colors.white54, size: 28),
-                        onPressed: () {},
-                      ),
                     ],
                   ),
-                  
-                  const SizedBox(height: 20),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ],
       ),
     );
   }
+}
 
-  Widget _buildEffectChip(String label, AudioEffectPreset preset) {
-    bool isSelected = _effectsManager.currentPreset == preset;
-    return GestureDetector(
-      onTap: () async {
-        await _effectsManager.setPreset(preset);
-        setState(() {}); // Refresh UI to show selected state
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: BoxDecoration(
-          color: isSelected ? Theme.of(context).primaryColor : Colors.white.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: isSelected ? Theme.of(context).primaryColor : Colors.white.withOpacity(0.2),
-          ),
-          boxShadow: isSelected
-              ? [
-                  BoxShadow(
-                    color: Theme.of(context).primaryColor.withOpacity(0.4),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  )
-                ]
-              : [],
-        ),
-        child: Text(
-          label,
-          style: GoogleFonts.splineSans(
-            color: isSelected ? Colors.white : Colors.white70,
-            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-            fontSize: 12,
-          ),
-        ),
-      ),
-    );
+// Simple Painter to draw a waveform curve
+class WaveformPainter extends CustomPainter {
+  final Color color;
+  WaveformPainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 3
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+
+    final path = Path();
+    final width = size.width;
+    final height = size.height;
+
+    // Simulate a waveform curve
+    path.moveTo(0, height * 0.5);
+    path.quadraticBezierTo(width * 0.1, height * 0.2, width * 0.2, height * 0.5);
+    path.quadraticBezierTo(width * 0.3, height * 0.8, width * 0.4, height * 0.5);
+    path.quadraticBezierTo(width * 0.5, height * 0.2, width * 0.6, height * 0.5);
+    path.quadraticBezierTo(width * 0.7, height * 0.9, width * 0.8, height * 0.5);
+    path.quadraticBezierTo(width * 0.9, height * 0.3, width, height * 0.5);
+
+    // Draw main line
+    canvas.drawPath(path, paint);
+    
+    // Draw shadow/reflection line
+    final shadowPaint = Paint()
+      ..color = color.withOpacity(0.3)
+      ..strokeWidth = 2
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+      
+    final shadowPath = Path(); // Inverted curve slightly offset
+    shadowPath.moveTo(0, height * 0.5);
+    shadowPath.quadraticBezierTo(width * 0.1, height * 0.8, width * 0.2, height * 0.5);
+    shadowPath.quadraticBezierTo(width * 0.3, height * 0.2, width * 0.4, height * 0.5);
+    // ... simplified reflection
+    
+    // canvas.drawPath(shadowPath, shadowPaint); // Optional
   }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+// Extension to simulate animate().pulse() if flutter_animate not available
+extension WidgetAnimation on Widget {
+  Widget animate() => this; // Placeholder if package missing, logically would need StatefulWidget wrapper or package
+  Widget pulse({required Duration duration}) => this;
 }

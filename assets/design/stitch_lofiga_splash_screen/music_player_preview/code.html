@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Music Player Preview</title>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Fonts -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Spline+Sans:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Theme Configuration -->
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "primary": "#993df5",
+              "accent-cyan": "#3df5e6",
+              "background-light": "#f7f5f8",
+              "background-dark": "#191022",
+            },
+            fontFamily: {
+              "display": ["Spline Sans", "sans-serif"]
+            },
+            borderRadius: {
+              "DEFAULT": "0.25rem", 
+              "lg": "0.5rem", 
+              "xl": "0.75rem", 
+              "2xl": "1rem",
+              "3xl": "1.5rem",
+              "full": "9999px"
+            },
+            boxShadow: {
+                'neon': '0 0 20px -5px rgba(153, 61, 245, 0.6)',
+                'neon-strong': '0 0 30px rgba(153, 61, 245, 0.8)',
+                'cyan-glow': '0 0 10px rgba(61, 245, 230, 0.5)',
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .scrollbar-hide::-webkit-scrollbar {
+            display: none;
+        }
+        /* Custom animation for the waveform to make it feel alive */
+        @keyframes breath {
+            0%, 100% { filter: drop-shadow(0 0 2px #993df5); opacity: 0.8; }
+            50% { filter: drop-shadow(0 0 8px #993df5); opacity: 1; }
+        }
+        .waveform-anim {
+            animation: breath 3s ease-in-out infinite;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display h-screen w-full flex flex-col overflow-hidden text-white selection:bg-primary selection:text-white">
+<!-- Top Navigation -->
+<header class="flex items-center justify-between p-6 z-20">
+<button class="flex items-center justify-center w-10 h-10 rounded-full bg-white/5 hover:bg-white/10 transition-colors backdrop-blur-sm">
+<span class="material-symbols-outlined text-white text-xl">arrow_back</span>
+</button>
+<h2 class="text-sm font-semibold tracking-widest uppercase text-white/70">Now Playing</h2>
+<button class="flex items-center justify-center w-10 h-10 rounded-full bg-white/5 hover:bg-white/10 transition-colors backdrop-blur-sm text-primary">
+<span class="material-symbols-outlined text-xl">ios_share</span>
+</button>
+</header>
+<!-- Main Content -->
+<main class="flex-1 flex flex-col items-center justify-center w-full px-6 relative z-10 pb-8">
+<!-- Album Art Container -->
+<div class="relative w-full max-w-[320px] aspect-square mb-10 group perspective-1000">
+<!-- Ambient Glow Behind -->
+<div class="absolute inset-4 bg-primary rounded-full blur-[60px] opacity-40 animate-pulse"></div>
+<!-- Album Image -->
+<div class="relative w-full h-full rounded-[2.5rem] overflow-hidden shadow-2xl border border-white/10 transform transition-transform duration-500 hover:scale-[1.02]">
+<div class="w-full h-full bg-cover bg-center" data-alt="Lofi anime aesthetic illustration of a rainy window at night with purple lighting" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuCImPsmYjueoRfs78bGbUc_2EmrB_ADnceZuZs7zxj-F7BISSvVeHmz3mpfIoT6uTHXf3trm-NYyz_EBOahN4vqMf9R7OodLOoX2RL7CzPnDmhVhBUHG8ckME62TPFyZrIzDpM9kTRm3shcLT96Uq6Nwg2UE3tYpqvtFg-o4RsjZgdaMKtE9ZYFPh8UaKj-aoQ8iflpDNOMMar4GsMkw1AzvcZia0aRkxI5UWbi7enV-HOV--yViZk9BJ_PC7Yz2HMZMsLgvOaOmOY');">
+</div>
+<!-- Glass Reflection Overlay -->
+<div class="absolute inset-0 bg-gradient-to-tr from-white/10 to-transparent opacity-50 pointer-events-none"></div>
+</div>
+</div>
+<!-- Track Typography -->
+<div class="text-center w-full max-w-sm mb-6">
+<div class="flex items-center justify-center gap-2 mb-2">
+<h1 class="text-2xl md:text-3xl font-bold tracking-tight text-white truncate">Study Session_01.mp3</h1>
+<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-white/10 text-white/70 border border-white/5 uppercase tracking-wider">LOFI</span>
+</div>
+<p class="text-white/50 text-base md:text-lg font-normal">Original Artist (Lofi Remix)</p>
+</div>
+<!-- Waveform Visualizer -->
+<!-- Modified Charts Component -->
+<div class="w-full max-w-xs h-16 flex items-center justify-center mb-4">
+<svg class="waveform-anim w-full h-full overflow-visible" preserveaspectratio="none" viewbox="0 0 300 60">
+<!-- Glowing Path -->
+<defs>
+<lineargradient id="waveGradient" x1="0%" x2="100%" y1="0%" y2="0%">
+<stop offset="0%" style="stop-color:#993df5;stop-opacity:0.2"></stop>
+<stop offset="50%" style="stop-color:#993df5;stop-opacity:1"></stop>
+<stop offset="100%" style="stop-color:#993df5;stop-opacity:0.2"></stop>
+</lineargradient>
+</defs>
+<!-- Line -->
+<path d="M0 30 Q 15 30, 30 30 T 60 20 T 90 40 T 120 10 T 150 50 T 180 25 T 210 35 T 240 30 T 270 30 T 300 30" fill="none" stroke="url(#waveGradient)" stroke-linecap="round" stroke-linejoin="round" stroke-width="3"></path>
+<!-- Mirror Reflection for depth -->
+<path d="M0 30 Q 15 30, 30 30 T 60 40 T 90 20 T 120 50 T 150 10 T 180 35 T 210 25 T 240 30 T 270 30 T 300 30" fill="none" stroke="#993df5" stroke-linecap="round" stroke-opacity="0.3" stroke-width="2"></path>
+</svg>
+</div>
+</main>
+<!-- Glassmorphic Controls Footer -->
+<footer class="w-full relative z-20">
+<!-- Background Blur Container -->
+<div class="absolute inset-0 bg-gradient-to-b from-transparent to-background-dark/90 pointer-events-none"></div>
+<div class="relative px-8 pb-10 pt-2 w-full max-w-md mx-auto flex flex-col gap-6">
+<!-- Progress Bar -->
+<div class="w-full group cursor-pointer">
+<div class="relative h-1.5 bg-white/10 rounded-full w-full overflow-hidden">
+<!-- Progress Fill -->
+<div class="absolute h-full w-[35%] bg-accent-cyan shadow-cyan-glow rounded-full"></div>
+</div>
+<!-- Timestamps -->
+<div class="flex justify-between mt-2 text-xs font-medium text-white/40 font-mono tracking-wide">
+<span>0:45</span>
+<span>3:20</span>
+</div>
+</div>
+<!-- Playback Controls -->
+<div class="flex items-center justify-between">
+<button class="text-white/40 hover:text-white transition-colors p-2">
+<span class="material-symbols-outlined text-2xl" style="font-variation-settings: 'FILL' 0;">shuffle</span>
+</button>
+<div class="flex items-center gap-6">
+<button class="text-white hover:text-accent-cyan transition-colors p-2">
+<span class="material-symbols-outlined text-4xl">skip_previous</span>
+</button>
+<!-- Play Button -->
+<button class="relative w-20 h-20 flex items-center justify-center rounded-full bg-primary text-white shadow-neon hover:shadow-neon-strong hover:scale-105 transition-all duration-300 active:scale-95 group">
+<!-- Subtle inner glow ring -->
+<div class="absolute inset-1 rounded-full border border-white/20"></div>
+<span class="material-symbols-outlined text-4xl">play_arrow</span>
+</button>
+<button class="text-white hover:text-accent-cyan transition-colors p-2">
+<span class="material-symbols-outlined text-4xl">skip_next</span>
+</button>
+</div>
+<button class="text-white/40 hover:text-white transition-colors p-2">
+<span class="material-symbols-outlined text-2xl" style="font-variation-settings: 'FILL' 0;">repeat</span>
+</button>
+</div>
+<!-- Context Control: Lofi Intensity -->
+<div class="mt-2 flex justify-center">
+<div class="flex items-center gap-3 px-5 py-2.5 rounded-2xl bg-white/5 border border-white/5 backdrop-blur-md">
+<span class="material-symbols-outlined text-primary text-xl">tune</span>
+<div class="flex flex-col gap-0.5">
+<span class="text-[10px] uppercase tracking-wider text-white/50 font-bold">Lofi Intensity</span>
+<div class="flex gap-1 h-1.5 w-24">
+<div class="h-full w-1/4 rounded-sm bg-primary shadow-[0_0_5px_rgba(153,61,245,0.8)]"></div>
+<div class="h-full w-1/4 rounded-sm bg-primary shadow-[0_0_5px_rgba(153,61,245,0.8)]"></div>
+<div class="h-full w-1/4 rounded-sm bg-primary shadow-[0_0_5px_rgba(153,61,245,0.8)]"></div>
+<div class="h-full w-1/4 rounded-sm bg-white/10"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Bottom Device Indicator -->
+<div class="flex justify-center pt-2 pb-2">
+<button class="flex items-center gap-2 text-accent-cyan text-xs font-semibold tracking-wide py-1 px-3 rounded-full hover:bg-white/5 transition-colors">
+<span class="material-symbols-outlined text-base">headphones</span>
+<span>AirPods Pro</span>
+</button>
+</div>
+</div>
+</footer>
+</body></html>

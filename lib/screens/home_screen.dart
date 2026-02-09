@@ -5,6 +5,7 @@ import 'package:lofiga/screens/player_screen.dart';
 import 'package:lofiga/screens/editor_screen.dart';
 import 'package:lofiga/screens/library_screen.dart';
 import 'package:lofiga/screens/settings_screen.dart';
+import 'dart:ui'; // For BackdropFilter
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -27,35 +28,105 @@ class _HomeScreenState extends State<HomeScreen> {
     ];
 
     return Scaffold(
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Stack(
         children: [
-           // Global Background for all screens (optional, or specific to Home)
-           // For now, let's keep the gradient/glow consistent if desired, 
-           // but Editor/Library might want their own. 
-           // The previous code had the background in the Scaffold body.
-           // Let's assume the "Glow" is part of the common theme or specific to Home.
-           // To keep it simple and consistent with previous design, we put the background here
-           // ONLY if it's shared. But Editor/Listen might need clean backgrounds.
-           // Let's render the selected screen.
+           // Ambient Background Glows (Global)
+           Positioned(
+            top: -100,
+            left: -100,
+            child: Container(
+              width: 400,
+              height: 400,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Theme.of(context).primaryColor.withOpacity(0.2),
+                backgroundBlendMode: BlendMode.screen,
+              ),
+            ),
+          ),
+          Positioned(
+            bottom: -100,
+            right: -100,
+            child: Container(
+              width: 300,
+              height: 300,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.blue.withOpacity(0.1),
+                backgroundBlendMode: BlendMode.screen,
+              ),
+            ),
+          ),
+          // Blur the glows slightly more
+          BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 60, sigmaY: 60),
+            child: Container(color: Colors.transparent),
+          ),
+
+           // Screen Content
            screens[_currentIndex],
+
+           // Custom Bottom Navigation Bar
+           Align(
+             alignment: Alignment.bottomCenter,
+             child: _buildGlassBottomNav(),
+           ),
         ],
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        backgroundColor: const Color(0xFF231B2E).withOpacity(0.95), // Slightly more opaque
-        selectedItemColor: Theme.of(context).primaryColor,
-        unselectedItemColor: Colors.grey,
-        type: BottomNavigationBarType.fixed,
-        currentIndex: _currentIndex,
-        onTap: (index) {
-          setState(() {
-            _currentIndex = index;
-          });
-        },
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-          BottomNavigationBarItem(icon: Icon(Icons.tune), label: 'Editor'),
-          BottomNavigationBarItem(icon: Icon(Icons.library_music), label: 'Library'),
-          BottomNavigationBarItem(icon: Icon(Icons.settings), label: 'Settings'),
+      // Hide default bottom nav since we use a custom one in Stack
+      // bottomNavigationBar: ... 
+    );
+  }
+
+  Widget _buildGlassBottomNav() {
+    return ClipRRect(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          height: 80,
+          decoration: BoxDecoration(
+            color: const Color(0xFF191022).withOpacity(0.8),
+            border: const Border(top: BorderSide(color: Colors.white10)),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _buildNavItem(Icons.home, 'Home', 0),
+              _buildNavItem(Icons.tune, 'Editor', 1),
+              _buildNavItem(Icons.library_music, 'Library', 2),
+              _buildNavItem(Icons.settings, 'Settings', 3),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNavItem(IconData icon, String label, int index) {
+    final isSelected = _currentIndex == index;
+    return GestureDetector(
+      onTap: () => setState(() => _currentIndex = index),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            icon, 
+            color: isSelected ? Theme.of(context).primaryColor : Colors.white54,
+            size: 26,
+            shadows: isSelected ? [
+              Shadow(color: Theme.of(context).primaryColor, blurRadius: 10),
+            ] : [],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: GoogleFonts.splineSans(
+              fontSize: 10,
+              fontWeight: FontWeight.w500,
+              color: isSelected ? Colors.white : Colors.white54,
+            ),
+          ),
         ],
       ),
     );
@@ -63,152 +134,198 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // Extracted Home Tab Content
   Widget _buildHomeContent() {
-    return Stack(
-      children: [
-         // Background Glows (Specific to Home)
-          Positioned(
-            top: -100,
-            left: -100,
-            child: Container(
-              width: 300,
-              height: 300,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Theme.of(context).primaryColor.withOpacity(0.2),
-              ),
-            ),
-          ),
-
-          SafeArea(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+    return SafeArea(
+      bottom: false, // Allow content to go behind bottom nav
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const SizedBox(height: 20),
+            // Header
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                // Header
-                Padding(
-                  padding: const EdgeInsets.all(24.0),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Good Evening',
-                            style: GoogleFonts.splineSans(
-                              fontSize: 24,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          Text(
-                            'Ready to chill?',
-                            style: GoogleFonts.splineSans(
-                              fontSize: 14,
-                              color: Colors.grey[400],
-                            ),
-                          ),
-                        ],
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Good Evening',
+                      style: GoogleFonts.splineSans(
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
                       ),
-                      CircleAvatar(
-                        backgroundColor: const Color(0xFF2D243A),
-                        child: IconButton(
-                          icon: const Icon(Icons.notifications, color: Colors.white), // Changed settings icon since we have a tab
-                          onPressed: () {},
-                        ),
+                    ),
+                    Text(
+                      'Ready to chill?',
+                      style: GoogleFonts.splineSans(
+                        fontSize: 14,
+                        color: Colors.white54,
+                        fontWeight: FontWeight.w500,
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-
-                // Main Content
-                Expanded(
-                  child: ListView(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    children: [
-                       // Select Song Card
-                       GestureDetector(
-                         onTap: () => _pickAudio(context),
-                         child: Container(
-                           height: 200,
-                           decoration: BoxDecoration(
-                             borderRadius: BorderRadius.circular(16),
-                             color: const Color(0xFF231B2E).withOpacity(0.6),
-                             border: Border.all(color: Theme.of(context).primaryColor.withOpacity(0.3)),
-                             boxShadow: [
-                               BoxShadow(
-                                 color: Theme.of(context).primaryColor.withOpacity(0.1),
-                                 blurRadius: 20,
-                                 spreadRadius: -5,
-                               )
-                             ],
-                           ),
-                           child: Center(
-                             child: Column(
-                               mainAxisAlignment: MainAxisAlignment.center,
-                               children: [
-                                 Container(
-                                   width: 80,
-                                   height: 80,
-                                   decoration: BoxDecoration(
-                                     color: Theme.of(context).primaryColor,
-                                     shape: BoxShape.circle,
-                                     boxShadow: [
-                                       BoxShadow(color: Theme.of(context).primaryColor.withOpacity(0.4), blurRadius: 10),
-                                     ],
-                                   ),
-                                   child: const Icon(Icons.add, size: 40, color: Colors.white),
-                                 ),
-                                 const SizedBox(height: 16),
-                                 const Text(
-                                   'Select Song',
-                                   style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                                 ),
-                                 const SizedBox(height: 8),
-                                 Text(
-                                   'Tap to import audio file (MP3, WAV)',
-                                   style: TextStyle(color: Colors.grey[400], fontSize: 12),
-                                 ),
-                               ],
-                             ),
-                           ),
-                         ),
-                       ),
-                       
-                       const SizedBox(height: 32),
-                       
-                       // Recent Edits Header
-                       Row(
-                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                         children: [
-                           const Text('Recent Edits', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                           TextButton(onPressed: (){}, child: const Text('See All')),
-                         ],
-                       ),
-                       
-                       const SizedBox(height: 16),
-                       
-                       // List Items
-                       _buildRecentItem(
-                         title: 'Midnight Jazz.mp3',
-                         time: '2 min ago • 3:42',
-                         color: Colors.purple.shade900,
-                       ),
-                       _buildRecentItem(
-                         title: 'Study Session_v2.wav',
-                         time: 'Yesterday • 12:05',
-                         color: Colors.blue.shade900,
-                       ),
-                         _buildRecentItem(
-                         title: 'Rainy Day.mp3',
-                         time: 'Last Week • 4:20',
-                         color: Colors.orange.shade900,
-                       ),
-                    ],
+                Container(
+                  width: 40, 
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF2D243A),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white12),
+                  ),
+                  child: IconButton(
+                    padding: EdgeInsets.zero,
+                    icon: const Icon(Icons.settings, color: Colors.white, size: 20),
+                    onPressed: () => setState(() => _currentIndex = 3), // Go to Settings
                   ),
                 ),
               ],
             ),
-          ),
-      ],
+
+            const SizedBox(height: 32),
+
+            // Select Song Hero Card
+            GestureDetector(
+              onTap: () => _pickAudio(context),
+              child: Container(
+                height: 220,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(color: Theme.of(context).primaryColor.withOpacity(0.3)),
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Theme.of(context).primaryColor.withOpacity(0.1),
+                       const Color(0xFF231B2E).withOpacity(0.6),
+                    ],
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Theme.of(context).primaryColor.withOpacity(0.15),
+                      blurRadius: 30,
+                      offset: const Offset(0, 10),
+                    ),
+                  ],
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(24),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                    child: Stack(
+                      children: [
+                        // Inner glow
+                        Positioned(
+                          top: -50,
+                          left: -50,
+                          child: Container(
+                            width: 150,
+                            height: 150,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Theme.of(context).primaryColor.withOpacity(0.2),
+                              backgroundBlendMode: BlendMode.overlay,
+                            ),
+                          ),
+                        ),
+                        
+                        Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Container(
+                                width: 80,
+                                height: 80,
+                                decoration: BoxDecoration(
+                                  color: Theme.of(context).primaryColor,
+                                  shape: BoxShape.circle,
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Theme.of(context).primaryColor.withOpacity(0.5), 
+                                      blurRadius: 20,
+                                      spreadRadius: 2,
+                                    ),
+                                  ],
+                                ),
+                                child: const Icon(Icons.add, size: 40, color: Colors.white),
+                              ),
+                              const SizedBox(height: 20),
+                              Text(
+                                'Select Song',
+                                style: GoogleFonts.splineSans(
+                                  fontSize: 22, 
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Tap to import audio file (MP3, WAV)',
+                                style: GoogleFonts.splineSans(fontSize: 12, color: Colors.white60),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            
+            const SizedBox(height: 32),
+            
+            // Recent Edits Header
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Recent Edits', 
+                  style: GoogleFonts.splineSans(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+                ),
+                TextButton(
+                  onPressed: (){}, 
+                  child: Text(
+                    'See All',
+                    style: GoogleFonts.splineSans(color: Theme.of(context).primaryColor, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+            
+            const SizedBox(height: 16),
+            
+            // List Items
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.only(bottom: 100), // Space for bottom nav
+                children: [
+                  _buildRecentItem(
+                    title: 'Midnight Jazz.mp3',
+                    subtitle: '2 min ago • 3:42',
+                    gradientStart: Colors.purple.shade900,
+                    gradientEnd: Colors.blue.shade900,
+                  ),
+                  _buildRecentItem(
+                    title: 'Study Session_v2.wav',
+                    subtitle: 'Yesterday • 12:05',
+                    gradientStart: Colors.blue.shade900,
+                    gradientEnd: Colors.teal.shade900,
+                  ),
+                  _buildRecentItem(
+                    title: 'Rainy Day.mp3',
+                    subtitle: 'Last Week • 4:20',
+                    gradientStart: Colors.orange.shade900,
+                    gradientEnd: Colors.red.shade900,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -248,13 +365,13 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Widget _buildRecentItem({required String title, required String time, required Color color}) {
+  Widget _buildRecentItem({required String title, required String subtitle, required Color gradientStart, required Color gradientEnd}) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: const Color(0xFF231B2E),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.white.withOpacity(0.05)),
       ),
       child: Row(
@@ -263,8 +380,12 @@ class _HomeScreenState extends State<HomeScreen> {
             width: 56,
             height: 56,
             decoration: BoxDecoration(
-              color: color,
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(12),
+              gradient: LinearGradient(
+                colors: [gradientStart, gradientEnd],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
             ),
             child: const Icon(Icons.play_arrow, color: Colors.white),
           ),
@@ -273,13 +394,28 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                Text(
+                  title, 
+                  style: GoogleFonts.splineSans(fontWeight: FontWeight.w600, fontSize: 16, color: Colors.white),
+                ),
                 const SizedBox(height: 4),
-                Text(time, style: TextStyle(color: Colors.grey[400], fontSize: 12)),
+                Row(
+                  children: [
+                    const Icon(Icons.access_time, size: 12, color: Colors.white38),
+                    const SizedBox(width: 4),
+                    Text(
+                      subtitle, 
+                      style: GoogleFonts.splineSans(color: Colors.white38, fontSize: 12),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
-          const Icon(Icons.more_vert, color: Colors.grey),
+          IconButton(
+            icon: const Icon(Icons.more_vert, color: Colors.white38),
+            onPressed: () {},
+          ),
         ],
       ),
     );
