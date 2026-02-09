@@ -11,19 +11,28 @@ class HomeScreen extends StatelessWidget {
   Future<void> _pickAudio(BuildContext context) async {
     try {
       FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.audio,
+        type: FileType.custom,
+        allowedExtensions: ['mp3', 'wav', 'm4a', 'flac', 'aac', 'ogg'],
       );
 
-      if (result != null && result.files.single.path != null) {
-        String filePath = result.files.single.path!;
-        String fileName = result.files.single.name;
-        
-        if (context.mounted) {
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (context) => PlayerScreen(filePath: filePath, fileName: fileName),
-            ),
-          );
+      if (result != null) {
+        if (result.files.single.path != null) {
+          String filePath = result.files.single.path!;
+          String fileName = result.files.single.name;
+          
+          if (context.mounted) {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (context) => PlayerScreen(filePath: filePath, fileName: fileName),
+              ),
+            );
+          }
+        } else {
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Error: Selected file path is null (iOS iCloud file?)')),
+            );
+          }
         }
       }
     } catch (e) {
