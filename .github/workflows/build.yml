@@ -41,6 +41,12 @@ jobs:
             -storepass lofiga2024 -keypass lofiga2024 \
             -dname "CN=Lofiga,O=Lofiga,C=US"
 
+      - name: Make Gradlew Executable
+        run: chmod +x android/gradlew
+
+      - name: Check Flutter Setup
+        run: flutter doctor -v
+
       - name: Configure Android Signing
         working-directory: android/app
         run: |
