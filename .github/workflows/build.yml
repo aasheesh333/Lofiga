@@ -50,24 +50,43 @@ jobs:
       - name: Configure Android Signing
         working-directory: android/app
         run: |
-          cat >> build.gradle << 'EOF'
-          
-          android {
-              signingConfigs {
-                  release {
-                      storeFile file('../../release.keystore')
-                      storePassword 'lofiga2024'
-                      keyAlias 'lofiga'
-                      keyPassword 'lofiga2024'
-                  }
-              }
-              buildTypes {
-                  release {
-                      signingConfig signingConfigs.release
-                  }
-              }
-          }
-          EOF
+          if [ -f build.gradle.kts ]; then
+            cat >> build.gradle.kts << 'EOF'
+            android {
+                signingConfigs {
+                    create("release") {
+                        storeFile = file("../../release.keystore")
+                        storePassword = "lofiga2024"
+                        keyAlias = "lofiga"
+                        keyPassword = "lofiga2024"
+                    }
+                }
+                buildTypes {
+                    getByName("release") {
+                        signingConfig = signingConfigs.getByName("release")
+                    }
+                }
+            }
+            EOF
+          else
+            cat >> build.gradle << 'EOF'
+            android {
+                signingConfigs {
+                    release {
+                        storeFile file('../../release.keystore')
+                        storePassword 'lofiga2024'
+                        keyAlias 'lofiga'
+                        keyPassword 'lofiga2024'
+                    }
+                }
+                buildTypes {
+                    release {
+                        signingConfig signingConfigs.release
+                    }
+                }
+            }
+            EOF
+          fi
 
       - name: Build APK (Demo Signed)
         run: flutter build apk --release
@@ -115,6 +134,9 @@ jobs:
 
       - name: Build iOS (No Codesign)
         run: |
+          export CODE_SIGNING_ALLOWED=NO
+          export CODE_SIGNING_REQUIRED=NO
+          export CODE_SIGN_IDENTITY=""
           flutter build ios --release --no-codesign
 
       - name: Package IPA
