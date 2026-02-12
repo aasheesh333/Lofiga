@@ -2,9 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:provider/provider.dart';
-import 'package:lofiga/logic/player_manager.dart';
-import 'package:lofiga/widgets/mini_player_bar.dart';
-import 'package:lofiga/screens/editor_screen.dart';
+import 'package:lofiga/logic/preset_manager.dart';
+import 'package:lofiga/screens/player_editor_screen.dart';
 import 'package:lofiga/screens/library_screen.dart';
 import 'package:lofiga/screens/settings_screen.dart';
 import 'dart:ui'; // For BackdropFilter
@@ -24,7 +23,9 @@ class _HomeScreenState extends State<HomeScreen> {
     // List of screens for navigation
     final List<Widget> screens = [
       _buildHomeContent(),
-      const EditorScreen(),
+      // Editor is now integrated into PlayerEditorScreen, so index 1 might be redundant or a direct jump
+      // For now, let's keep placeholder or navigate directly
+      Container(),
       const LibraryScreen(),
       const SettingsScreen(),
     ];
@@ -69,23 +70,19 @@ class _HomeScreenState extends State<HomeScreen> {
            // Screen Content
            screens[_currentIndex],
 
-           // Mini-Player Bar (Bottom)
+           // Mini-Player Bar (Bottom) - Removed as we move to full screen editing flow
+           // But user might want it if they navigate away.
+           // For this specific task, "Player & Lofi Editor" implies a focused editing session.
+           // We will remove the MiniPlayerBar for now to focus on the new flow.
+
            Positioned(
              left: 0,
              right: 0,
              bottom: 0,
-             child: Column(
-               mainAxisSize: MainAxisSize.min,
-               children: [
-                 const MiniPlayerBar(),
-                 _buildGlassBottomNav(),
-               ],
-             ),
+             child: _buildGlassBottomNav(),
            ),
         ],
       ),
-      // Hide default bottom nav since we use a custom one in Stack
-      // bottomNavigationBar: ... 
     );
   }
 
@@ -103,7 +100,8 @@ class _HomeScreenState extends State<HomeScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
               _buildNavItem(Icons.home, 'Home', 0),
-              _buildNavItem(Icons.tune, 'Editor', 1),
+              // We'll hide Editor tab since it's now context-driven by selecting a song
+              // _buildNavItem(Icons.tune, 'Editor', 1),
               _buildNavItem(Icons.library_music, 'Library', 2),
               _buildNavItem(Icons.settings, 'Settings', 3),
             ],
@@ -295,13 +293,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   'Recent Edits', 
                   style: GoogleFonts.splineSans(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
                 ),
-                TextButton(
-                  onPressed: (){}, 
-                  child: Text(
-                    'See All',
-                    style: GoogleFonts.splineSans(color: Theme.of(context).primaryColor, fontWeight: FontWeight.w600),
-                  ),
-                ),
               ],
             ),
             
@@ -317,18 +308,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     subtitle: '2 min ago • 3:42',
                     gradientStart: Colors.purple.shade900,
                     gradientEnd: Colors.blue.shade900,
-                  ),
-                  _buildRecentItem(
-                    title: 'Study Session_v2.wav',
-                    subtitle: 'Yesterday • 12:05',
-                    gradientStart: Colors.blue.shade900,
-                    gradientEnd: Colors.teal.shade900,
-                  ),
-                  _buildRecentItem(
-                    title: 'Rainy Day.mp3',
-                    subtitle: 'Last Week • 4:20',
-                    gradientStart: Colors.orange.shade900,
-                    gradientEnd: Colors.red.shade900,
                   ),
                 ],
               ),
@@ -351,11 +330,14 @@ class _HomeScreenState extends State<HomeScreen> {
           String filePath = result.files.single.path!;
           String fileName = result.files.single.name;
           
-          // Load track into PlayerManager
-          final playerManager = Provider.of<PlayerManager>(context, listen: false);
-          await playerManager.loadTrack(filePath, fileName);
-          
-          // Mini-player will appear automatically
+          // Navigate to Player Editor directly
+          if (mounted) {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (context) => PlayerEditorScreen(filePath: filePath, fileName: fileName),
+              ),
+            );
+          }
         } else {
           if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(

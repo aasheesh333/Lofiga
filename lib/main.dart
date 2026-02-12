@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:lofiga/theme/app_theme.dart';
-import 'package:lofiga/logic/player_manager.dart';
+import 'package:lofiga/logic/preset_manager.dart';
+import 'package:lofiga/logic/audio_engine.dart';
 import 'package:lofiga/screens/splash_screen.dart';
 import 'package:lofiga/screens/home_screen.dart';
 
@@ -14,8 +15,17 @@ class LofigaApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (context) => PlayerManager(),
+    return MultiProvider(
+      providers: [
+        // Provide AudioEngine as a singleton service if needed, or just inside PresetManager
+        Provider<AudioEngine>(create: (_) => AudioEngine()),
+
+        // Provide PresetManager which depends on AudioEngine
+        ChangeNotifierProxyProvider<AudioEngine, PresetManager>(
+          create: (context) => PresetManager(context.read<AudioEngine>()),
+          update: (context, engine, previous) => previous ?? PresetManager(engine),
+        ),
+      ],
       child: MaterialApp(
         title: 'Lofiga',
         debugShowCheckedModeBanner: false,
