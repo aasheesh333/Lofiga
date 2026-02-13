@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:lofiga/logic/preset_manager.dart';
 import 'package:lofiga/logic/audio_engine.dart';
 import 'package:lofiga/logic/export_service.dart';
+import 'package:lofiga/services/storage_service.dart';
 import 'dart:ui';
 import 'dart:math' as math;
 
@@ -135,26 +136,137 @@ class _PlayerEditorScreenState extends State<PlayerEditorScreen> with SingleTick
     );
   }
 
-  void _handleSave() {
-    // TODO: Implement save functionality
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Save feature coming soon',
-          style: GoogleFonts.splineSans(),
-        ),
-      ),
+  void _handleSave() async {
+    final preset = context.read<PresetManager>();
+    final storage = StorageService();
+    
+    // Create saved config
+    final config = SavedConfig(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      fileName: widget.fileName,
+      filePath: widget.filePath,
+      savedAt: DateTime.now(),
+      effectValues: {
+        'tempo': preset.tempo,
+        'pitch': preset.pitch,
+        'reverb': preset.reverb,
+        'delay': preset.delay,
+        'bass': preset.bass,
+        'trebleCut': preset.trebleCut,
+        'rain': preset.rainVolume,
+        'vinyl': preset.vinylVolume,
+        'wind': preset.windVolume,
+        'tape': preset.tapeVolume,
+      },
     );
+    
+    await storage.saveConfig(config);
+    
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Configuration saved!',
+            style: GoogleFonts.splineSans(),
+          ),
+          backgroundColor: const Color(0xFF993DF5),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
   }
 
   void _handleCreatePreset() {
-    // TODO: Implement create preset functionality
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Create Preset feature coming soon',
-          style: GoogleFonts.splineSans(),
+    final TextEditingController nameController = TextEditingController();
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF2A1F36),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(
+          'Create Custom Preset',
+          style: GoogleFonts.splineSans(color: Colors.white, fontWeight: FontWeight.bold),
         ),
+        content: TextField(
+          controller: nameController,
+          style: GoogleFonts.splineSans(color: Colors.white),
+          decoration: InputDecoration(
+            hintText: 'Preset Name',
+            hintStyle: GoogleFonts.splineSans(color: Colors.white38),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: Color(0xFF993DF5)),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: Colors.white.withOpacity(0.3)),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: Color(0xFF993DF5), width: 2),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Cancel', style: GoogleFonts.splineSans(color: Colors.white54)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF993DF5),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            onPressed: () async {
+              if (nameController.text.trim().isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Please enter a preset name')),
+                );
+                return;
+              }
+              
+              final preset = context.read<PresetManager>();
+              final storage = StorageService();
+              
+              final customPreset = CustomPreset(
+                id: DateTime.now().millisecondsSinceEpoch.toString(),
+                name: nameController.text.trim(),
+                effectValues: {
+                  'tempo': preset.tempo,
+                  'pitch': preset.pitch,
+                  'reverb': preset.reverb,
+                  'delay': preset.delay,
+                  'bass': preset.bass,
+                  'trebleCut': preset.trebleCut,
+                  'rain': preset.rainVolume,
+                  'vinyl': preset.vinylVolume,
+                  'wind': preset.windVolume,
+                  'tape': preset.tapeVolume,
+                },
+                createdAt: DateTime.now(),
+              );
+              
+              await storage.saveCustomPreset(customPreset);
+              
+              Navigator.pop(context);
+              
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      'Preset "${nameController.text.trim()}" created!',
+                      style: GoogleFonts.splineSans(),
+                    ),
+                    backgroundColor: const Color(0xFF993DF5),
+                    duration: const Duration(seconds: 2),
+                  ),
+                );
+              }
+            },
+            child: Text('Create', style: GoogleFonts.splineSans(color: Colors.white)),
+          ),
+        ],
       ),
     );
   }

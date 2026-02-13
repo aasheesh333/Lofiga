@@ -123,8 +123,17 @@ class PresetManager extends ChangeNotifier {
         _rainVolume = 0; _vinylVolume = 0; _windVolume = 0; _tapeVolume = 0;
         break;
       case LofiPreset.lofiSlow:
-        _tempo = 0.85; _pitch = -2.0; _reverb = 0.35; _delay = 0.10; _bass = 0.15; _trebleCut = 0.40;
-        _rainVolume = 0; _vinylVolume = 0.1; _windVolume = 0; _tapeVolume = 0.2;
+        _tempo = 0.85; // Slower tempo (85%)
+        _pitch = -1.5; // Slightly lower pitch for warmth
+        _reverb = 0.35; // Moderate reverb for space
+        _delay = 0.20; // Light echo for depth
+        _bass = 0.40; // Boosted bass for warmth
+        _trebleCut = 0.60; // Cut highs for lo-fi warmth
+        // Atmosphere for authentic lo-fi feel
+        _rainVolume = 0.15; // Subtle rain ambience
+        _vinylVolume = 0.25; // Vinyl crackle for texture
+        _windVolume = 0.0; 
+        _tapeVolume = 0.20; // Tape hiss for vintage feel
         break;
       case LofiPreset.rainyNight:
         _tempo = 0.90; _pitch = -1.0; _reverb = 0.45; _delay = 0.15; _bass = 0.10; _trebleCut = 0.50;
