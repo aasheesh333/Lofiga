@@ -34,11 +34,9 @@ class _PlayerEditorScreenState extends State<PlayerEditorScreen> with SingleTick
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await _engine.init();
-      // Handle edge cases: verify file exists or is valid before loading
-      // (Basic check done by AudioEngine try/catch, but UI feedback is good)
       await _engine.loadTrack(widget.filePath);
       if (mounted) {
-        context.read<PresetManager>().applyPreset(LofiPreset.normal);
+        context.read<PresetManager>().applyPreset(LofiPreset.lofiSlow);
       }
     });
 
@@ -77,7 +75,6 @@ class _PlayerEditorScreenState extends State<PlayerEditorScreen> with SingleTick
           ),
         );
       } else {
-        // Could be cancelled or failed
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Export Cancelled or Failed')),
         );
@@ -98,51 +95,22 @@ class _PlayerEditorScreenState extends State<PlayerEditorScreen> with SingleTick
       backgroundColor: const Color(0xFF191022),
       body: Stack(
         children: [
-          // Background Ambience
-          Positioned(
-            top: -100,
-            left: -50,
-            child: Container(
-              width: 300,
-              height: 300,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: const Color(0xFF993DF5).withOpacity(0.15),
-                backgroundBlendMode: BlendMode.screen,
-              ),
-            ),
-          ),
-          Positioned(
-            bottom: -100,
-            right: -50,
-            child: Container(
-              width: 300,
-              height: 300,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: const Color(0xFF3DF5E6).withOpacity(0.1),
-                backgroundBlendMode: BlendMode.screen,
-              ),
-            ),
-          ),
-          BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 60, sigmaY: 60),
-            child: Container(color: Colors.transparent),
-          ),
-
           SafeArea(
+            bottom: false,
             child: Column(
               children: [
-                _buildTopSection(),
+                _buildHeader(),
                 Expanded(
                   child: SingleChildScrollView(
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                    padding: const EdgeInsets.only(left: 24, right: 24, top: 16, bottom: 220),
                     child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _buildDSPControls(),
+                        _buildMoodSection(),
+                        const SizedBox(height: 32),
+                        _buildFineTuneSection(),
                         const SizedBox(height: 32),
                         _buildAtmosphereSection(),
-                        const SizedBox(height: 100),
                       ],
                     ),
                   ),
@@ -155,7 +123,7 @@ class _PlayerEditorScreenState extends State<PlayerEditorScreen> with SingleTick
             left: 0,
             right: 0,
             bottom: 0,
-            child: _buildPresetPanel(),
+            child: _buildBottomPlayerBar(),
           ),
 
           if (_isExporting) _buildExportOverlay(),
@@ -164,272 +132,57 @@ class _PlayerEditorScreenState extends State<PlayerEditorScreen> with SingleTick
     );
   }
 
-  Widget _buildTopSection() {
-    return Padding(
-      padding: const EdgeInsets.all(24.0),
-      child: Column(
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              IconButton(
-                icon: const Icon(Icons.keyboard_arrow_down, color: Colors.white),
-                onPressed: () => Navigator.pop(context),
-              ),
-              Text(
-                'NOW PLAYING',
-                style: GoogleFonts.splineSans(
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 2,
-                  color: Colors.white54,
-                ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.ios_share, color: Colors.white),
-                onPressed: _handleExport,
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-          StreamBuilder<bool>(
-            stream: _engine.isPlayingStream,
-            initialData: false,
-            builder: (context, snapshot) {
-              final isPlaying = snapshot.data ?? false;
-              return AnimatedContainer(
-                duration: const Duration(milliseconds: 500),
-                width: isPlaying ? 240 : 220,
-                height: isPlaying ? 240 : 220,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF581C87), Color(0xFF1E3A8A)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFF993DF5).withOpacity(isPlaying ? 0.4 : 0.1),
-                      blurRadius: isPlaying ? 30 : 10,
-                      spreadRadius: isPlaying ? 5 : 0,
-                    ),
-                  ],
-                ),
-                child: const Icon(Icons.music_note, size: 80, color: Colors.white24),
-              );
-            },
-          ),
-          const SizedBox(height: 24),
-          Text(
-            widget.fileName,
-            textAlign: TextAlign.center,
-            style: GoogleFonts.splineSans(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-            ),
-          ),
-          const SizedBox(height: 24),
-          SizedBox(
-            height: 40,
-            child: AnimatedBuilder(
-              animation: _waveController,
-              builder: (context, child) {
-                return CustomPaint(
-                  painter: WaveformPainter(
-                    color: Theme.of(context).primaryColor,
-                    animationValue: _waveController.value,
-                  ),
-                  size: const Size(double.infinity, 40),
-                );
-              },
-            ),
-          ),
-          const SizedBox(height: 16),
-          StreamBuilder<bool>(
-            stream: _engine.isPlayingStream,
-            initialData: false,
-            builder: (context, snapshot) {
-              final isPlaying = snapshot.data ?? false;
-              return Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  IconButton(
-                    iconSize: 48,
-                    icon: Icon(
-                      isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled,
-                      color: Colors.white,
-                    ),
-                    onPressed: _engine.togglePlayPause,
-                  ),
-                ],
-              );
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDSPControls() {
-    return Consumer<PresetManager>(
-      builder: (context, preset, _) {
-        return Column(
-          children: [
-            _buildSliderRow('TEMPO', '${(preset.tempo * 100).toInt()}%', preset.tempo, 0.75, 1.05, (v) {
-              HapticFeedback.selectionClick();
-              preset.setTempo(v);
-            }),
-            _buildSliderRow('PITCH', '${preset.pitch.toStringAsFixed(1)} st', preset.pitch, -4.0, 2.0, (v) {
-               HapticFeedback.selectionClick();
-               preset.setPitch(v);
-            }),
-            _buildSliderRow('REVERB', '${(preset.reverb * 100).toInt()}%', preset.reverb, 0.0, 0.60, (v) {
-               HapticFeedback.selectionClick();
-               preset.setReverb(v);
-            }),
-            _buildSliderRow('DELAY', '${(preset.delay * 100).toInt()}%', preset.delay, 0.0, 0.40, (v) {
-               HapticFeedback.selectionClick();
-               preset.setDelay(v);
-            }),
-            _buildSliderRow('BASS', '+${(preset.bass * 100).toInt()}%', preset.bass, 0.0, 0.40, (v) {
-               HapticFeedback.selectionClick();
-               preset.setBass(v);
-            }),
-            _buildSliderRow('CUT', '${(preset.trebleCut * 100).toInt()}%', preset.trebleCut, 0.0, 0.70, (v) {
-               HapticFeedback.selectionClick();
-               preset.setTrebleCut(v);
-            }),
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _buildSliderRow(String label, String valueLabel, double value, double min, double max, Function(double) onChanged) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16.0),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 60,
-            child: Text(
-              label,
-              style: GoogleFonts.splineSans(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white54, letterSpacing: 1),
-            ),
-          ),
-          Expanded(
-            child: SliderTheme(
-              data: SliderTheme.of(context).copyWith(
-                activeTrackColor: Theme.of(context).primaryColor,
-                inactiveTrackColor: Colors.white10,
-                thumbColor: Colors.white,
-                trackHeight: 4,
-                overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
-                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-              ),
-              child: Slider(
-                min: min,
-                max: max,
-                value: value,
-                onChanged: onChanged,
-              ),
-            ),
-          ),
-          SizedBox(
-            width: 40,
-            child: Text(
-              valueLabel,
-              textAlign: TextAlign.right,
-              style: GoogleFonts.splineSans(fontSize: 10, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.secondary),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAtmosphereSection() {
-    return Consumer<PresetManager>(
-      builder: (context, preset, _) {
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'ATMOSPHERE LAYERS',
-              style: GoogleFonts.splineSans(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white54, letterSpacing: 1),
-            ),
-            const SizedBox(height: 16),
-            _buildAtmosphereRow('Rain', preset.rainVolume, (v) => preset.setAtmosphere('rain', v)),
-            _buildAtmosphereRow('Vinyl', preset.vinylVolume, (v) => preset.setAtmosphere('vinyl', v)),
-            _buildAtmosphereRow('Wind', preset.windVolume, (v) => preset.setAtmosphere('wind', v)),
-            _buildAtmosphereRow('Tape', preset.tapeVolume, (v) => preset.setAtmosphere('tape', v)),
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _buildAtmosphereRow(String label, double volume, Function(double) onChanged) {
-    bool isActive = volume > 0;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12.0),
-      child: Row(
-        children: [
-          Icon(
-            isActive ? Icons.volume_up : Icons.volume_off,
-            size: 16,
-            color: isActive ? Colors.white : Colors.white24,
-          ),
-          const SizedBox(width: 12),
-          Text(label, style: GoogleFonts.splineSans(color: isActive ? Colors.white : Colors.white38, fontSize: 12)),
-          Expanded(
-            child: SliderTheme(
-              data: SliderTheme.of(context).copyWith(
-                activeTrackColor: isActive ? Colors.white : Colors.white10,
-                inactiveTrackColor: Colors.white10,
-                thumbColor: isActive ? Colors.white : Colors.white38,
-                trackHeight: 2,
-                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 4),
-              ),
-              child: Slider(
-                value: volume,
-                onChanged: (v) {
-                  HapticFeedback.selectionClick();
-                  onChanged(v);
-                },
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPresetPanel() {
+  Widget _buildHeader() {
     return Container(
-      height: 100,
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
       decoration: BoxDecoration(
-        color: const Color(0xFF231B2E).withOpacity(0.95),
-        border: const Border(top: BorderSide(color: Colors.white10)),
-        boxShadow: [
-           BoxShadow(color: Colors.black.withOpacity(0.5), blurRadius: 20, offset: const Offset(0, -5)),
-        ],
+        color: const Color(0xFF191022).withOpacity(0.9),
       ),
       child: ClipRRect(
         child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+          filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _buildPresetChip('Normal', LofiPreset.normal),
-              _buildPresetChip('Lofi Slow', LofiPreset.lofiSlow),
-              _buildPresetChip('Rainy Night', LofiPreset.rainyNight),
-              _buildPresetChip('Vintage', LofiPreset.vintage),
-              _buildPresetChip('Dreamy', LofiPreset.dreamy),
-              _buildPresetChip('Sad', LofiPreset.sad),
+              Row(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    margin: const EdgeInsets.only(right: 12),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(20),
+                      color: Colors.transparent,
+                    ),
+                    child: IconButton(
+                      padding: EdgeInsets.zero,
+                      icon: const Icon(Icons.arrow_back, color: Colors.white70, size: 24),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ),
+                  Text(
+                    'Effects',
+                    style: GoogleFonts.splineSans(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(20),
+                  color: Colors.transparent,
+                ),
+                child: IconButton(
+                  padding: EdgeInsets.zero,
+                  icon: const Icon(Icons.more_vert, color: Colors.white70, size: 24),
+                  onPressed: _handleExport,
+                ),
+              ),
             ],
           ),
         ),
@@ -437,42 +190,820 @@ class _PlayerEditorScreenState extends State<PlayerEditorScreen> with SingleTick
     );
   }
 
-  Widget _buildPresetChip(String label, LofiPreset presetValue) {
-    return Consumer<PresetManager>(
-      builder: (context, manager, _) {
-        final isSelected = manager.currentPreset == presetValue;
-        return GestureDetector(
-          onTap: () {
-            HapticFeedback.mediumImpact();
-            manager.applyPreset(presetValue);
-          },
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            margin: const EdgeInsets.only(right: 12),
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: isSelected ? Theme.of(context).primaryColor : Colors.white.withOpacity(0.05),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: isSelected ? Theme.of(context).primaryColor : Colors.white10,
-                width: isSelected ? 2 : 1,
-              ),
-              boxShadow: isSelected ? [
-                BoxShadow(color: Theme.of(context).primaryColor.withOpacity(0.4), blurRadius: 10),
-              ] : [],
-            ),
-            child: Text(
-              label,
+  Widget _buildMoodSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Select Preset',
               style: GoogleFonts.splineSans(
+                fontSize: 18,
                 fontWeight: FontWeight.bold,
-                fontSize: 12,
-                color: isSelected ? Colors.white : Colors.white60,
+                color: Colors.white,
+                letterSpacing: 0.5,
               ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 20),
+        SizedBox(
+          height: 220,
+          child: Consumer<PresetManager>(
+            builder: (context, manager, _) {
+              return ListView(
+                scrollDirection: Axis.horizontal,
+                children: [
+                  _buildMoodCard(
+                    label: 'Normal',
+                    subtitle: 'Raw Audio',
+                    icon: Icons.music_note,
+                    isSelected: manager.currentPreset == LofiPreset.normal,
+                    onTap: () {
+                      HapticFeedback.mediumImpact();
+                      manager.applyPreset(LofiPreset.normal);
+                    },
+                    gradient: null,
+                    iconColor: Colors.white38,
+                    isDashed: true,
+                  ),
+                  _buildMoodCard(
+                    label: 'Lofi Slow',
+                    subtitle: null,
+                    icon: Icons.bedtime,
+                    isSelected: manager.currentPreset == LofiPreset.lofiSlow,
+                    onTap: () {
+                      HapticFeedback.mediumImpact();
+                      manager.applyPreset(LofiPreset.lofiSlow);
+                    },
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        const Color(0xFF993DF5).withOpacity(0.25),
+                        const Color(0xFF191022).withOpacity(0.05),
+                      ],
+                    ),
+                    iconColor: const Color(0xFF993DF5),
+                    progressValue: 0.75,
+                  ),
+                  _buildMoodCard(
+                    label: 'Rainy Night',
+                    subtitle: null,
+                    icon: Icons.cloudy_snowing,
+                    isSelected: manager.currentPreset == LofiPreset.rainyNight,
+                    onTap: () {
+                      HapticFeedback.mediumImpact();
+                      manager.applyPreset(LofiPreset.rainyNight);
+                    },
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        const Color(0xFF3B82F6).withOpacity(0.2),
+                        const Color(0xFF191022).withOpacity(0),
+                      ],
+                    ),
+                    iconColor: const Color(0xFF60A5FA),
+                    progressValue: 0.80,
+                  ),
+                  _buildMoodCard(
+                    label: 'Vintage',
+                    subtitle: null,
+                    icon: Icons.radio,
+                    isSelected: manager.currentPreset == LofiPreset.vintage,
+                    onTap: () {
+                      HapticFeedback.mediumImpact();
+                      manager.applyPreset(LofiPreset.vintage);
+                    },
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        const Color(0xFFFBBF24).withOpacity(0.2),
+                        const Color(0xFF191022).withOpacity(0),
+                      ],
+                    ),
+                    iconColor: const Color(0xFFFBBF24),
+                    progressValue: 0.65,
+                  ),
+                  _buildMoodCard(
+                    label: 'Dreamy',
+                    subtitle: null,
+                    icon: Icons.cloud,
+                    isSelected: manager.currentPreset == LofiPreset.dreamy,
+                    onTap: () {
+                      HapticFeedback.mediumImpact();
+                      manager.applyPreset(LofiPreset.dreamy);
+                    },
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        const Color(0xFF8B5CF6).withOpacity(0.2),
+                        const Color(0xFF191022).withOpacity(0),
+                      ],
+                    ),
+                    iconColor: const Color(0xFFA78BFA),
+                    progressValue: 0.70,
+                  ),
+                  _buildMoodCard(
+                    label: 'Sad',
+                    subtitle: null,
+                    icon: Icons.sentiment_dissatisfied,
+                    isSelected: manager.currentPreset == LofiPreset.sad,
+                    onTap: () {
+                      HapticFeedback.mediumImpact();
+                      manager.applyPreset(LofiPreset.sad);
+                    },
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        const Color(0xFF6366F1).withOpacity(0.2),
+                        const Color(0xFF191022).withOpacity(0),
+                      ],
+                    ),
+                    iconColor: const Color(0xFF818CF8),
+                    progressValue: 0.60,
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMoodCard({
+    required String label,
+    String? subtitle,
+    required IconData icon,
+    required bool isSelected,
+    required VoidCallback onTap,
+    Gradient? gradient,
+    required Color iconColor,
+    bool isDashed = false,
+    double? progressValue,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        width: 160,
+        margin: const EdgeInsets.only(right: 16),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(24),
+          color: isDashed ? Colors.transparent : const Color(0xFF2A1F36),
+          border: Border.all(
+            color: isSelected
+                ? const Color(0xFF993DF5)
+                : isDashed
+                    ? Colors.white.withOpacity(0.2)
+                    : Colors.white.withOpacity(0.05),
+            width: isDashed ? 2 : 1,
+            style: isDashed ? BorderStyle.solid : BorderStyle.solid,
+          ),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: const Color(0xFF993DF5).withOpacity(0.4),
+                    blurRadius: 15,
+                    spreadRadius: 0,
+                  ),
+                  BoxShadow(
+                    color: const Color(0xFF993DF5).withOpacity(0.2),
+                    blurRadius: 10,
+                    spreadRadius: 0,
+                    offset: const Offset(0, 0),
+                  ),
+                ]
+              : [],
+        ),
+        child: Stack(
+          children: [
+            if (gradient != null)
+              Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(24),
+                  gradient: gradient,
+                ),
+              ),
+            if (isSelected && !isDashed)
+              Positioned(
+                top: -60,
+                right: -60,
+                child: Container(
+                  width: 120,
+                  height: 120,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: const Color(0xFF993DF5).withOpacity(0.3),
+                  ),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 40, sigmaY: 40),
+                    child: Container(color: Colors.transparent),
+                  ),
+                ),
+              ),
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      if (isSelected && !isDashed)
+                        Container(
+                          width: 24,
+                          height: 24,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: const Color(0xFF993DF5),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFF993DF5).withOpacity(0.6),
+                                blurRadius: 10,
+                              ),
+                            ],
+                          ),
+                          child: const Icon(Icons.check, color: Colors.white, size: 14),
+                        ),
+                    ],
+                  ),
+                  Icon(
+                    icon,
+                    size: 60,
+                    color: iconColor,
+                    shadows: isSelected && !isDashed
+                        ? [
+                            Shadow(
+                              color: iconColor.withOpacity(0.8),
+                              blurRadius: 20,
+                            ),
+                          ]
+                        : [],
+                  ),
+                  Column(
+                    children: [
+                      Text(
+                        label,
+                        style: GoogleFonts.splineSans(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                          shadows: isSelected && !isDashed
+                              ? [
+                                  Shadow(
+                                    color: const Color(0xFF993DF5).withOpacity(0.6),
+                                    blurRadius: 10,
+                                  ),
+                                ]
+                              : [],
+                        ),
+                      ),
+                      if (subtitle != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Text(
+                            subtitle,
+                            style: GoogleFonts.splineSans(
+                              fontSize: 12,
+                              color: Colors.white38,
+                            ),
+                          ),
+                        ),
+                      if (progressValue != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 12),
+                          child: Container(
+                            height: 4,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(2),
+                              color: Colors.white.withOpacity(0.1),
+                            ),
+                            child: FractionallySizedBox(
+                              alignment: Alignment.centerLeft,
+                              widthFactor: progressValue,
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(2),
+                                  color: isSelected ? const Color(0xFF993DF5) : iconColor,
+                                  boxShadow: isSelected
+                                      ? [
+                                          BoxShadow(
+                                            color: const Color(0xFF993DF5).withOpacity(0.5),
+                                            blurRadius: 10,
+                                          ),
+                                        ]
+                                      : [],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFineTuneSection() {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(24),
+        color: const Color(0xFF352B42).withOpacity(0.3),
+        border: Border.all(
+          color: Colors.white.withOpacity(0.05),
+          width: 1,
+        ),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 4,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(2),
+                      color: const Color(0xFF993DF5),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF993DF5).withOpacity(0.5),
+                          blurRadius: 10,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    'FINE TUNE',
+                    style: GoogleFonts.splineSans(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white70,
+                      letterSpacing: 2,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              Consumer<PresetManager>(
+                builder: (context, preset, _) {
+                  return Column(
+                    children: [
+                      _buildSliderControl(
+                        icon: Icons.speed,
+                        label: 'Tempo',
+                        value: (preset.tempo * 100).toInt(),
+                        onChanged: (v) {
+                          HapticFeedback.selectionClick();
+                          preset.setTempo(v / 100);
+                        },
+                        min: 75,
+                        max: 105,
+                      ),
+                      const SizedBox(height: 24),
+                      _buildSliderControl(
+                        icon: Icons.graphic_eq,
+                        label: 'Pitch',
+                        value: ((preset.pitch + 4) * 10).toInt(),
+                        onChanged: (v) {
+                          HapticFeedback.selectionClick();
+                          preset.setPitch((v / 10) - 4);
+                        },
+                        min: 0,
+                        max: 60,
+                        displaySuffix: ' st',
+                      ),
+                      const SizedBox(height: 24),
+                      _buildSliderControl(
+                        icon: Icons.blur_on,
+                        label: 'Reverb',
+                        value: (preset.reverb * 100).toInt(),
+                        onChanged: (v) {
+                          HapticFeedback.selectionClick();
+                          preset.setReverb(v / 100);
+                        },
+                      ),
+                      const SizedBox(height: 24),
+                      _buildSliderControl(
+                        icon: Icons.repeat,
+                        label: 'Delay',
+                        value: (preset.delay * 100).toInt(),
+                        onChanged: (v) {
+                          HapticFeedback.selectionClick();
+                          preset.setDelay(v / 100);
+                        },
+                      ),
+                      const SizedBox(height: 24),
+                      _buildSliderControl(
+                        icon: Icons.waves,
+                        label: 'Bass Boost',
+                        value: (preset.bass * 100).toInt(),
+                        onChanged: (v) {
+                          HapticFeedback.selectionClick();
+                          preset.setBass(v / 100);
+                        },
+                      ),
+                      const SizedBox(height: 24),
+                      _buildSliderControl(
+                        icon: Icons.remove_circle_outline,
+                        label: 'Treble Cut',
+                        value: (preset.trebleCut * 100).toInt(),
+                        onChanged: (v) {
+                          HapticFeedback.selectionClick();
+                          preset.setTrebleCut(v / 100);
+                        },
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSliderControl({
+    required IconData icon,
+    required String label,
+    required int value,
+    required ValueChanged<double> onChanged,
+    int min = 0,
+    int max = 100,
+    String displaySuffix = '%',
+  }) {
+    return Column(
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                Icon(icon, color: Colors.white38, size: 14),
+                const SizedBox(width: 8),
+                Text(
+                  label.toUpperCase(),
+                  style: GoogleFonts.splineSans(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.white70,
+                    letterSpacing: 1.5,
+                  ),
+                ),
+              ],
+            ),
+            Text(
+              '$value$displaySuffix',
+              style: GoogleFonts.splineSans(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: const Color(0xFF993DF5),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        SliderTheme(
+          data: SliderTheme.of(context).copyWith(
+            activeTrackColor: const Color(0xFF993DF5),
+            inactiveTrackColor: const Color(0xFF2A1F36),
+            thumbColor: Colors.white,
+            trackHeight: 4,
+            overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+          ),
+          child: Slider(
+            min: min.toDouble(),
+            max: max.toDouble(),
+            value: value.toDouble().clamp(min.toDouble(), max.toDouble()),
+            onChanged: onChanged,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAtmosphereSection() {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(24),
+        color: const Color(0xFF352B42).withOpacity(0.3),
+        border: Border.all(
+          color: Colors.white.withOpacity(0.05),
+          width: 1,
+        ),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: Consumer<PresetManager>(
+            builder: (context, preset, _) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        width: 4,
+                        height: 32,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(2),
+                          color: const Color(0xFF3DF5E6),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFF3DF5E6).withOpacity(0.5),
+                              blurRadius: 10,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        'ATMOSPHERE LAYERS',
+                        style: GoogleFonts.splineSans(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white70,
+                          letterSpacing: 2,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  _buildAtmosphereRow('Rain', preset.rainVolume, (v) => preset.setAtmosphere('rain', v)),
+                  const SizedBox(height: 16),
+                  _buildAtmosphereRow('Vinyl', preset.vinylVolume, (v) => preset.setAtmosphere('vinyl', v)),
+                  const SizedBox(height: 16),
+                  _buildAtmosphereRow('Wind', preset.windVolume, (v) => preset.setAtmosphere('wind', v)),
+                  const SizedBox(height: 16),
+                  _buildAtmosphereRow('Tape', preset.tapeVolume, (v) => preset.setAtmosphere('tape', v)),
+                ],
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAtmosphereRow(String label, double volume, Function(double) onChanged) {
+    bool isActive = volume > 0;
+    return Row(
+      children: [
+        Icon(
+          isActive ? Icons.volume_up : Icons.volume_off,
+          size: 16,
+          color: isActive ? const Color(0xFF3DF5E6) : Colors.white24,
+        ),
+        const SizedBox(width: 12),
+        SizedBox(
+          width: 60,
+          child: Text(
+            label,
+            style: GoogleFonts.splineSans(
+              color: isActive ? Colors.white : Colors.white38,
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
             ),
           ),
-        );
-      },
+        ),
+        Expanded(
+          child: SliderTheme(
+            data: SliderTheme.of(context).copyWith(
+              activeTrackColor: const Color(0xFF3DF5E6),
+              inactiveTrackColor: Colors.white10,
+              thumbColor: isActive ? const Color(0xFF3DF5E6) : Colors.white38,
+              trackHeight: 3,
+              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 5),
+            ),
+            child: Slider(
+              value: volume,
+              onChanged: (v) {
+                HapticFeedback.selectionClick();
+                onChanged(v);
+              },
+            ),
+          ),
+        ),
+        SizedBox(
+          width: 35,
+          child: Text(
+            '${(volume * 100).toInt()}%',
+            textAlign: TextAlign.right,
+            style: GoogleFonts.splineSans(
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              color: isActive ? const Color(0xFF3DF5E6) : Colors.white38,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBottomPlayerBar() {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF191022).withOpacity(0.95),
+        border: const Border(
+          top: BorderSide(color: Colors.white10, width: 1),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.4),
+            blurRadius: 40,
+            offset: const Offset(0, -10),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+          child: SafeArea(
+            top: false,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Progress bar
+                StreamBuilder<Duration>(
+                  stream: _engine.positionStream,
+                  initialData: Duration.zero,
+                  builder: (context, posSnapshot) {
+                    return StreamBuilder<Duration?>(
+                      stream: _engine.durationStream,
+                      initialData: null,
+                      builder: (context, durSnapshot) {
+                        final position = posSnapshot.data ?? Duration.zero;
+                        final duration = durSnapshot.data ?? const Duration(seconds: 1);
+                        final progress = duration.inMilliseconds > 0
+                            ? position.inMilliseconds / duration.inMilliseconds
+                            : 0.0;
+                        
+                        return Container(
+                          height: 4,
+                          color: Colors.white.withOpacity(0.05),
+                          child: FractionallySizedBox(
+                            alignment: Alignment.centerLeft,
+                            widthFactor: progress.clamp(0.0, 1.0),
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF993DF5),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: const Color(0xFF993DF5).withOpacity(0.5),
+                                    blurRadius: 8,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    );
+                  },
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 48,
+                        height: 48,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(8),
+                          color: const Color(0xFF2A1F36),
+                          border: Border.all(
+                            color: Colors.white.withOpacity(0.1),
+                            width: 1,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.3),
+                              blurRadius: 8,
+                            ),
+                          ],
+                        ),
+                        child: Stack(
+                          children: [
+                            Container(
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(8),
+                                gradient: LinearGradient(
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                  colors: [
+                                    const Color(0xFF993DF5).withOpacity(0.2),
+                                    Colors.transparent,
+                                  ],
+                                ),
+                              ),
+                            ),
+                            const Center(
+                              child: Icon(Icons.music_note, color: Color(0xFF993DF5), size: 24),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              widget.fileName,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.splineSans(
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            StreamBuilder<bool>(
+                              stream: _engine.isPlayingStream,
+                              initialData: false,
+                              builder: (context, snapshot) {
+                                final isPlaying = snapshot.data ?? false;
+                                return Text(
+                                  isPlaying ? 'Playing • Lofi Mix' : 'Paused',
+                                  style: GoogleFonts.splineSans(
+                                    fontSize: 12,
+                                    color: Colors.white.withOpacity(0.5),
+                                  ),
+                                );
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                      StreamBuilder<bool>(
+                        stream: _engine.isPlayingStream,
+                        initialData: false,
+                        builder: (context, snapshot) {
+                          final isPlaying = snapshot.data ?? false;
+                          return Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 40,
+                                height: 40,
+                                margin: const EdgeInsets.symmetric(horizontal: 4),
+                                decoration: const BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: Colors.white,
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black26,
+                                      blurRadius: 8,
+                                    ),
+                                  ],
+                                ),
+                                child: IconButton(
+                                  padding: EdgeInsets.zero,
+                                  icon: Icon(
+                                    isPlaying ? Icons.pause : Icons.play_arrow,
+                                    color: const Color(0xFF191022),
+                                    size: 24,
+                                  ),
+                                  onPressed: _engine.togglePlayPause,
+                                ),
+                              ),
+                            ],
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -512,35 +1043,4 @@ class _PlayerEditorScreenState extends State<PlayerEditorScreen> with SingleTick
       ),
     );
   }
-}
-
-class WaveformPainter extends CustomPainter {
-  final Color color;
-  final double animationValue;
-  WaveformPainter({required this.color, required this.animationValue});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color.withOpacity(0.5)
-      ..strokeWidth = 2
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round;
-
-    final path = Path();
-    final width = size.width;
-    final height = size.height;
-
-    path.moveTo(0, height * 0.5);
-    for (double i = 0; i < width; i += 5) {
-      double wave = math.sin((i / 20) + (animationValue * 2 * math.pi));
-      path.lineTo(i, height * 0.5 + (wave * 10));
-    }
-
-    canvas.drawPath(path, paint);
-  }
-
-  @override
-  bool shouldRepaint(covariant WaveformPainter oldDelegate) =>
-      oldDelegate.animationValue != animationValue;
 }
