@@ -105,7 +105,7 @@ class AudioEngine {
       _soloud!.filters.bassBoostFilter.wet.value = 0;
       // Set Limiter defaults (Threshold -1dB)
       _soloud!.filters.limiterFilter.threshold.value = -1.0;
-      _soloud!.filters.limiterFilter.ceiling.value = -0.5;
+      _soloud!.filters.limiterFilter.outputCeiling.value = -0.5;
 
       _log.info('Track loaded: $filePath');
     } catch (e) {
