@@ -3,7 +3,7 @@ name: Build Flutter App
 on:
   push:
     branches:
-      - '**'
+      - "**"
   pull_request:
   workflow_dispatch:
 
@@ -26,8 +26,8 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.x'
-          channel: 'stable'
+          flutter-version: "3.x"
+          channel: "stable"
 
       - name: Initialize Flutter Project
         run: |
@@ -53,14 +53,14 @@ jobs:
           python3 -c "
           import os
           import re
-          
+
           kotlin_dsl = os.path.exists('build.gradle.kts')
           filename = 'build.gradle.kts' if kotlin_dsl else 'build.gradle'
-          
+
           # Read file
           with open(filename, 'r') as f:
               content = f.read()
-          
+
           # Update SDK versions (Force compileSdk 34, minSdk 23 for safe Audio/File support)
           if kotlin_dsl:
               content = re.sub(r'compileSdk\s*=\s*flutter.compileSdkVersion', 'compileSdk = 34', content)
@@ -70,7 +70,7 @@ jobs:
               content = re.sub(r'compileSdkVersion\s*flutter.compileSdkVersion', 'compileSdkVersion 34', content)
               content = re.sub(r'minSdkVersion\s*flutter.minSdkVersion', 'minSdkVersion 23', content)
               content = re.sub(r'targetSdkVersion\s*flutter.targetSdkVersion', 'targetSdkVersion 34', content)
-          
+
           # Append Signing Config
           content_kotlin = '''
           android {
@@ -89,7 +89,7 @@ jobs:
               }
           }
           '''
-          
+
           content_groovy = '''
           android {
               signingConfigs {
@@ -107,9 +107,9 @@ jobs:
               }
           }
           '''
-          
+
           content += (content_kotlin if kotlin_dsl else content_groovy)
-          
+
           # Write back
           with open(filename, 'w') as f:
               f.write(content)
@@ -131,12 +131,12 @@ jobs:
             build/app/outputs/bundle/release/*.aab
 
       - name: Build iOS (IPA - No CodeSign)
-        # Note: 'flutter build ios' requires MacOS. 
+        # Note: 'flutter build ios' requires MacOS.
         # Since we are on ubuntu-latest, we cannot build iOS app directly using xcodebuild.
-        # However, we can try to use 'flutter build ios --release --no-codesign' if tools allow, 
+        # However, we can try to use 'flutter build ios --release --no-codesign' if tools allow,
         # BUT xcodebuild is not available on Linux.
-        # FIX: We must use a matrix or separate job for iOS if we want IPA. 
-        # For this single job on Linux, we can only build Android. 
+        # FIX: We must use a matrix or separate job for iOS if we want IPA.
+        # For this single job on Linux, we can only build Android.
         # I will split the jobs.
         run: echo "Skipping iOS on Linux runner"
 
@@ -144,7 +144,7 @@ jobs:
     name: Build iOS IPA
     runs-on: macos-latest
     timeout-minutes: 60
-    
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -152,8 +152,8 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.x'
-          channel: 'stable'
+          flutter-version: "3.x"
+          channel: "stable"
 
       - name: Initialize Flutter Project
         run: |
@@ -164,6 +164,11 @@ jobs:
         working-directory: ios
         run: |
           pod repo update
+
+      - name: Set Dummy Development Team
+        run: |
+          # Add dummy team ID to project.pbxproj for CI build
+          sed -i '' 's/PRODUCT_BUNDLE_IDENTIFIER = com.example.lofiga;/PRODUCT_BUNDLE_IDENTIFIER = com.example.lofiga;\n\t\t\t\tDEVELOPMENT_TEAM = XXXXXXXXXX;/' ios/Runner.xcodeproj/project.pbxproj
 
       - name: Build iOS (No Codesign)
         run: |
