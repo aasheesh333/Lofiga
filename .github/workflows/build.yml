@@ -160,6 +160,11 @@ jobs:
           flutter create . --org com.lofiga
           flutter pub get
 
+      - name: Update Pod Specs
+        working-directory: ios
+        run: |
+          pod repo update
+
       - name: Build iOS (No Codesign)
         run: |
           export CODE_SIGNING_ALLOWED=NO
