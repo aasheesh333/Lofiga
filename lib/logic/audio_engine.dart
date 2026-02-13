@@ -27,6 +27,7 @@ class AudioEngine {
   // State
   bool _isInitialized = false;
   bool _isPlaying = false;
+  bool _isLooping = false;
   Duration _duration = Duration.zero;
   Duration _position = Duration.zero;
 
@@ -37,7 +38,9 @@ class AudioEngine {
   Stream<Duration> get positionStream => _positionController.stream;
   Stream<bool> get isPlayingStream => _stateController.stream;
   Duration get duration => _duration;
+  Duration get position => _position;
   bool get isPlaying => _isPlaying;
+  bool get isLooping => _isLooping;
   bool get isInitialized => _isInitialized;
 
   // Initialize Engine
@@ -137,6 +140,13 @@ class AudioEngine {
     _soloud!.seek(_musicHandle!, position);
     _position = position;
     _positionController.add(position);
+  }
+
+  void toggleLoop() {
+    _isLooping = !_isLooping;
+    if (_musicHandle != null && _soloud != null) {
+      _soloud!.setLooping(_musicHandle!, _isLooping);
+    }
   }
 
   // Stop all playback (used when leaving editor)

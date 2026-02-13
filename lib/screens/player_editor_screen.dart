@@ -89,6 +89,76 @@ class _PlayerEditorScreenState extends State<PlayerEditorScreen> with SingleTick
     }
   }
 
+  void _handleMenuSelection(String value) {
+    switch (value) {
+      case 'export':
+        _handleExport();
+        break;
+      case 'share':
+        _handleShare();
+        break;
+      case 'save':
+        _handleSave();
+        break;
+      case 'create_preset':
+        _handleCreatePreset();
+        break;
+    }
+  }
+
+  void _handleReset() {
+    HapticFeedback.mediumImpact();
+    final preset = context.read<PresetManager>();
+    preset.applyPreset(LofiPreset.normal);
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Reset to default',
+          style: GoogleFonts.splineSans(),
+        ),
+        backgroundColor: const Color(0xFF993DF5),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  void _handleShare() {
+    // TODO: Implement share functionality
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Share feature coming soon',
+          style: GoogleFonts.splineSans(),
+        ),
+      ),
+    );
+  }
+
+  void _handleSave() {
+    // TODO: Implement save functionality
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Save feature coming soon',
+          style: GoogleFonts.splineSans(),
+        ),
+      ),
+    );
+  }
+
+  void _handleCreatePreset() {
+    // TODO: Implement create preset functionality
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Create Preset feature coming soon',
+          style: GoogleFonts.splineSans(),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -170,18 +240,87 @@ class _PlayerEditorScreenState extends State<PlayerEditorScreen> with SingleTick
                   ),
                 ],
               ),
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(20),
-                  color: Colors.transparent,
-                ),
-                child: IconButton(
-                  padding: EdgeInsets.zero,
-                  icon: const Icon(Icons.more_vert, color: Colors.white70, size: 24),
-                  onPressed: _handleExport,
-                ),
+              Row(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(20),
+                      color: Colors.transparent,
+                    ),
+                    child: IconButton(
+                      padding: EdgeInsets.zero,
+                      icon: const Icon(Icons.refresh, color: Colors.white70, size: 24),
+                      onPressed: _handleReset,
+                      tooltip: 'Reset',
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  PopupMenuButton<String>(
+                    icon: const Icon(Icons.more_vert, color: Colors.white70, size: 24),
+                    color: const Color(0xFF2A1F36),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      side: BorderSide(color: Colors.white.withOpacity(0.1)),
+                    ),
+                    onSelected: _handleMenuSelection,
+                    itemBuilder: (context) => [
+                      PopupMenuItem(
+                        value: 'export',
+                        child: Row(
+                          children: [
+                            const Icon(Icons.file_download, color: Colors.white70, size: 20),
+                            const SizedBox(width: 12),
+                            Text(
+                              'Export',
+                              style: GoogleFonts.splineSans(color: Colors.white),
+                            ),
+                          ],
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'share',
+                        child: Row(
+                          children: [
+                            const Icon(Icons.share, color: Colors.white70, size: 20),
+                            const SizedBox(width: 12),
+                            Text(
+                              'Share',
+                              style: GoogleFonts.splineSans(color: Colors.white),
+                            ),
+                          ],
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'save',
+                        child: Row(
+                          children: [
+                            const Icon(Icons.save, color: Colors.white70, size: 20),
+                            const SizedBox(width: 12),
+                            Text(
+                              'Save',
+                              style: GoogleFonts.splineSans(color: Colors.white),
+                            ),
+                          ],
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'create_preset',
+                        child: Row(
+                          children: [
+                            const Icon(Icons.add_circle, color: Colors.white70, size: 20),
+                            const SizedBox(width: 12),
+                            Text(
+                              'Create Preset',
+                              style: GoogleFonts.splineSans(color: Colors.white),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ],
           ),
@@ -437,7 +576,7 @@ class _PlayerEditorScreenState extends State<PlayerEditorScreen> with SingleTick
                   ),
                   Icon(
                     icon,
-                    size: 60,
+                    size: 48,
                     color: iconColor,
                     shadows: isSelected && !isDashed
                         ? [
@@ -846,7 +985,7 @@ class _PlayerEditorScreenState extends State<PlayerEditorScreen> with SingleTick
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Progress bar
+                // Progress bar - Seekable
                 StreamBuilder<Duration>(
                   stream: _engine.positionStream,
                   initialData: Duration.zero,
@@ -857,21 +996,41 @@ class _PlayerEditorScreenState extends State<PlayerEditorScreen> with SingleTick
                         ? position.inMilliseconds / duration.inMilliseconds
                         : 0.0;
                     
-                    return Container(
-                      height: 4,
-                      color: Colors.white.withOpacity(0.05),
-                      child: FractionallySizedBox(
-                        alignment: Alignment.centerLeft,
-                        widthFactor: progress.clamp(0.0, 1.0),
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF993DF5),
-                            boxShadow: [
-                              BoxShadow(
-                                color: const Color(0xFF993DF5).withOpacity(0.5),
-                                blurRadius: 8,
-                              ),
-                            ],
+                    return GestureDetector(
+                      onHorizontalDragUpdate: (details) {
+                        final RenderBox box = context.findRenderObject() as RenderBox;
+                        final width = box.size.width;
+                        final seekProgress = (details.localPosition.dx / width).clamp(0.0, 1.0);
+                        final seekPosition = Duration(
+                          milliseconds: (duration.inMilliseconds * seekProgress).toInt(),
+                        );
+                        _engine.seek(seekPosition);
+                      },
+                      onTapDown: (details) {
+                        final RenderBox box = context.findRenderObject() as RenderBox;
+                        final width = box.size.width;
+                        final seekProgress = (details.localPosition.dx / width).clamp(0.0, 1.0);
+                        final seekPosition = Duration(
+                          milliseconds: (duration.inMilliseconds * seekProgress).toInt(),
+                        );
+                        _engine.seek(seekPosition);
+                      },
+                      child: Container(
+                        height: 4,
+                        color: Colors.white.withOpacity(0.05),
+                        child: FractionallySizedBox(
+                          alignment: Alignment.centerLeft,
+                          widthFactor: progress.clamp(0.0, 1.0),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF993DF5),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: const Color(0xFF993DF5).withOpacity(0.5),
+                                  blurRadius: 8,
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
@@ -962,10 +1121,20 @@ class _PlayerEditorScreenState extends State<PlayerEditorScreen> with SingleTick
                           return Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
+                              IconButton(
+                                icon: const Icon(Icons.skip_previous, color: Colors.white70),
+                                iconSize: 28,
+                                onPressed: () {
+                                  // Skip backward 10 seconds
+                                  final currentPos = _engine.position;
+                                  final newPos = currentPos - const Duration(seconds: 10);
+                                  _engine.seek(newPos > Duration.zero ? newPos : Duration.zero);
+                                },
+                              ),
                               Container(
-                                width: 40,
-                                height: 40,
-                                margin: const EdgeInsets.symmetric(horizontal: 4),
+                                width: 48,
+                                height: 48,
+                                margin: const EdgeInsets.symmetric(horizontal: 8),
                                 decoration: const BoxDecoration(
                                   shape: BoxShape.circle,
                                   color: Colors.white,
@@ -981,10 +1150,34 @@ class _PlayerEditorScreenState extends State<PlayerEditorScreen> with SingleTick
                                   icon: Icon(
                                     isPlaying ? Icons.pause : Icons.play_arrow,
                                     color: const Color(0xFF191022),
-                                    size: 24,
+                                    size: 28,
                                   ),
                                   onPressed: _engine.togglePlayPause,
                                 ),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.skip_next, color: Colors.white70),
+                                iconSize: 28,
+                                onPressed: () {
+                                  // Skip forward 10 seconds
+                                  final currentPos = _engine.position;
+                                  final duration = _engine.duration;
+                                  final newPos = currentPos + const Duration(seconds: 10);
+                                  _engine.seek(newPos < duration ? newPos : duration);
+                                },
+                              ),
+                              const SizedBox(width: 8),
+                              IconButton(
+                                icon: Icon(
+                                  _engine.isLooping ? Icons.repeat_one : Icons.repeat,
+                                  color: _engine.isLooping ? const Color(0xFF993DF5) : Colors.white38,
+                                ),
+                                iconSize: 24,
+                                onPressed: () {
+                                  setState(() {
+                                    _engine.toggleLoop();
+                                  });
+                                },
                               ),
                             ],
                           );
