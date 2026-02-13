@@ -851,36 +851,30 @@ class _PlayerEditorScreenState extends State<PlayerEditorScreen> with SingleTick
                   stream: _engine.positionStream,
                   initialData: Duration.zero,
                   builder: (context, posSnapshot) {
-                    return StreamBuilder<Duration?>(
-                      stream: _engine.durationStream,
-                      initialData: null,
-                      builder: (context, durSnapshot) {
-                        final position = posSnapshot.data ?? Duration.zero;
-                        final duration = durSnapshot.data ?? const Duration(seconds: 1);
-                        final progress = duration.inMilliseconds > 0
-                            ? position.inMilliseconds / duration.inMilliseconds
-                            : 0.0;
-                        
-                        return Container(
-                          height: 4,
-                          color: Colors.white.withOpacity(0.05),
-                          child: FractionallySizedBox(
-                            alignment: Alignment.centerLeft,
-                            widthFactor: progress.clamp(0.0, 1.0),
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF993DF5),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: const Color(0xFF993DF5).withOpacity(0.5),
-                                    blurRadius: 8,
-                                  ),
-                                ],
+                    final position = posSnapshot.data ?? Duration.zero;
+                    final duration = _engine.duration;
+                    final progress = duration.inMilliseconds > 0
+                        ? position.inMilliseconds / duration.inMilliseconds
+                        : 0.0;
+                    
+                    return Container(
+                      height: 4,
+                      color: Colors.white.withOpacity(0.05),
+                      child: FractionallySizedBox(
+                        alignment: Alignment.centerLeft,
+                        widthFactor: progress.clamp(0.0, 1.0),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF993DF5),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFF993DF5).withOpacity(0.5),
+                                blurRadius: 8,
                               ),
-                            ),
+                            ],
                           ),
-                        );
-                      },
+                        ),
+                      ),
                     );
                   },
                 ),
