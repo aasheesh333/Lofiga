@@ -1097,54 +1097,38 @@ class _PlayerEditorScreenState extends State<PlayerEditorScreen> with SingleTick
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Progress bar - Seekable
+                // Progress bar - YouTube-style Slider
                 StreamBuilder<Duration>(
                   stream: _engine.positionStream,
                   initialData: Duration.zero,
                   builder: (context, posSnapshot) {
                     final position = posSnapshot.data ?? Duration.zero;
                     final duration = _engine.duration;
-                    final progress = duration.inMilliseconds > 0
-                        ? position.inMilliseconds / duration.inMilliseconds
+                    final progressValue = duration.inMilliseconds > 0
+                        ? position.inMilliseconds.toDouble()
                         : 0.0;
                     
-                    return GestureDetector(
-                      onHorizontalDragUpdate: (details) {
-                        final RenderBox box = context.findRenderObject() as RenderBox;
-                        final width = box.size.width;
-                        final seekProgress = (details.localPosition.dx / width).clamp(0.0, 1.0);
-                        final seekPosition = Duration(
-                          milliseconds: (duration.inMilliseconds * seekProgress).toInt(),
-                        );
-                        _engine.seek(seekPosition);
-                      },
-                      onTapDown: (details) {
-                        final RenderBox box = context.findRenderObject() as RenderBox;
-                        final width = box.size.width;
-                        final seekProgress = (details.localPosition.dx / width).clamp(0.0, 1.0);
-                        final seekPosition = Duration(
-                          milliseconds: (duration.inMilliseconds * seekProgress).toInt(),
-                        );
-                        _engine.seek(seekPosition);
-                      },
-                      child: Container(
-                        height: 4,
-                        color: Colors.white.withOpacity(0.05),
-                        child: FractionallySizedBox(
-                          alignment: Alignment.centerLeft,
-                          widthFactor: progress.clamp(0.0, 1.0),
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF993DF5),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: const Color(0xFF993DF5).withOpacity(0.5),
-                                  blurRadius: 8,
-                                ),
-                              ],
-                            ),
-                          ),
+                    return SliderTheme(
+                      data: SliderThemeData(
+                        trackHeight: 3,
+                        thumbShape: const RoundSliderThumbShape(
+                          enabledThumbRadius: 6,
+                          elevation: 2,
                         ),
+                        overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+                        activeTrackColor: const Color(0xFF993DF5),
+                        inactiveTrackColor: Colors.white.withOpacity(0.15),
+                        thumbColor: const Color(0xFF993DF5),
+                        overlayColor: const Color(0xFF993DF5).withOpacity(0.3),
+                      ),
+                      child: Slider(
+                        value: progressValue.clamp(0.0, duration.inMilliseconds.toDouble()),
+                        min: 0.0,
+                        max: duration.inMilliseconds > 0 ? duration.inMilliseconds.toDouble() : 1.0,
+                        onChanged: (value) {
+                          final seekPosition = Duration(milliseconds: value.toInt());
+                          _engine.seek(seekPosition);
+                        },
                       ),
                     );
                   },
