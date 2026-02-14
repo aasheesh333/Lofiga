@@ -466,6 +466,7 @@ class _PlayerEditorScreenState extends State<PlayerEditorScreen> with SingleTick
             builder: (context, manager, _) {
               return ListView(
                 scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.only(left: 24, right: 100), // Show 3rd card partially
                 children: [
                   _buildMoodCard(
                     label: 'Normal',
@@ -688,7 +689,7 @@ class _PlayerEditorScreenState extends State<PlayerEditorScreen> with SingleTick
                   ),
                   Icon(
                     icon,
-                    size: 48,
+                    size: 38,
                     color: iconColor,
                     shadows: isSelected && !isDashed
                         ? [
@@ -1097,7 +1098,7 @@ class _PlayerEditorScreenState extends State<PlayerEditorScreen> with SingleTick
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Progress bar - YouTube-style Slider
+                // Progress bar - YouTube-style Slider with time labels
                 StreamBuilder<Duration>(
                   stream: _engine.positionStream,
                   initialData: Duration.zero,
@@ -1108,28 +1109,62 @@ class _PlayerEditorScreenState extends State<PlayerEditorScreen> with SingleTick
                         ? position.inMilliseconds.toDouble()
                         : 0.0;
                     
-                    return SliderTheme(
-                      data: SliderThemeData(
-                        trackHeight: 3,
-                        thumbShape: const RoundSliderThumbShape(
-                          enabledThumbRadius: 6,
-                          elevation: 2,
+                    // Format time as mm:ss
+                    String formatDuration(Duration d) {
+                      String twoDigits(int n) => n.toString().padLeft(2, '0');
+                      final minutes = twoDigits(d.inMinutes.remainder(60));
+                      final seconds = twoDigits(d.inSeconds.remainder(60));
+                      return '$minutes:$seconds';
+                    }
+                    
+                    return Column(
+                      children: [
+                        SliderTheme(
+                          data: SliderThemeData(
+                            trackHeight: 3,
+                            thumbShape: const RoundSliderThumbShape(
+                              enabledThumbRadius: 6,
+                              elevation: 2,
+                            ),
+                            overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+                            activeTrackColor: const Color(0xFF993DF5),
+                            inactiveTrackColor: Colors.white.withOpacity(0.15),
+                            thumbColor: const Color(0xFF993DF5),
+                            overlayColor: const Color(0xFF993DF5).withOpacity(0.3),
+                          ),
+                          child: Slider(
+                            value: progressValue.clamp(0.0, duration.inMilliseconds.toDouble()),
+                            min: 0.0,
+                            max: duration.inMilliseconds > 0 ? duration.inMilliseconds.toDouble() : 1.0,
+                            onChanged: (value) {
+                              final seekPosition = Duration(milliseconds: value.toInt());
+                              _engine.seek(seekPosition);
+                            },
+                          ),
                         ),
-                        overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
-                        activeTrackColor: const Color(0xFF993DF5),
-                        inactiveTrackColor: Colors.white.withOpacity(0.15),
-                        thumbColor: const Color(0xFF993DF5),
-                        overlayColor: const Color(0xFF993DF5).withOpacity(0.3),
-                      ),
-                      child: Slider(
-                        value: progressValue.clamp(0.0, duration.inMilliseconds.toDouble()),
-                        min: 0.0,
-                        max: duration.inMilliseconds > 0 ? duration.inMilliseconds.toDouble() : 1.0,
-                        onChanged: (value) {
-                          final seekPosition = Duration(milliseconds: value.toInt());
-                          _engine.seek(seekPosition);
-                        },
-                      ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 24),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                formatDuration(position),
+                                style: GoogleFonts.splineSans(
+                                  fontSize: 11,
+                                  color: Colors.white.withOpacity(0.6),
+                                ),
+                              ),
+                              Text(
+                                formatDuration(duration),
+                                style: GoogleFonts.splineSans(
+                                  fontSize: 11,
+                                  color: Colors.white.withOpacity(0.6),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     );
                   },
                 ),
