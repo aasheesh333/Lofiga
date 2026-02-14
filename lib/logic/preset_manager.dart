@@ -128,7 +128,7 @@ class PresetManager extends ChangeNotifier {
         _reverb = 0.35; // Moderate reverb for space
         _delay = 0.20; // Light echo for depth
         _bass = 0.40; // Boosted bass for warmth
-        _trebleCut = 0.60; // Cut highs for lo-fi warmth
+        _trebleCut = 0.40; // 40% treble cut for lofi warmth (maps to ~12.8kHz)
         // Atmosphere for authentic lo-fi feel
         _rainVolume = 0.15; // Subtle rain ambience
         _vinylVolume = 0.25; // Vinyl crackle for texture

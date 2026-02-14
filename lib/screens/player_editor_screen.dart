@@ -36,6 +36,13 @@ class _PlayerEditorScreenState extends State<PlayerEditorScreen> with SingleTick
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await _engine.init();
       await _engine.loadTrack(widget.filePath);
+      
+      // Preload atmosphere layers
+      await _engine.loadAtmosphere('rain', 'assets/audio/atmosphere/rain_loop.mp3');
+      await _engine.loadAtmosphere('vinyl', 'assets/audio/atmosphere/vinyl_crackle.mp3');
+      await _engine.loadAtmosphere('wind', 'assets/audio/atmosphere/wind_blow.mp3');
+      await _engine.loadAtmosphere('tape', 'assets/audio/atmosphere/tape_hiss.mp3');
+      
       if (mounted) {
         context.read<PresetManager>().applyPreset(LofiPreset.lofiSlow);
       }
