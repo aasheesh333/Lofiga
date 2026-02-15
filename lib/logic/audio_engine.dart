@@ -85,6 +85,7 @@ class AudioEngine {
       _musicHandle = await _soloud!.play(_musicSource!, paused: false);
       _isPlaying = true;
       _stateController.add(true);
+      _playAtmospheres(); // Ensure atmospheres sync with playback
 
       // Enable Filters Global
       try {
@@ -266,6 +267,11 @@ class AudioEngine {
     if (handle != null) {
       // Handle exists, just update volume
       _soloud!.setVolume(handle, volume);
+      
+      // Safety: Ensure it's unpaused if music is playing (in case sync was lost)
+      if (_isPlaying) {
+        _soloud!.setPause(handle, false);
+      }
 
       // Optimization: if volume is effectively zero, maybe pause?
       // For now, keeping it simple to ensure instant response.
@@ -310,8 +316,11 @@ class AudioEngine {
         _position = actualPosition;
         
         if (_isPlaying) {
-          // Check if song has finished (not looping and reached/passed end)
-          if (_position >= _duration && !_isLooping && _duration.inMilliseconds > 0) {
+          // Check if song has finished (not looping and reached/passed end OR invalid handle)
+          // Also check isValidVoiceHandle to catch end-of-stream even if position < duration
+          final bool isValid = _soloud!.isValidVoiceHandle(_musicHandle!);
+          
+          if ((!isValid || (_position >= _duration && _duration.inMilliseconds > 0)) && !_isLooping) {
             // Song has finished
             _isPlaying = false;
             _position = Duration.zero;
@@ -320,7 +329,9 @@ class AudioEngine {
             _pauseAtmospheres();
           } else {
             // Still playing, emit current position
-            _positionController.add(_position);
+            if (isValid) {
+               _positionController.add(_position);
+            }
           }
         }
       }
