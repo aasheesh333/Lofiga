@@ -120,9 +120,19 @@ class AudioEngine {
   void togglePlayPause() {
     if (_musicHandle == null || _soloud == null) return;
 
-    _soloud!.getPause(_musicHandle!)
-      ? _soloud!.setPause(_musicHandle!, false)
-      : _soloud!.setPause(_musicHandle!, true);
+    final isPaused = _soloud!.getPause(_musicHandle!);
+    
+    if (isPaused) {
+      // Resuming from pause
+      // If position is at 0 (song finished), seek to beginning for replay
+      if (_position.inMilliseconds <= 0) {
+        _soloud!.seek(_musicHandle!, Duration.zero);
+      }
+      _soloud!.setPause(_musicHandle!, false);
+    } else {
+      // Pausing
+      _soloud!.setPause(_musicHandle!, true);
+    }
 
     _isPlaying = !_soloud!.getPause(_musicHandle!);
     _stateController.add(_isPlaying);
