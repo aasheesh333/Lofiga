@@ -166,7 +166,8 @@ jobs:
       - name: Set Dummy Development Team
         run: |
           # Add dummy team ID to project.pbxproj for CI build
-          sed -i '' 's/PRODUCT_BUNDLE_IDENTIFIER = com.example.lofiga;/PRODUCT_BUNDLE_IDENTIFIER = com.example.lofiga;\n\t\t\t\tDEVELOPMENT_TEAM = XXXXXXXXXX;/' ios/Runner.xcodeproj/project.pbxproj
+          # Use perl because BSD sed (macOS) doesn't handle \n in replacement string correctly
+          perl -i -pe 's/PRODUCT_BUNDLE_IDENTIFIER = com.example.lofiga;/PRODUCT_BUNDLE_IDENTIFIER = com.example.lofiga;\n\t\t\t\tDEVELOPMENT_TEAM = XXXXXXXXXX;/g' ios/Runner.xcodeproj/project.pbxproj
 
       - name: Build iOS (No Codesign)
         run: |
