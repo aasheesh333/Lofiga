@@ -268,9 +268,14 @@ class AudioEngine {
   Future<void> _startAtmosphere(String key, double volume) async {
     final source = _atmosphereSources[key];
     if (source != null) {
-       // Loop
-       final handle = await _soloud!.play(source, volume: volume, looping: true, paused: !_isPlaying);
+       // Always start playing (not paused) - the _playAtmospheres/_pauseAtmospheres methods will control pause state
+       final handle = await _soloud!.play(source, volume: volume, looping: true, paused: false);
        _atmosphereHandles[key] = handle;
+       
+       // If main track is currently paused, pause this atmosphere too
+       if (!_isPlaying) {
+         _soloud!.setPause(handle, true);
+       }
     }
   }
 
@@ -289,10 +294,24 @@ class AudioEngine {
   // Internal Loop
   void _startPositionPolling() {
     Timer.periodic(const Duration(milliseconds: 100), (timer) {
-      if (_musicHandle != null && _isPlaying) {
-        if (_position < _duration) {
-          _position += const Duration(milliseconds: 100);
-          _positionController.add(_position);
+      if (_musicHandle != null && _soloud != null) {
+        // Query actual position from SoLoud
+        final actualPosition = _soloud!.getPosition(_musicHandle!);
+        _position = actualPosition;
+        
+        if (_isPlaying) {
+          // Check if song has finished (not looping and reached/passed end)
+          if (_position >= _duration && !_isLooping && _duration.inMilliseconds > 0) {
+            // Song has finished
+            _isPlaying = false;
+            _position = Duration.zero;
+            _stateController.add(false);
+            _positionController.add(Duration.zero);
+            _pauseAtmospheres();
+          } else {
+            // Still playing, emit current position
+            _positionController.add(_position);
+          }
         }
       }
     });
