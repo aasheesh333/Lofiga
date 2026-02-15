@@ -31,7 +31,6 @@ jobs:
 
       - name: Initialize Flutter Project
         run: |
-          flutter create . --org com.lofiga
           flutter pub get
 
       - name: Setup Keystore (Android)
@@ -157,7 +156,6 @@ jobs:
 
       - name: Initialize Flutter Project
         run: |
-          flutter create . --org com.lofiga
           flutter pub get
 
       - name: Update Pod Specs
