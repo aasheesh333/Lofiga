@@ -177,25 +177,33 @@ jobs:
               with open(path, 'r') as f:
                   content = f.read()
 
+              # 1. Inject Settings at Bundle ID
               # Regex target: any bundle identifier assignment
-              # Pattern: PRODUCT_BUNDLE_IDENTIFIER = <something>;
-              pattern = r'(PRODUCT_BUNDLE_IDENTIFIER\s*=\s*[^;]+;)'
+              pattern_bundle = r'(PRODUCT_BUNDLE_IDENTIFIER\s*=\s*[^;]+;)'
               
-              # Check if present
-              if not re.search(pattern, content):
-                  print(f'Error: Pattern \"{pattern}\" not found in {path}')
+              if not re.search(pattern_bundle, content):
+                  print(f'Error: Pattern \"{pattern_bundle}\" not found query in {path}')
                   sys.exit(1)
               
-              # Replacement: explicitly set ID and disable signing requirements
-              # tabs \t align with existing file structure
-              replacement = r'''PRODUCT_BUNDLE_IDENTIFIER = com.example.lofiga;
+              replacement_bundle = r'''PRODUCT_BUNDLE_IDENTIFIER = com.example.lofiga;
           				DEVELOPMENT_TEAM = XXXXXXXXXX;
           				CODE_SIGN_STYLE = Manual;
           				CODE_SIGNING_REQUIRED = NO;
           				CODE_SIGNING_ALLOWED = NO;'''
 
-              # use re.sub to replace ALL occurrences found in Release/Debug/etc.
-              new_content = re.sub(pattern, replacement, content)
+              new_content = re.sub(pattern_bundle, replacement_bundle, content)
+
+              # 2. Clear Code Signing Identity
+              # Regex target: "CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";
+              pattern_identity = r'\"CODE_SIGN_IDENTITY\[sdk=iphoneos\*\]\"\s*=\s*\"iPhone Developer\";'
+              replacement_identity = r'\"CODE_SIGN_IDENTITY[sdk=iphoneos*]\" = \"\";'
+              
+              # It's ok if this is not found (some configs might not have it), but strictly it should be there.
+              if re.search(pattern_identity, new_content):
+                   new_content = re.sub(pattern_identity, replacement_identity, new_content)
+                   print('Cleared CODE_SIGN_IDENTITY.')
+              else:
+                   print('Warning: CODE_SIGN_IDENTITY pattern not found.')
 
               with open(path, 'w') as f:
                   f.write(new_content)
