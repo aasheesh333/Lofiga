@@ -48,73 +48,9 @@ jobs:
         run: flutter doctor -v
 
       - name: Configure Android Signing & SDK Versions
-        working-directory: android/app
+
         run: |
-          python3 -c "
-          import os
-          import re
-
-          kotlin_dsl = os.path.exists('build.gradle.kts')
-          filename = 'build.gradle.kts' if kotlin_dsl else 'build.gradle'
-
-          # Read file
-          with open(filename, 'r') as f:
-              content = f.read()
-
-          # Update SDK versions (Force compileSdk 34, minSdk 23 for safe Audio/File support)
-          if kotlin_dsl:
-              content = re.sub(r'compileSdk\s*=\s*flutter.compileSdkVersion', 'compileSdk = 34', content)
-              content = re.sub(r'minSdk\s*=\s*flutter.minSdkVersion', 'minSdk = 24', content)
-              content = re.sub(r'targetSdk\s*=\s*flutter.targetSdkVersion', 'targetSdk = 34', content)
-          else:
-              content = re.sub(r'compileSdkVersion\s*flutter.compileSdkVersion', 'compileSdkVersion 34', content)
-              content = re.sub(r'minSdkVersion\s*flutter.minSdkVersion', 'minSdkVersion 24', content)
-              content = re.sub(r'targetSdkVersion\s*flutter.targetSdkVersion', 'targetSdkVersion 34', content)
-
-          # Append Signing Config
-          content_kotlin = '''
-          android {
-              signingConfigs {
-                  create(\"release\") {
-                      storeFile = file(\"../../release.keystore\")
-                      storePassword = \"lofiga2024\"
-                      keyAlias = \"lofiga\"
-                      keyPassword = \"lofiga2024\"
-                  }
-              }
-              buildTypes {
-                  getByName(\"release\") {
-                      signingConfig = signingConfigs.getByName(\"release\")
-                  }
-              }
-          }
-          '''
-
-          content_groovy = '''
-          android {
-              signingConfigs {
-                  release {
-                      storeFile file('../../release.keystore')
-                      storePassword 'lofiga2024'
-                      keyAlias 'lofiga'
-                      keyPassword 'lofiga2024'
-                  }
-              }
-              buildTypes {
-                  release {
-                      signingConfig signingConfigs.release
-                  }
-              }
-          }
-          '''
-
-          content += (content_kotlin if kotlin_dsl else content_groovy)
-
-          # Write back
-          with open(filename, 'w') as f:
-              f.write(content)
-          print(f'Updated SDK versions and appended signing config to {filename}')
-          "
+          python3 scripts/configure_android.py
 
       - name: Build APK (Demo Signed)
         run: flutter build apk --release
@@ -168,39 +104,7 @@ jobs:
       - name: Configure iOS Project for No-CodeSign Build
         run: |
           # Use Python to safely modify project.pbxproj to silence signing errors
-          python3 -c "
-          import sys
-          import re
-
-          path = 'ios/Runner.xcodeproj/project.pbxproj'
-          try:
-              with open(path, 'r') as f:
-                  content = f.read()
-
-              # Regex target: any bundle identifier assignment
-              # Pattern: PRODUCT_BUNDLE_IDENTIFIER = <something>;
-              pattern_bundle = r'(PRODUCT_BUNDLE_IDENTIFIER\s*=\s*[^;]+;)'
-              
-              if not re.search(pattern_bundle, content):
-                  print(f'Error: Pattern \"{pattern_bundle}\" not found query in {path}')
-                  sys.exit(1)
-              
-              # Reverting to simple strategy: Just inject Team ID.
-              # Keep CODE_SIGN_STYLE as is (Automatic assumed).
-              # This satisfies Xcode validation, while --no-codesign skips actual signing.
-              replacement_bundle = r'''\1
-          				DEVELOPMENT_TEAM = XXXXXXXXXX;'''
-
-              new_content = re.sub(pattern_bundle, replacement_bundle, content)
-
-              with open(path, 'w') as f:
-                  f.write(new_content)
-              
-              print(f'Successfully patched {path} for no-codesign build.')
-          except Exception as e:
-              print(f'Python script error: {e}')
-              sys.exit(1)
-          "
+          python3 scripts/configure_ios.py
 
       - name: Build iOS (No Codesign)
         run: |
