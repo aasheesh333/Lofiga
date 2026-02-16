@@ -163,11 +163,38 @@ jobs:
         run: |
           pod repo update
 
-      - name: Set Dummy Development Team
+      - name: Configure iOS Project for No-CodeSign Build
         run: |
-          # Add dummy team ID to project.pbxproj for CI build
-          # Use perl because BSD sed (macOS) doesn't handle \n in replacement string correctly
-          perl -i -pe 's/PRODUCT_BUNDLE_IDENTIFIER = com.example.lofiga;/PRODUCT_BUNDLE_IDENTIFIER = com.example.lofiga;\n\t\t\t\tDEVELOPMENT_TEAM = XXXXXXXXXX;/g' ios/Runner.xcodeproj/project.pbxproj
+          # Use Python to safely modify project.pbxproj to silence signing errors
+          python3 -c "
+          import sys
+
+          path = 'ios/Runner.xcodeproj/project.pbxproj'
+          with open(path, 'r') as f:
+              content = f.read()
+
+          # Injection target: exact bundle identifier line found in Release/Profile/Debug configs
+          target = 'PRODUCT_BUNDLE_IDENTIFIER = com.example.lofiga;'
+          
+          # Inject settings to force Manual signing style and disable signing requirements
+          # tabs \t align with existing file structure
+          replacement = '''PRODUCT_BUNDLE_IDENTIFIER = com.example.lofiga;
+          				DEVELOPMENT_TEAM = XXXXXXXXXX;
+          				CODE_SIGN_STYLE = Manual;
+          				CODE_SIGNING_REQUIRED = NO;
+          				CODE_SIGNING_ALLOWED = NO;'''
+
+          if target not in content:
+              print(f'Error: Target string \"{target}\" not found in {path}')
+              sys.exit(1)
+
+          new_content = content.replace(target, replacement)
+
+          with open(path, 'w') as f:
+              f.write(new_content)
+          
+          print(f'Successfully patched {path} for no-codesign build.')
+          "
 
       - name: Build iOS (No Codesign)
         run: |
