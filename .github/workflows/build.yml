@@ -31,6 +31,7 @@ jobs:
 
       - name: Initialize Flutter Project
         run: |
+          flutter create . --org com.example
           flutter pub get
 
       - name: Setup Keystore (Android)
@@ -156,6 +157,7 @@ jobs:
 
       - name: Initialize Flutter Project
         run: |
+          flutter create . --org com.example
           flutter pub get
 
       - name: Update Pod Specs
@@ -168,32 +170,40 @@ jobs:
           # Use Python to safely modify project.pbxproj to silence signing errors
           python3 -c "
           import sys
+          import re
 
           path = 'ios/Runner.xcodeproj/project.pbxproj'
-          with open(path, 'r') as f:
-              content = f.read()
+          try:
+              with open(path, 'r') as f:
+                  content = f.read()
 
-          # Injection target: exact bundle identifier line found in Release/Profile/Debug configs
-          target = 'PRODUCT_BUNDLE_IDENTIFIER = com.example.lofiga;'
-          
-          # Inject settings to force Manual signing style and disable signing requirements
-          # tabs \t align with existing file structure
-          replacement = '''PRODUCT_BUNDLE_IDENTIFIER = com.example.lofiga;
+              # Regex target: any bundle identifier assignment
+              # Pattern: PRODUCT_BUNDLE_IDENTIFIER = <something>;
+              pattern = r'(PRODUCT_BUNDLE_IDENTIFIER\s*=\s*[^;]+;)'
+              
+              # Check if present
+              if not re.search(pattern, content):
+                  print(f'Error: Pattern \"{pattern}\" not found in {path}')
+                  sys.exit(1)
+              
+              # Replacement: explicitly set ID and disable signing requirements
+              # tabs \t align with existing file structure
+              replacement = r'''PRODUCT_BUNDLE_IDENTIFIER = com.example.lofiga;
           				DEVELOPMENT_TEAM = XXXXXXXXXX;
           				CODE_SIGN_STYLE = Manual;
           				CODE_SIGNING_REQUIRED = NO;
           				CODE_SIGNING_ALLOWED = NO;'''
 
-          if target not in content:
-              print(f'Error: Target string \"{target}\" not found in {path}')
+              # use re.sub to replace ALL occurrences found in Release/Debug/etc.
+              new_content = re.sub(pattern, replacement, content)
+
+              with open(path, 'w') as f:
+                  f.write(new_content)
+              
+              print(f'Successfully patched {path} for no-codesign build.')
+          except Exception as e:
+              print(f'Python script error: {e}')
               sys.exit(1)
-
-          new_content = content.replace(target, replacement)
-
-          with open(path, 'w') as f:
-              f.write(new_content)
-          
-          print(f'Successfully patched {path} for no-codesign build.')
           "
 
       - name: Build iOS (No Codesign)
