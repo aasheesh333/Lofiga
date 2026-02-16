@@ -38,7 +38,7 @@ class _PlayerEditorScreenState extends State<PlayerEditorScreen> with SingleTick
       await _engine.loadTrack(widget.filePath);
       
       if (mounted) {
-        context.read<PresetManager>().applyPreset(LofiPreset.lofiSlow);
+        context.read<PresetManager>().applyPreset(LofiPreset.normal);
       }
     });
 
