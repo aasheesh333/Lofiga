@@ -108,6 +108,7 @@ class PresetManager extends ChangeNotifier {
   }
 
   void setAtmosphere(String type, double volume) {
+    switch (type) {
       case 'rain': _rainVolume = volume; break;
       case 'vinyl': _vinylVolume = volume; break;
       case 'wind': _windVolume = volume; break;
