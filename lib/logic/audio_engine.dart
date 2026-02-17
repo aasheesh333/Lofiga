@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_soloud/flutter_soloud.dart';
+import 'package:just_audio/just_audio.dart' as ja; // Alias just_audio
 import 'package:logging/logging.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:math' as math;
@@ -21,11 +22,15 @@ class AudioEngine {
 
   // Handles
   SoundHandle? _musicHandle;
-  final Map<String, SoundHandle> _atmosphereHandles = {};
+  // REMOVED: final Map<String, SoundHandle> _atmosphereHandles = {};
 
   // Sources
   AudioSource? _musicSource;
-  final Map<String, AudioSource> _atmosphereSources = {};
+  // REMOVED: final Map<String, AudioSource> _atmosphereSources = {};
+
+  // Atmosphere Players (JustAudio)
+  final Map<String, ja.AudioPlayer> _atmospherePlayers = {};
+  final Map<String, double> _atmosphereVolumes = {};
 
   // State
   bool _isInitialized = false;
@@ -67,10 +72,25 @@ class AudioEngine {
   }
 
   Future<void> _preloadAtmospheres() async {
-    await loadAtmosphere('rain', 'assets/audio/atmosphere/rain_loop.mp3');
-    await loadAtmosphere('vinyl', 'assets/audio/atmosphere/vinyl_crackle.mp3');
-    await loadAtmosphere('wind', 'assets/audio/atmosphere/wind_blow.mp3');
-    await loadAtmosphere('tape', 'assets/audio/atmosphere/tape_hiss.mp3');
+    // Initialize JustAudio players for atmospheres
+    await _initAtmospherePlayer('rain', 'assets/audio/atmosphere/rain_loop.mp3');
+    await _initAtmospherePlayer('vinyl', 'assets/audio/atmosphere/vinyl_crackle.mp3');
+    await _initAtmospherePlayer('wind', 'assets/audio/atmosphere/wind_blow.mp3');
+    await _initAtmospherePlayer('tape', 'assets/audio/atmosphere/tape_hiss.mp3');
+  }
+
+  Future<void> _initAtmospherePlayer(String key, String assetPath) async {
+    try {
+      final player = ja.AudioPlayer();
+      await player.setAsset(assetPath);
+      await player.setLoopMode(ja.LoopMode.all);
+      await player.setVolume(0.0); // Start silent
+      _atmospherePlayers[key] = player;
+      _atmosphereVolumes[key] = 0.0;
+      _log.info('Initialized atmosphere player: $key');
+    } catch (e) {
+      _log.severe('Failed to init atmosphere $key: $e');
+    }
   }
 
   // Load Main Track
@@ -151,7 +171,7 @@ class AudioEngine {
     
     _isPlaying = true;
     _stateController.add(true);
-    _playAtmospheres();
+    _syncAtmospheres(); // Sync atmospheres with play state
   }
 }
 
@@ -175,7 +195,7 @@ class AudioEngine {
       _soloud!.stop(_musicHandle!);
       _musicHandle = null;
     }
-    _pauseAtmospheres();
+    _syncAtmospheres(); // This will pause them since _isPlaying becomes false
     _isPlaying = false;
     _stateController.add(false);
     _position = Duration.zero;
@@ -259,103 +279,40 @@ class AudioEngine {
 
   // --- Atmosphere ---
 
-  Future<void> loadAtmosphere(String key, String assetPath) async {
-    if (!_isInitialized) return;
-    try {
-      if (!_atmosphereSources.containsKey(key)) {
-        // Copy to local file first to ensure SoLoud can read it reliably
-        final file = await _copyAssetToLocal(assetPath);
-        final source = await _soloud!.loadFile(file.path);
-        _atmosphereSources[key] = source;
-        _log.info('Loaded atmosphere: $key from ${file.path}');
-      }
-    } catch (e) {
-      _log.warning('Failed to load atmosphere $key: $e');
-    }
-  }
-
-  Future<File> _copyAssetToLocal(String assetPath) async {
-    try {
-      final byteData = await rootBundle.load(assetPath);
-      final directory = await getApplicationDocumentsDirectory();
-      final fileName = assetPath.split('/').last;
-      final file = File('${directory.path}/$fileName');
-      
-      // Always write to ensure latest version
-      await file.writeAsBytes(byteData.buffer.asUint8List(byteData.offsetInBytes, byteData.lengthInBytes));
-      return file;
-    } catch (e) {
-      _log.severe('Error copying asset $assetPath: $e');
-      rethrow;
-    }
-  }
+  // --- Atmosphere (JustAudio Implementation) ---
 
   void setAtmosphereVolume(String key, double volume) {
-    final handle = _atmosphereHandles[key];
-    if (handle != null) {
-      // Handle exists, just update volume
-      _soloud!.setVolume(handle, volume);
-      
-      // Safety: Ensure it's unpaused if music is playing (in case sync was lost)
-      if (_isPlaying) {
-        _soloud!.setPause(handle, false);
-      }
-
-      // Optimization: if volume is effectively zero, maybe pause?
-      // For now, keeping it simple to ensure instant response.
-    } else if (volume > 0.01) {
-      // Start if not playing and volume is requested
-      _startAtmosphere(key, volume);
-    }
+    _atmosphereVolumes[key] = volume;
+    _updateAtmosphereState(key);
   }
 
-  Future<void> _startAtmosphere(String key, double volume) async {
-    // Lazy load if not already loaded
-    if (!_atmosphereSources.containsKey(key)) {
-      _log.info('Lazy loading atmosphere: $key');
-      String assetPath = '';
-      switch (key) {
-        case 'rain': assetPath = 'assets/audio/atmosphere/rain_loop.mp3'; break;
-        case 'vinyl': assetPath = 'assets/audio/atmosphere/vinyl_crackle.mp3'; break;
-        case 'wind': assetPath = 'assets/audio/atmosphere/wind_blow.mp3'; break;
-        case 'tape': assetPath = 'assets/audio/atmosphere/tape_hiss.mp3'; break;
-      }
-      if (assetPath.isNotEmpty) {
-        await loadAtmosphere(key, assetPath);
-      }
-    }
+  void _updateAtmosphereState(String key) {
+    final player = _atmospherePlayers[key];
+    if (player == null) return;
 
-    final source = _atmosphereSources[key];
-    if (source != null) {
-       // Start playing so user can hear the effect immediately
-       // Atmospheres will sync with music via togglePlayPause when user plays/pauses
-       try {
-         final handle = await _soloud!.play(source, volume: volume, looping: true, paused: false);
-         _atmosphereHandles[key] = handle;
-         
-         // If main music is paused, pause this new atmosphere too (consistency)
-         if (!_isPlaying) {
-            _soloud!.setPause(handle, true);
-         }
-       } catch (e) {
-         _log.severe('Error playing atmosphere $key: $e');
-       }
+    final vol = _atmosphereVolumes[key] ?? 0.0;
+    // Play IF volume > 0 AND main music is playing
+    // (Or should we allow preview? For now, stick to sync)
+    bool shouldPlay = vol > 0.01 && _isPlaying;
+
+    if (shouldPlay) {
+      if (!player.playing) player.play();
     } else {
-      _log.warning('Could not play atmosphere $key: Source not found');
+      if (player.playing) player.pause();
+    }
+    player.setVolume(vol);
+  }
+
+  void _syncAtmospheres() {
+    for (var key in _atmospherePlayers.keys) {
+      _updateAtmosphereState(key);
     }
   }
 
-  void _playAtmospheres() {
-    for (var handle in _atmosphereHandles.values) {
-      _soloud!.setPause(handle, false);
-    }
-  }
+  // Obsolete: loadAtmosphere, _copyAssetToLocal, _startAtmosphere, _playAtmospheres, _pauseAtmospheres
+  // Removed to clean up SoLoud atmosphere logic.
 
-  void _pauseAtmospheres() {
-     for (var handle in _atmosphereHandles.values) {
-      _soloud!.setPause(handle, true);
-    }
-  }
+  // Obsolete methods removed.
 
   // Internal Loop
   void _startPositionPolling() {
@@ -373,7 +330,7 @@ class AudioEngine {
           // Song has finished - stop playback but keep position at end
           _isPlaying = false;
           _stateController.add(false);
-          _pauseAtmospheres();
+          _syncAtmospheres(); // Pauses atmospheres because _isPlaying is false
           // Don't reset position to zero - this breaks handle validity check in togglePlayPause
         } else {
           // Still playing, emit current position
@@ -390,6 +347,9 @@ class AudioEngine {
     // Note: Since this is a singleton provided at app level,
     // calling dispose() shuts down the engine globally.
     _soloud?.deinit();
+    for (var player in _atmospherePlayers.values) {
+      player.dispose();
+    }
     _positionController.close();
     _stateController.close();
   }
