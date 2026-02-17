@@ -621,7 +621,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   Text(
                     song.artist ?? 'Unknown Artist', 
                     maxLines: 1,
-                    overflow: Text.ellipsis,
+                    overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.splineSans(color: Colors.white38, fontSize: 12),
                   ),
                 ],
@@ -634,4 +634,3 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
   }
 }
-```

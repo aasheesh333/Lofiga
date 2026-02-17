@@ -649,9 +649,6 @@ class _PlayerEditorScreenState extends State<PlayerEditorScreen> with SingleTick
                         iconColor: Colors.orange,
                         progressValue: 1.0,
                     ),
-                        iconColor: Colors.orange,
-                        progressValue: 1.0,
-                    ),
                 ],
               );
             },
