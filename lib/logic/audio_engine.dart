@@ -80,10 +80,10 @@ class AudioEngine {
 
   Future<void> _preloadAtmospheres() async {
     // Initialize JustAudio players for atmospheres
-    await _initAtmospherePlayer('rain', 'assets/audio/atmosphere/rain_loop.mp3');
-    await _initAtmospherePlayer('vinyl', 'assets/audio/atmosphere/vinyl_crackle.mp3');
-    await _initAtmospherePlayer('wind', 'assets/audio/atmosphere/wind_blow.mp3');
-    await _initAtmospherePlayer('tape', 'assets/audio/atmosphere/tape_hiss.mp3');
+    await _initAtmospherePlayer('rain', 'assets/audio/atmosphere/rain_loop.wav');
+    await _initAtmospherePlayer('vinyl', 'assets/audio/atmosphere/vinyl_crackle.wav');
+    await _initAtmospherePlayer('wind', 'assets/audio/atmosphere/wind_blow.wav');
+    await _initAtmospherePlayer('tape', 'assets/audio/atmosphere/tape_hiss.wav');
   }
 
   Future<void> _initAtmospherePlayer(String key, String assetPath) async {
