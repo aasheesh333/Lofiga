@@ -128,28 +128,28 @@ class PresetManager extends ChangeNotifier {
         _reverb = 0.35; // Moderate reverb for space
         _delay = 0.20; // Light echo for depth
         _bass = 0.40; // Boosted bass for warmth
-        _trebleCut = 0.40; // 40% treble cut for lofi warmth (maps to ~12.8kHz)
+        _trebleCut = 0.70; // High cut for warmth (approx 7.4kHz)
         // Atmosphere for authentic lo-fi feel
-        _rainVolume = 0.15; // Subtle rain ambience
-        _vinylVolume = 0.25; // Vinyl crackle for texture
-        _windVolume = 0.0; 
-        _tapeVolume = 0.20; // Tape hiss for vintage feel
+        _rainVolume = 0.08; // Subtle rain ambience
+        _vinylVolume = 0.12; // Vinyl crackle for texture
+        _windVolume = 0.0;
+        _tapeVolume = 0.10; // Tape hiss for vintage feel
         break;
       case LofiPreset.rainyNight:
-        _tempo = 0.90; _pitch = -1.0; _reverb = 0.45; _delay = 0.15; _bass = 0.10; _trebleCut = 0.50;
-        _rainVolume = 0.35; _vinylVolume = 0.15; _windVolume = 0.1; _tapeVolume = 0;
+        _tempo = 0.90; _pitch = -1.0; _reverb = 0.45; _delay = 0.15; _bass = 0.10; _trebleCut = 0.65;
+        _rainVolume = 0.18; _vinylVolume = 0.05; _windVolume = 0.05; _tapeVolume = 0;
         break;
       case LofiPreset.vintage:
-        _tempo = 0.92; _pitch = -1.0; _reverb = 0.25; _delay = 0.0; _bass = 0.0; _trebleCut = 0.55;
-        _rainVolume = 0; _vinylVolume = 0.40; _windVolume = 0; _tapeVolume = 0.3;
+        _tempo = 0.92; _pitch = -1.0; _reverb = 0.25; _delay = 0.0; _bass = 0.0; _trebleCut = 0.75;
+        _rainVolume = 0; _vinylVolume = 0.15; _windVolume = 0; _tapeVolume = 0.12;
         break;
       case LofiPreset.dreamy:
-        _tempo = 0.95; _pitch = -3.0; _reverb = 0.55; _delay = 0.25; _bass = 0.0; _trebleCut = 0.20;
-        _rainVolume = 0; _vinylVolume = 0; _windVolume = 0.2; _tapeVolume = 0;
+        _tempo = 0.95; _pitch = -3.0; _reverb = 0.45; _delay = 0.25; _bass = 0.0; _trebleCut = 0.20;
+        _rainVolume = 0; _vinylVolume = 0; _windVolume = 0.10; _tapeVolume = 0;
         break;
       case LofiPreset.sad:
-        _tempo = 0.80; _pitch = -3.0; _reverb = 0.40; _delay = 0.20; _bass = 0.0; _trebleCut = 0.45;
-        _rainVolume = 0.2; _vinylVolume = 0.2; _windVolume = 0; _tapeVolume = 0.2;
+        _tempo = 0.80; _pitch = -3.0; _reverb = 0.40; _delay = 0.20; _bass = 0.0; _trebleCut = 0.60;
+        _rainVolume = 0.08; _vinylVolume = 0.08; _windVolume = 0; _tapeVolume = 0.08;
         break;
       case LofiPreset.custom:
         break; // Keep current

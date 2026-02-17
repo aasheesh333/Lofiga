@@ -237,7 +237,7 @@ class AudioEngine {
       double freq = 20000 - (cutoffFactor * 18000); // 0% = 20kHz, 100% = 2kHz
       _soloud!.filters.biquadResonantFilter.type.value = 0; // LowPass
       _soloud!.filters.biquadResonantFilter.frequency.value = freq;
-      _soloud!.filters.biquadResonantFilter.resonance.value = 2.0;
+      _soloud!.filters.biquadResonantFilter.resonance.value = 0.7;
     } else {
       _soloud!.filters.biquadResonantFilter.frequency.value = 22000;
     }
