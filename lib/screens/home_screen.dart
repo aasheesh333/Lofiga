@@ -6,6 +6,9 @@ import 'package:lofiga/logic/preset_manager.dart';
 import 'package:lofiga/screens/player_editor_screen.dart';
 import 'package:lofiga/screens/library_screen.dart';
 import 'package:lofiga/screens/settings_screen.dart';
+import 'package:lofiga/screens/settings_screen.dart';
+import 'package:lofiga/services/storage_service.dart';
+import 'package:intl/intl.dart'; 
 import 'dart:ui'; // For BackdropFilter
 
 class HomeScreen extends StatefulWidget {
@@ -17,6 +20,25 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
+  List<SavedConfig> _recentEdits = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRecentEdits();
+  }
+
+  Future<void> _loadRecentEdits() async {
+    final storage = StorageService();
+    final edits = await storage.loadAllConfigs();
+    // Sort by savedAt descending
+    edits.sort((a, b) => b.savedAt.compareTo(a.savedAt));
+    if (mounted) {
+      setState(() {
+        _recentEdits = edits;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -300,16 +322,24 @@ class _HomeScreenState extends State<HomeScreen> {
             
             // List Items
             Expanded(
-              child: ListView(
-                padding: const EdgeInsets.only(bottom: 100), // Space for bottom nav
-                children: [
-                  _buildRecentItem(
-                    title: 'Midnight Jazz.mp3',
-                    subtitle: '2 min ago • 3:42',
-                    gradientStart: Colors.purple.shade900,
-                    gradientEnd: Colors.blue.shade900,
+              child: _recentEdits.isEmpty 
+              ? Center(
+                  child: Text(
+                    'No recent edits',
+                    style: GoogleFonts.splineSans(color: Colors.white38),
                   ),
-                ],
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.only(bottom: 100), // Space for bottom nav
+                  itemCount: _recentEdits.length,
+                  itemBuilder: (context, index) {
+                    final edit = _recentEdits[index];
+                    return _buildRecentItem(
+                      edit: edit,
+                      gradientStart: Colors.purple.shade900,
+                      gradientEnd: Colors.blue.shade900,
+                    );
+                  },
               ),
             ),
           ],
@@ -354,58 +384,78 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Widget _buildRecentItem({required String title, required String subtitle, required Color gradientStart, required Color gradientEnd}) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: const Color(0xFF231B2E),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.05)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 56,
-            height: 56,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
-              gradient: LinearGradient(
-                colors: [gradientStart, gradientEnd],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
+  Widget _buildRecentItem({required SavedConfig edit, required Color gradientStart, required Color gradientEnd}) {
+    final dateStr = DateFormat('MMM d, h:mm a').format(edit.savedAt);
+
+    return GestureDetector(
+      onTap: () {
+         // Open Editor with this config
+         Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) => PlayerEditorScreen(
+                 filePath: edit.filePath,
+                 fileName: edit.fileName,
+                 savedConfig: edit,
               ),
             ),
-            child: const Icon(Icons.play_arrow, color: Colors.white),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title, 
-                  style: GoogleFonts.splineSans(fontWeight: FontWeight.w600, fontSize: 16, color: Colors.white),
+         ).then((_) => _loadRecentEdits()); // Reload after return
+      },
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: const Color(0xFF231B2E),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.white.withOpacity(0.05)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                gradient: LinearGradient(
+                  colors: [gradientStart, gradientEnd],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
                 ),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    const Icon(Icons.access_time, size: 12, color: Colors.white38),
-                    const SizedBox(width: 4),
-                    Text(
-                      subtitle, 
-                      style: GoogleFonts.splineSans(color: Colors.white38, fontSize: 12),
-                    ),
-                  ],
-                ),
-              ],
+              ),
+              child: const Icon(Icons.play_arrow, color: Colors.white),
             ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.more_vert, color: Colors.white38),
-            onPressed: () {},
-          ),
-        ],
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    edit.fileName, 
+                    style: GoogleFonts.splineSans(fontWeight: FontWeight.w600, fontSize: 16, color: Colors.white),
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      const Icon(Icons.access_time, size: 12, color: Colors.white38),
+                      const SizedBox(width: 4),
+                      Text(
+                        dateStr, 
+                        style: GoogleFonts.splineSans(color: Colors.white38, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.delete_outline, color: Colors.white38),
+              onPressed: () async {
+                 final storage = StorageService();
+                 await storage.deleteConfig(edit.id);
+                 _loadRecentEdits();
+              },
+            ),
+          ],
+        ),
       ),
     );
   }

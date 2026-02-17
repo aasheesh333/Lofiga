@@ -12,11 +12,13 @@ import 'dart:math' as math;
 class PlayerEditorScreen extends StatefulWidget {
   final String filePath;
   final String fileName;
+  final SavedConfig? savedConfig; // Optional config to restore
 
   const PlayerEditorScreen({
     super.key,
     required this.filePath,
     required this.fileName,
+    this.savedConfig,
   });
 
   @override
@@ -38,7 +40,12 @@ class _PlayerEditorScreenState extends State<PlayerEditorScreen> with SingleTick
       await _engine.loadTrack(widget.filePath);
       
       if (mounted) {
-        context.read<PresetManager>().applyPreset(LofiPreset.normal);
+        if (widget.savedConfig != null) {
+           // Restore Effects
+           _restoreConfig(widget.savedConfig!);
+        } else {
+           context.read<PresetManager>().applyPreset(LofiPreset.lofiSlow); // Default
+        }
       }
     });
 
@@ -106,6 +113,27 @@ class _PlayerEditorScreenState extends State<PlayerEditorScreen> with SingleTick
         _handleCreatePreset();
         break;
     }
+  }
+
+  void _restoreConfig(SavedConfig config) {
+    final preset = context.read<PresetManager>();
+    final values = config.effectValues;
+    
+    preset.setTempo(values['tempo'] ?? 1.0);
+    preset.setPitch(values['pitch'] ?? 0.0);
+    preset.setReverb(values['reverb'] ?? 0.0);
+    preset.setDelay(values['delay'] ?? 0.0);
+    preset.setBass(values['bass'] ?? 0.0);
+    preset.setTrebleCut(values['trebleCut'] ?? 0.0);
+    
+    preset.setAtmosphere('rain', values['rain'] ?? 0.0);
+    preset.setAtmosphere('vinyl', values['vinyl'] ?? 0.0);
+    preset.setAtmosphere('wind', values['wind'] ?? 0.0);
+    preset.setAtmosphere('tape', values['tape'] ?? 0.0);
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Restored session: ${config.fileName}')),
+    );
   }
 
   void _handleReset() {
