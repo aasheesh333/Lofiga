@@ -119,32 +119,26 @@ class AudioEngine {
 
   // Play / Pause
   void togglePlayPause() {
-    if (_musicHandle == null || _soloud == null) return;
+  if (_musicHandle == null || _soloud == null) return;
 
-    final isPaused = _soloud!.getPause(_musicHandle!);
-    
-    if (isPaused) {
-      // Resuming from pause
-      // If position is at 0 (song finished), seek to beginning for replay
-      if (_position.inMilliseconds <= 0) {
-        _soloud!.seek(_musicHandle!, Duration.zero);
-      }
-      _soloud!.setPause(_musicHandle!, false);
-    } else {
-      // Pausing
-      _soloud!.setPause(_musicHandle!, true);
+  if (_isPlaying) {
+    // Currently playing, so pause
+    _soloud!.setPause(_musicHandle!, true);
+    _isPlaying = false;
+    _stateController.add(false);
+    _pauseAtmospheres();
+  } else {
+    // Currently not playing, so play
+    // If at start (song finished/reset), seek to 0 for clean replay
+    if (_position.inMilliseconds <= 100) {
+      _soloud!.seek(_musicHandle!, Duration.zero);
     }
-
-    _isPlaying = !_soloud!.getPause(_musicHandle!);
-    _stateController.add(_isPlaying);
-
-    // Also toggle atmospheres
-    if (_isPlaying) {
-      _playAtmospheres();
-    } else {
-      _pauseAtmospheres();
-    }
+    _soloud!.setPause(_musicHandle!, false);
+    _isPlaying = true;
+    _stateController.add(true);
+    _playAtmospheres();
   }
+}
 
   void seek(Duration position) {
     if (_musicHandle == null || _soloud == null) return;
@@ -282,18 +276,14 @@ class AudioEngine {
   }
 
   Future<void> _startAtmosphere(String key, double volume) async {
-    final source = _atmosphereSources[key];
-    if (source != null) {
-       // Always start playing (not paused) - the _playAtmospheres/_pauseAtmospheres methods will control pause state
-       final handle = await _soloud!.play(source, volume: volume, looping: true, paused: false);
-       _atmosphereHandles[key] = handle;
-       
-       // If main track is currently paused, pause this atmosphere too
-       if (!_isPlaying) {
-         _soloud!.setPause(handle, true);
-       }
-    }
+  final source = _atmosphereSources[key];
+  if (source != null) {
+     // Start playing so user can hear the effect immediately
+     // Atmospheres will sync with music via togglePlayPause when user plays/pauses
+     final handle = await _soloud!.play(source, volume: volume, looping: true, paused: false);
+     _atmosphereHandles[key] = handle;
   }
+}
 
   void _playAtmospheres() {
     for (var handle in _atmosphereHandles.values) {
