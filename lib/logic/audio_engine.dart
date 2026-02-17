@@ -118,7 +118,7 @@ class AudioEngine {
   }
 
   // Play / Pause
-  void togglePlayPause() {
+  Future<void> togglePlayPause() async {
   if (_musicHandle == null || _soloud == null || _musicSource == null) return;
 
   if (_isPlaying) {
@@ -134,7 +134,7 @@ class AudioEngine {
     
     if (!isHandleValid) {
       // Handle is invalid (song finished), restart from source
-      _musicHandle = _soloud!.play(_musicSource!, paused: false);
+      _musicHandle = await _soloud!.play(_musicSource!, paused: false);
       _position = Duration.zero;
       _positionController.add(_position);
     } else {
