@@ -318,7 +318,7 @@ class AudioEngine {
         if (_isPlaying) {
           // Check if song has finished (not looping and reached/passed end OR invalid handle)
           // Also check isValidVoiceHandle to catch end-of-stream even if position < duration
-          final bool isValid = _soloud!.isValidVoiceHandle(_musicHandle!);
+          final bool isValid = _musicSource != null && _musicSource!.handles.contains(_musicHandle!);
           
           if ((!isValid || (_position >= _duration && _duration.inMilliseconds > 0)) && !_isLooping) {
             // Song has finished

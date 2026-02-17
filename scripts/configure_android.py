@@ -16,14 +16,15 @@ try:
 
     # Update SDK versions using direct replacement
     # Using raw strings for regex to avoid escaping issues
+    # Bumped to 35 for plugin compatibility
     if kotlin_dsl:
-        content = re.sub(r'compileSdk\s*=\s*flutter.compileSdkVersion', 'compileSdk = 34', content)
+        content = re.sub(r'compileSdk\s*=\s*flutter.compileSdkVersion', 'compileSdk = 35', content)
         content = re.sub(r'minSdk\s*=\s*flutter.minSdkVersion', 'minSdk = 24', content)
-        content = re.sub(r'targetSdk\s*=\s*flutter.targetSdkVersion', 'targetSdk = 34', content)
+        content = re.sub(r'targetSdk\s*=\s*flutter.targetSdkVersion', 'targetSdk = 35', content)
     else:
-        content = re.sub(r'compileSdkVersion\s*flutter.compileSdkVersion', 'compileSdkVersion 34', content)
+        content = re.sub(r'compileSdkVersion\s*flutter.compileSdkVersion', 'compileSdkVersion 35', content)
         content = re.sub(r'minSdkVersion\s*flutter.minSdkVersion', 'minSdkVersion 24', content)
-        content = re.sub(r'targetSdkVersion\s*flutter.targetSdkVersion', 'targetSdkVersion 34', content)
+        content = re.sub(r'targetSdkVersion\s*flutter.targetSdkVersion', 'targetSdkVersion 35', content)
 
     # Append Signing Config
     # Check if we already appended (basic check)
