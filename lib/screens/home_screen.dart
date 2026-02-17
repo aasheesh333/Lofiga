@@ -19,7 +19,7 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   int _currentIndex = 0;
   List<SavedConfig> _recentEdits = [];
   
@@ -34,6 +34,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadRecentEdits();
     _checkPermissionAndLoadSongs();
     _searchController.addListener(_onSearchChanged);
@@ -41,8 +42,19 @@ class _HomeScreenState extends State<HomeScreen> {
   
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _searchController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      // Reload songs when app comes to foreground (e.g. after downloading a file)
+      if (_hasPermission) {
+        _loadSongs();
+      }
+    }
   }
 
   void _onSearchChanged() {
@@ -64,7 +76,6 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _loadRecentEdits() async {
     final storage = StorageService();
     final edits = await storage.loadAllConfigs();
-    // Sort by savedAt descending
     edits.sort((a, b) => b.savedAt.compareTo(a.savedAt));
     if (mounted) {
       setState(() {
@@ -74,7 +85,6 @@ class _HomeScreenState extends State<HomeScreen> {
   }
   
   Future<void> _checkPermissionAndLoadSongs() async {
-    // Check permission
     bool permissionStatus = await _audioQuery.permissionsStatus();
     if (!permissionStatus) {
       permissionStatus = await _audioQuery.permissionsRequest();
@@ -98,13 +108,15 @@ class _HomeScreenState extends State<HomeScreen> {
         ignoreCase: true,
       );
       
-      // Filter out small files (e.g. < 30s or < 500KB) if needed, 
-      // but user asked for "System ki saari music files"
-      
       if (mounted) {
         setState(() {
           _allSongs = songs;
-          _filteredSongs = songs;
+          // Re-apply search filter if needed
+          if (_searchController.text.isNotEmpty) {
+             _onSearchChanged();
+          } else {
+             _filteredSongs = songs;
+          }
         });
       }
     } catch (e) {
@@ -291,140 +303,148 @@ class _HomeScreenState extends State<HomeScreen> {
 
             // Use Expanded properly to allow list to scroll
             Expanded(
-              child: ListView(
-                padding: const EdgeInsets.only(bottom: 100),
-                children: [
-                  // Recent Edits (Horizontal) - Hide if searching
-                  if (!_isSearching && _recentEdits.isNotEmpty) ...[
-                     Text(
-                      'Recent Projects', 
-                      style: GoogleFonts.splineSans(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
-                    ),
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      height: 140,
-                      child: ListView.builder(
-                        scrollDirection: Axis.horizontal,
-                        itemCount: _recentEdits.length,
-                        itemBuilder: (context, index) {
-                           final edit = _recentEdits[index];
-                           final dateStr = DateFormat('MMM d').format(edit.savedAt);
-                           return GestureDetector(
-                             onTap: () {
-                               Navigator.of(context).push(
-                                  MaterialPageRoute(
-                                    builder: (context) => PlayerEditorScreen(
-                                       filePath: edit.filePath,
-                                       fileName: edit.fileName,
-                                       savedConfig: edit,
-                                    ),
-                                  ),
-                               ).then((_) => _loadRecentEdits());
-                             },
-                             child: Container(
-                               width: 120,
-                               margin: const EdgeInsets.only(right: 12),
-                               padding: const EdgeInsets.all(12),
-                               decoration: BoxDecoration(
-                                 color: const Color(0xFF231B2E),
-                                 borderRadius: BorderRadius.circular(16),
-                                 border: Border.all(color: Colors.white.withOpacity(0.05)),
-                               ),
-                               child: Column(
-                                 crossAxisAlignment: CrossAxisAlignment.start,
-                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                 children: [
-                                   Container(
-                                     width: 40, height: 40,
-                                     alignment: Alignment.center,
-                                     decoration: BoxDecoration(
-                                       color: Theme.of(context).primaryColor.withOpacity(0.2),
-                                       shape: BoxShape.circle,
-                                     ),
-                                     child: const Icon(Icons.history, color: Colors.white70),
-                                   ),
-                                   Column(
-                                     crossAxisAlignment: CrossAxisAlignment.start,
-                                     children: [
-                                       Text(
-                                         edit.fileName,
-                                         maxLines: 2,
-                                         overflow: TextOverflow.ellipsis,
-                                         style: GoogleFonts.splineSans(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 13),
-                                       ),
-                                       const SizedBox(height: 4),
-                                       Text(
-                                         dateStr,
-                                         style: GoogleFonts.splineSans(color: Colors.white38, fontSize: 11),
-                                       ),
-                                     ],
-                                   ),
-                                 ],
-                               ),
-                             ),
-                           );
-                        },
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                  ],
-
-                  // File Picker & All Songs
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        _isSearching ? 'Search Results' : 'All Songs', 
+              child: RefreshIndicator(
+                onRefresh: () async {
+                  await _loadRecentEdits();
+                  if (_hasPermission) await _loadSongs();
+                },
+                color: Theme.of(context).primaryColor,
+                backgroundColor: const Color(0xFF2A1F36),
+                child: ListView(
+                  padding: const EdgeInsets.only(bottom: 100),
+                  children: [
+                    // Recent Edits (Horizontal) - Hide if searching
+                    if (!_isSearching && _recentEdits.isNotEmpty) ...[
+                       Text(
+                        'Recent Projects', 
                         style: GoogleFonts.splineSans(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
                       ),
-                      if (!_isSearching)
-                        TextButton.icon(
-                          onPressed: () => _pickAudio(context),
-                          icon: const Icon(Icons.folder_open, size: 16, color: Colors.white54),
-                          label: Text('Browse Files', style: GoogleFonts.splineSans(color: Colors.white54)),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        height: 140,
+                        child: ListView.builder(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: _recentEdits.length,
+                          itemBuilder: (context, index) {
+                             final edit = _recentEdits[index];
+                             final dateStr = DateFormat('MMM d').format(edit.savedAt);
+                             return GestureDetector(
+                               onTap: () {
+                                 Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (context) => PlayerEditorScreen(
+                                         filePath: edit.filePath,
+                                         fileName: edit.fileName,
+                                         savedConfig: edit,
+                                      ),
+                                    ),
+                                 ).then((_) => _loadRecentEdits());
+                               },
+                               child: Container(
+                                 width: 120,
+                                 margin: const EdgeInsets.only(right: 12),
+                                 padding: const EdgeInsets.all(12),
+                                 decoration: BoxDecoration(
+                                   color: const Color(0xFF231B2E),
+                                   borderRadius: BorderRadius.circular(16),
+                                   border: Border.all(color: Colors.white.withOpacity(0.05)),
+                                 ),
+                                 child: Column(
+                                   crossAxisAlignment: CrossAxisAlignment.start,
+                                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                   children: [
+                                     Container(
+                                       width: 40, height: 40,
+                                       alignment: Alignment.center,
+                                       decoration: BoxDecoration(
+                                         color: Theme.of(context).primaryColor.withOpacity(0.2),
+                                         shape: BoxShape.circle,
+                                       ),
+                                       child: const Icon(Icons.history, color: Colors.white70),
+                                     ),
+                                     Column(
+                                       crossAxisAlignment: CrossAxisAlignment.start,
+                                       children: [
+                                         Text(
+                                           edit.fileName,
+                                           maxLines: 2,
+                                           overflow: TextOverflow.ellipsis,
+                                           style: GoogleFonts.splineSans(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 13),
+                                         ),
+                                         const SizedBox(height: 4),
+                                         Text(
+                                           dateStr,
+                                           style: GoogleFonts.splineSans(color: Colors.white38, fontSize: 11),
+                                         ),
+                                       ],
+                                     ),
+                                   ],
+                                 ),
+                               ),
+                             );
+                          },
                         ),
+                      ),
+                      const SizedBox(height: 24),
                     ],
-                  ),
-                  const SizedBox(height: 12),
 
-                  if (!_hasPermission)
-                    Container(
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: Colors.orange.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: Colors.orange.withOpacity(0.3)),
-                      ),
-                      child: Column(
-                        children: [
-                          const Icon(Icons.folder_off, size: 40, color: Colors.orange),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Permission Required',
-                            style: GoogleFonts.splineSans(color: Colors.orange, fontWeight: FontWeight.bold),
+                    // File Picker & All Songs
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          _isSearching ? 'Search Results' : 'All Songs', 
+                          style: GoogleFonts.splineSans(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+                        ),
+                        if (!_isSearching)
+                          TextButton.icon(
+                            onPressed: () => _pickAudio(context),
+                            icon: const Icon(Icons.folder_open, size: 16, color: Colors.white54),
+                            label: Text('Browse Files', style: GoogleFonts.splineSans(color: Colors.white54)),
                           ),
-                          Text(
-                            'Grant access to load all system songs.',
-                            textAlign: TextAlign.center,
-                            style: GoogleFonts.splineSans(color: Colors.white54, fontSize: 12),
-                          ),
-                          const SizedBox(height: 12),
-                          ElevatedButton(
-                            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
-                            onPressed: _checkPermissionAndLoadSongs,
-                            child: const Text('Allow Access'),
-                          ),
-                        ],
-                      ),
-                    )
-                  else if (_filteredSongs.isEmpty)
-                     Padding(
-                       padding: const EdgeInsets.all(32),
-                       child: Center(child: Text('No songs found', style: GoogleFonts.splineSans(color: Colors.white38))),
-                     )
-                  else
-                    ..._filteredSongs.map((song) => _buildSongItem(song)),
-                ],
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+
+                    if (!_hasPermission)
+                      Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: Colors.orange.withOpacity(0.3)),
+                        ),
+                        child: Column(
+                          children: [
+                            const Icon(Icons.folder_off, size: 40, color: Colors.orange),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Permission Required',
+                              style: GoogleFonts.splineSans(color: Colors.orange, fontWeight: FontWeight.bold),
+                            ),
+                            Text(
+                              'Grant access to load all system songs.',
+                              textAlign: TextAlign.center,
+                              style: GoogleFonts.splineSans(color: Colors.white54, fontSize: 12),
+                            ),
+                            const SizedBox(height: 12),
+                            ElevatedButton(
+                              style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+                              onPressed: _checkPermissionAndLoadSongs,
+                              child: const Text('Allow Access'),
+                            ),
+                          ],
+                        ),
+                      )
+                    else if (_filteredSongs.isEmpty)
+                       Padding(
+                         padding: const EdgeInsets.all(32),
+                         child: Center(child: Text('No songs found', style: GoogleFonts.splineSans(color: Colors.white38))),
+                       )
+                    else
+                      ..._filteredSongs.map((song) => _buildSongItem(song)),
+                  ],
+                ),
               ),
             ),
           ],
