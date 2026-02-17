@@ -119,38 +119,45 @@ class AudioEngine {
 
   // Play / Pause
   Future<void> togglePlayPause() async {
-  if (_musicHandle == null || _soloud == null || _musicSource == null) return;
+    if (_musicHandle == null || _soloud == null || _musicSource == null) return;
 
-  if (_isPlaying) {
-    // Currently playing, so pause
-    _soloud!.setPause(_musicHandle!, true);
-    _isPlaying = false;
-    _stateController.add(false);
-    _pauseAtmospheres();
-  } else {
-    // Currently not playing, so play/resume
-    // Check if handle is still valid
-    final bool isHandleValid = _musicSource!.handles.contains(_musicHandle!);
-    
-    if (!isHandleValid) {
-      // Handle is invalid (song finished), restart from source
-      _musicHandle = await _soloud!.play(_musicSource!, paused: false);
-      _position = Duration.zero;
-      _positionController.add(_position);
-    } else {
-      // Handle is valid, just unpause
-      // If at start (manually reset), seek to 0 for clean replay
-      if (_position.inMilliseconds <= 100) {
-        _soloud!.seek(_musicHandle!, Duration.zero);
+    try {
+      if (_isPlaying) {
+        // Currently playing, so pause
+        _soloud!.setPause(_musicHandle!, true);
+        _isPlaying = false;
+        _stateController.add(false);
+        _pauseAtmospheres();
+      } else {
+        // Currently not playing, so play/resume
+        // Check if handle is still valid
+        final bool isHandleValid = _musicSource!.handles.contains(_musicHandle!);
+        
+        if (!isHandleValid) {
+          // Handle is invalid (song finished), restart from source
+          _musicHandle = await _soloud!.play(_musicSource!, paused: false);
+          _position = Duration.zero;
+          _positionController.add(_position);
+        } else {
+          // Handle is valid, just unpause
+          // If at start (manually reset), seek to 0 for clean replay
+          if (_position.inMilliseconds <= 100) {
+            _soloud!.seek(_musicHandle!, Duration.zero);
+          }
+          _soloud!.setPause(_musicHandle!, false);
+        }
+        
+        _isPlaying = true;
+        _stateController.add(true);
+        _playAtmospheres();
       }
-      _soloud!.setPause(_musicHandle!, false);
+    } catch (e) {
+      _log.severe('Error toggling play/pause: $e');
+      // Attempt to recover state to paused
+      _isPlaying = false;
+      _stateController.add(false);
     }
-    
-    _isPlaying = true;
-    _stateController.add(true);
-    _playAtmospheres();
   }
-}
 
   void seek(Duration position) {
     if (_musicHandle == null || _soloud == null) return;
@@ -288,24 +295,40 @@ class AudioEngine {
   }
 
   Future<void> _startAtmosphere(String key, double volume) async {
-  final source = _atmosphereSources[key];
-  if (source != null) {
-     // Start playing so user can hear the effect immediately
-     // Atmospheres will sync with music via togglePlayPause when user plays/pauses
-     final handle = await _soloud!.play(source, volume: volume, looping: true, paused: false);
-     _atmosphereHandles[key] = handle;
+    final source = _atmosphereSources[key];
+    if (source != null) {
+       // Start playing so user can hear the effect immediately
+       // Atmospheres will sync with music via togglePlayPause when user plays/pauses
+       
+       // CRITICAL FIX: Only play immediately if music is playing.
+       // Otherwise, start paused so it waits for resume.
+       bool startPaused = !_isPlaying;
+       try {
+         final handle = await _soloud!.play(source, volume: volume, looping: true, paused: startPaused);
+         _atmosphereHandles[key] = handle;
+       } catch (e) {
+         _log.severe('Failed to start atmosphere $key: $e');
+       }
+    }
   }
-}
 
   void _playAtmospheres() {
     for (var handle in _atmosphereHandles.values) {
-      _soloud!.setPause(handle, false);
+      try {
+        _soloud!.setPause(handle, false);
+      } catch (e) {
+        _log.warning('Error resuming atmosphere: $e');
+      }
     }
   }
 
   void _pauseAtmospheres() {
      for (var handle in _atmosphereHandles.values) {
-      _soloud!.setPause(handle, true);
+      try {
+        _soloud!.setPause(handle, true);
+      } catch (e) {
+        _log.warning('Error pausing atmosphere: $e');
+      }
     }
   }
 
