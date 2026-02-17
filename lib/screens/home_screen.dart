@@ -108,14 +108,29 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         ignoreCase: true,
       );
       
+      // Filter out atmosphere files and short clips
+      final filteredList = songs.where((song) {
+        final title = song.title.toLowerCase();
+        // Exclude common atmosphere keywords if they appear to be assets/loops
+        // Also exclude very short files (< 10 seconds) to avoid UI sounds
+        bool isAtmosphere = title.contains('rain_') || 
+                            title.contains('wind_') || 
+                            title.contains('vinyl_') || 
+                            title.contains('tape_loop');
+                            
+        bool isShort = (song.duration ?? 0) < 10000; // 10 seconds
+        
+        return !isAtmosphere && !isShort;
+      }).toList();
+      
       if (mounted) {
         setState(() {
-          _allSongs = songs;
+          _allSongs = filteredList;
           // Re-apply search filter if needed
           if (_searchController.text.isNotEmpty) {
              _onSearchChanged();
           } else {
-             _filteredSongs = songs;
+             _filteredSongs = filteredList;
           }
         });
       }
@@ -400,7 +415,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                           TextButton.icon(
                             onPressed: () => _pickAudio(context),
                             icon: const Icon(Icons.folder_open, size: 16, color: Colors.white54),
-                            label: Text('Browse Files', style: GoogleFonts.splineSans(color: Colors.white54)),
+                            label: Text('Open Files App', style: GoogleFonts.splineSans(color: Colors.white54)),
                           ),
                       ],
                     ),
