@@ -1396,3 +1396,21 @@ class _PlayerEditorScreenState extends State<PlayerEditorScreen> with SingleTick
     );
   }
 }
+
+class _PresetUIConfig {
+  final String label;
+  final String? subtitle;
+  final IconData icon;
+  final Color iconColor;
+  final Gradient? gradient;
+  final double? intensity;
+
+  _PresetUIConfig({
+    required this.label,
+    this.subtitle,
+    required this.icon,
+    required this.iconColor,
+    this.gradient,
+    this.intensity,
+  });
+}

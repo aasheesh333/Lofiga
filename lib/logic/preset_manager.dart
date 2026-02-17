@@ -4,11 +4,16 @@ import 'package:lofiga/logic/audio_engine.dart';
 
 enum LofiPreset {
   normal,
-  lofiSlow,
+  slowReverb,
+  lofi,
   rainyNight,
   vintage,
   dreamy,
   sad,
+  underwater,
+  nightcore,
+  bassBoosted,
+  radio,
   custom,
 }
 
