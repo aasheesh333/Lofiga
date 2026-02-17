@@ -108,7 +108,7 @@ class AudioEngine {
       _musicHandle = await _soloud!.play(_musicSource!, paused: false);
       _isPlaying = true;
       _stateController.add(true);
-      _playAtmospheres(); // Ensure atmospheres sync with playback
+      _syncAtmospheres(); // Ensure atmospheres sync with playback
 
       // Enable Filters Global
       try {
@@ -149,7 +149,7 @@ class AudioEngine {
     _soloud!.setPause(_musicHandle!, true);
     _isPlaying = false;
     _stateController.add(false);
-    _pauseAtmospheres();
+    _syncAtmospheres();
   } else {
     // Currently not playing, so play/resume
     // Check if handle is still valid
