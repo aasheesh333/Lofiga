@@ -38,7 +38,7 @@ class _PlayerEditorScreenState extends State<PlayerEditorScreen> with SingleTick
       await _engine.loadTrack(widget.filePath);
       
       if (mounted) {
-        context.read<PresetManager>().applyPreset(LofiPreset.normal);
+        context.read<PresetManager>().applyPreset(LofiPreset.slowReverb);
       }
     });
 
@@ -465,130 +465,163 @@ class _PlayerEditorScreenState extends State<PlayerEditorScreen> with SingleTick
           height: 220,
           child: Consumer<PresetManager>(
             builder: (context, manager, _) {
-              return ListView(
+              final presets = LofiPreset.values.where((p) => p != LofiPreset.custom).toList();
+              
+              return ListView.builder(
                 scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.only(left: 24, right: 100), // Show 3rd card partially
-                children: [
-                  _buildMoodCard(
-                    label: 'Normal',
-                    subtitle: 'Raw Audio',
-                    icon: Icons.music_note,
-                    isSelected: manager.currentPreset == LofiPreset.normal,
+                padding: const EdgeInsets.only(left: 24, right: 24),
+                itemCount: presets.length,
+                itemBuilder: (context, index) {
+                  final preset = presets[index];
+                  final config = _getPresetUIConfig(preset);
+                  
+                  return _buildMoodCard(
+                    label: config.label,
+                    subtitle: config.subtitle,
+                    icon: config.icon,
+                    isSelected: manager.currentPreset == preset,
                     onTap: () {
                       HapticFeedback.mediumImpact();
-                      manager.applyPreset(LofiPreset.normal);
+                      manager.applyPreset(preset);
                     },
-                    gradient: null,
-                    iconColor: Colors.white38,
-                    isDashed: true,
-                  ),
-                  _buildMoodCard(
-                    label: 'Lofi Slow',
-                    subtitle: null,
-                    icon: Icons.bedtime,
-                    isSelected: manager.currentPreset == LofiPreset.lofiSlow,
-                    onTap: () {
-                      HapticFeedback.mediumImpact();
-                      manager.applyPreset(LofiPreset.lofiSlow);
-                    },
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        const Color(0xFF993DF5).withOpacity(0.25),
-                        const Color(0xFF191022).withOpacity(0.05),
-                      ],
-                    ),
-                    iconColor: const Color(0xFF993DF5),
-                    progressValue: 0.75,
-                  ),
-                  _buildMoodCard(
-                    label: 'Rainy Night',
-                    subtitle: null,
-                    icon: Icons.cloudy_snowing,
-                    isSelected: manager.currentPreset == LofiPreset.rainyNight,
-                    onTap: () {
-                      HapticFeedback.mediumImpact();
-                      manager.applyPreset(LofiPreset.rainyNight);
-                    },
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        const Color(0xFF3B82F6).withOpacity(0.2),
-                        const Color(0xFF191022).withOpacity(0),
-                      ],
-                    ),
-                    iconColor: const Color(0xFF60A5FA),
-                    progressValue: 0.80,
-                  ),
-                  _buildMoodCard(
-                    label: 'Vintage',
-                    subtitle: null,
-                    icon: Icons.radio,
-                    isSelected: manager.currentPreset == LofiPreset.vintage,
-                    onTap: () {
-                      HapticFeedback.mediumImpact();
-                      manager.applyPreset(LofiPreset.vintage);
-                    },
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        const Color(0xFFFBBF24).withOpacity(0.2),
-                        const Color(0xFF191022).withOpacity(0),
-                      ],
-                    ),
-                    iconColor: const Color(0xFFFBBF24),
-                    progressValue: 0.65,
-                  ),
-                  _buildMoodCard(
-                    label: 'Dreamy',
-                    subtitle: null,
-                    icon: Icons.cloud,
-                    isSelected: manager.currentPreset == LofiPreset.dreamy,
-                    onTap: () {
-                      HapticFeedback.mediumImpact();
-                      manager.applyPreset(LofiPreset.dreamy);
-                    },
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        const Color(0xFF8B5CF6).withOpacity(0.2),
-                        const Color(0xFF191022).withOpacity(0),
-                      ],
-                    ),
-                    iconColor: const Color(0xFFA78BFA),
-                    progressValue: 0.70,
-                  ),
-                  _buildMoodCard(
-                    label: 'Sad',
-                    subtitle: null,
-                    icon: Icons.sentiment_dissatisfied,
-                    isSelected: manager.currentPreset == LofiPreset.sad,
-                    onTap: () {
-                      HapticFeedback.mediumImpact();
-                      manager.applyPreset(LofiPreset.sad);
-                    },
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        const Color(0xFF6366F1).withOpacity(0.2),
-                        const Color(0xFF191022).withOpacity(0),
-                      ],
-                    ),
-                    iconColor: const Color(0xFF818CF8),
-                    progressValue: 0.60,
-                  ),
-                ],
+                    gradient: config.gradient,
+                    iconColor: config.iconColor,
+                    isDashed: preset == LofiPreset.normal,
+                    progressValue: config.intensity,
+                  );
+                },
               );
             },
           ),
         ),
       ],
     );
+  }
+
+  // Helper for Preset UI Configuration
+  _PresetUIConfig _getPresetUIConfig(LofiPreset preset) {
+    switch (preset) {
+      case LofiPreset.normal:
+        return _PresetUIConfig(
+          label: 'None',
+          subtitle: 'Raw Audio',
+          icon: Icons.music_note,
+          iconColor: Colors.white38,
+          intensity: 0.0,
+        );
+      case LofiPreset.slowReverb:
+        return _PresetUIConfig(
+          label: 'Slow Reverb',
+          subtitle: 'Pure Vibes',
+          icon: Icons.access_time,
+          iconColor: const Color(0xFF993DF5),
+          gradient: LinearGradient(
+              colors: [const Color(0xFF993DF5).withOpacity(0.25), const Color(0xFF191022).withOpacity(0.05)],
+              begin: Alignment.topCenter, end: Alignment.bottomCenter),
+          intensity: 0.6,
+        );
+      case LofiPreset.lofi:
+        return _PresetUIConfig(
+          label: 'Lofi',
+          subtitle: 'Classic',
+          icon: Icons.headphones,
+          iconColor: Colors.orange,
+          gradient: LinearGradient(
+              colors: [Colors.orange.withOpacity(0.2), const Color(0xFF191022).withOpacity(0.05)],
+              begin: Alignment.topCenter, end: Alignment.bottomCenter),
+          intensity: 0.7,
+        );
+      case LofiPreset.rainyNight:
+        return _PresetUIConfig(
+          label: 'Rainy Night',
+          subtitle: 'Cozy',
+          icon: Icons.cloudy_snowing,
+          iconColor: const Color(0xFF60A5FA),
+          gradient: LinearGradient(
+              colors: [const Color(0xFF3B82F6).withOpacity(0.2), const Color(0xFF191022).withOpacity(0)],
+              begin: Alignment.topCenter, end: Alignment.bottomCenter),
+          intensity: 0.8,
+        );
+      case LofiPreset.vintage:
+        return _PresetUIConfig(
+          label: 'Vintage',
+          subtitle: 'Retro',
+          icon: Icons.radio,
+          iconColor: const Color(0xFFFBBF24),
+          gradient: LinearGradient(
+              colors: [const Color(0xFFFBBF24).withOpacity(0.2), const Color(0xFF191022).withOpacity(0)],
+              begin: Alignment.topCenter, end: Alignment.bottomCenter),
+          intensity: 0.65,
+        );
+      case LofiPreset.dreamy:
+        return _PresetUIConfig(
+          label: 'Dreamy',
+          subtitle: 'Ethereal',
+          icon: Icons.cloud,
+          iconColor: const Color(0xFFA78BFA),
+          gradient: LinearGradient(
+              colors: [const Color(0xFF8B5CF6).withOpacity(0.2), const Color(0xFF191022).withOpacity(0)],
+              begin: Alignment.topCenter, end: Alignment.bottomCenter),
+          intensity: 0.7,
+        );
+      case LofiPreset.sad:
+        return _PresetUIConfig(
+          label: 'Sad',
+          subtitle: 'Melancholy',
+          icon: Icons.sentiment_dissatisfied,
+          iconColor: const Color(0xFF818CF8),
+          gradient: LinearGradient(
+              colors: [const Color(0xFF6366F1).withOpacity(0.2), const Color(0xFF191022).withOpacity(0)],
+              begin: Alignment.topCenter, end: Alignment.bottomCenter),
+          intensity: 0.6,
+        );
+      case LofiPreset.underwater:
+        return _PresetUIConfig(
+          label: 'Underwater',
+          subtitle: 'Muffled',
+          icon: Icons.water_drop,
+          iconColor: Colors.cyan,
+          gradient: LinearGradient(
+              colors: [Colors.cyan.withOpacity(0.2), const Color(0xFF191022).withOpacity(0)],
+              begin: Alignment.topCenter, end: Alignment.bottomCenter),
+          intensity: 0.85,
+        );
+      case LofiPreset.nightcore:
+        return _PresetUIConfig(
+          label: 'Nightcore',
+          subtitle: 'Fast & High',
+          icon: Icons.bolt,
+          iconColor: Colors.redAccent,
+          gradient: LinearGradient(
+              colors: [Colors.redAccent.withOpacity(0.2), const Color(0xFF191022).withOpacity(0)],
+              begin: Alignment.topCenter, end: Alignment.bottomCenter),
+          intensity: 0.9,
+        );
+      case LofiPreset.bassBoosted:
+        return _PresetUIConfig(
+          label: 'Bass Boost',
+          subtitle: 'Heavy',
+          icon: Icons.speaker,
+          iconColor: Colors.deepPurple,
+          gradient: LinearGradient(
+              colors: [Colors.deepPurple.withOpacity(0.2), const Color(0xFF191022).withOpacity(0)],
+              begin: Alignment.topCenter, end: Alignment.bottomCenter),
+          intensity: 0.8,
+        );
+      case LofiPreset.radio:
+        return _PresetUIConfig(
+          label: 'AM Radio',
+          subtitle: 'Lo-Fi',
+          icon: Icons.podcasts,
+          iconColor: Colors.green,
+          gradient: LinearGradient(
+              colors: [Colors.green.withOpacity(0.2), const Color(0xFF191022).withOpacity(0)],
+              begin: Alignment.topCenter, end: Alignment.bottomCenter),
+          intensity: 0.5,
+        );
+      default:
+        return _PresetUIConfig(label: 'Unknown', icon: Icons.help, iconColor: Colors.grey);
+    }
   }
 
   Widget _buildMoodCard({
