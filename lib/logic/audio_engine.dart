@@ -119,7 +119,7 @@ class AudioEngine {
 
   // Play / Pause
   void togglePlayPause() {
-  if (_musicHandle == null || _soloud == null) return;
+  if (_musicHandle == null || _soloud == null || _musicSource == null) return;
 
   if (_isPlaying) {
     // Currently playing, so pause
@@ -128,12 +128,24 @@ class AudioEngine {
     _stateController.add(false);
     _pauseAtmospheres();
   } else {
-    // Currently not playing, so play
-    // If at start (song finished/reset), seek to 0 for clean replay
-    if (_position.inMilliseconds <= 100) {
-      _soloud!.seek(_musicHandle!, Duration.zero);
+    // Currently not playing, so play/resume
+    // Check if handle is still valid
+    final bool isHandleValid = _musicSource!.handles.contains(_musicHandle!);
+    
+    if (!isHandleValid) {
+      // Handle is invalid (song finished), restart from source
+      _musicHandle = _soloud!.play(_musicSource!, paused: false);
+      _position = Duration.zero;
+      _positionController.add(_position);
+    } else {
+      // Handle is valid, just unpause
+      // If at start (manually reset), seek to 0 for clean replay
+      if (_position.inMilliseconds <= 100) {
+        _soloud!.seek(_musicHandle!, Duration.zero);
+      }
+      _soloud!.setPause(_musicHandle!, false);
     }
-    _soloud!.setPause(_musicHandle!, false);
+    
     _isPlaying = true;
     _stateController.add(true);
     _playAtmospheres();
@@ -306,23 +318,21 @@ class AudioEngine {
         _position = actualPosition;
         
         if (_isPlaying) {
-          // Check if song has finished (not looping and reached/passed end OR invalid handle)
-          // Also check isValidVoiceHandle to catch end-of-stream even if position < duration
-          final bool isValid = _musicSource != null && _musicSource!.handles.contains(_musicHandle!);
-          
-          if ((!isValid || (_position >= _duration && _duration.inMilliseconds > 0)) && !_isLooping) {
-            // Song has finished
-            _isPlaying = false;
-            _position = Duration.zero;
-            _stateController.add(false);
-            _positionController.add(Duration.zero);
-            _pauseAtmospheres();
-          } else {
-            // Still playing, emit current position
-            if (isValid) {
-               _positionController.add(_position);
-            }
+        // Check if song has finished (not looping and reached/passed end OR invalid handle)
+        final bool isValid = _musicSource != null && _musicSource!.handles.contains(_musicHandle!);
+        
+        if ((!isValid || (_position >= _duration && _duration.inMilliseconds > 0)) && !_isLooping) {
+          // Song has finished - stop playback but keep position at end
+          _isPlaying = false;
+          _stateController.add(false);
+          _pauseAtmospheres();
+          // Don't reset position to zero - this breaks handle validity check in togglePlayPause
+        } else {
+          // Still playing, emit current position
+          if (isValid) {
+             _positionController.add(_position);
           }
+        }
         }
       }
     });
