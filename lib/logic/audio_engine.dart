@@ -288,14 +288,40 @@ class AudioEngine {
   }
 
   Future<void> _startAtmosphere(String key, double volume) async {
-  final source = _atmosphereSources[key];
-  if (source != null) {
-     // Start playing so user can hear the effect immediately
-     // Atmospheres will sync with music via togglePlayPause when user plays/pauses
-     final handle = await _soloud!.play(source, volume: volume, looping: true, paused: false);
-     _atmosphereHandles[key] = handle;
+    // Lazy load if not already loaded
+    if (!_atmosphereSources.containsKey(key)) {
+      _log.info('Lazy loading atmosphere: $key');
+      String assetPath = '';
+      switch (key) {
+        case 'rain': assetPath = 'assets/audio/atmosphere/rain_loop.mp3'; break;
+        case 'vinyl': assetPath = 'assets/audio/atmosphere/vinyl_crackle.mp3'; break;
+        case 'wind': assetPath = 'assets/audio/atmosphere/wind_blow.mp3'; break;
+        case 'tape': assetPath = 'assets/audio/atmosphere/tape_hiss.mp3'; break;
+      }
+      if (assetPath.isNotEmpty) {
+        await loadAtmosphere(key, assetPath);
+      }
+    }
+
+    final source = _atmosphereSources[key];
+    if (source != null) {
+       // Start playing so user can hear the effect immediately
+       // Atmospheres will sync with music via togglePlayPause when user plays/pauses
+       try {
+         final handle = await _soloud!.play(source, volume: volume, looping: true, paused: false);
+         _atmosphereHandles[key] = handle;
+         
+         // If main music is paused, pause this new atmosphere too (consistency)
+         if (!_isPlaying) {
+            _soloud!.setPause(handle, true);
+         }
+       } catch (e) {
+         _log.severe('Error playing atmosphere $key: $e');
+       }
+    } else {
+      _log.warning('Could not play atmosphere $key: Source not found');
+    }
   }
-}
 
   void _playAtmospheres() {
     for (var handle in _atmosphereHandles.values) {
