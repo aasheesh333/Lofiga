@@ -22,3 +22,22 @@ subprojects {
 tasks.register<Delete>("clean") {
     delete(rootProject.layout.buildDirectory)
 }
+
+subprojects {
+    afterEvaluate {
+        if (project.extensions.findByName("android") != null) {
+             val android = project.extensions.findByName("android")!!
+             try {
+                 val getNs = android.javaClass.getMethod("getNamespace")
+                 if (getNs.invoke(android) == null) {
+                     val setNs = android.javaClass.getMethod("setNamespace", String::class.java)
+                     if (project.name == "on_audio_query_android") {
+                         setNs.invoke(android, "com.lucasjosino.on_audio_query")
+                     }
+                 }
+             } catch (e: Exception) {
+                 // ignore
+             }
+        }
+    }
+}

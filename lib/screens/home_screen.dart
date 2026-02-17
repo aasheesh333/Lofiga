@@ -471,7 +471,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Future<void> _pickAudio(BuildContext context) async {
     try {
       FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.audio, // Filter for Music Files only
+        type: FileType.custom, 
+        allowedExtensions: ['mp3', 'wav', 'm4a', 'aac', 'flac', 'ogg'],
       );
 
       if (result != null) {
