@@ -64,10 +64,10 @@ class AudioEngine {
   }
 
   Future<void> _preloadAtmospheres() async {
-    await loadAtmosphere('rain', 'assets/audio/atmosphere/rain_loop.mp3');
-    await loadAtmosphere('vinyl', 'assets/audio/atmosphere/vinyl_crackle.mp3');
-    await loadAtmosphere('wind', 'assets/audio/atmosphere/wind_blow.mp3');
-    await loadAtmosphere('tape', 'assets/audio/atmosphere/tape_hiss.mp3');
+    await loadAtmosphere('rain', 'assets/audio/atmosphere/rain_loop.wav');
+    await loadAtmosphere('vinyl', 'assets/audio/atmosphere/vinyl_crackle.wav');
+    await loadAtmosphere('wind', 'assets/audio/atmosphere/wind_blow.wav');
+    await loadAtmosphere('tape', 'assets/audio/atmosphere/tape_hiss.wav');
   }
 
   // Load Main Track
