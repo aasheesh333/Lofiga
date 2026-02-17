@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_soloud/flutter_soloud.dart';
 import 'package:just_audio/just_audio.dart' as ja; // Alias just_audio
+import 'package:audio_session/audio_session.dart';
 import 'package:logging/logging.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:math' as math;
@@ -58,6 +59,12 @@ class AudioEngine {
     try {
       _soloud = SoLoud.instance;
       await _soloud!.init();
+      _soloud!.setGlobalVolume(1.0);
+      
+      // Configure Audio Session for iOS (Playback + Mixing)
+      final session = await AudioSession.instance;
+      await session.configure(const AudioSessionConfiguration.music());
+
       _isInitialized = true;
       _log.info('SoLoud initialized');
 
