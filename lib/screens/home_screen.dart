@@ -321,8 +321,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _pickAudio(BuildContext context) async {
     try {
       FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['mp3', 'wav', 'm4a', 'flac', 'aac', 'ogg'],
+        type: FileType.audio, // Filter for Music Files only
       );
 
       if (result != null) {

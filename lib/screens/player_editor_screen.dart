@@ -250,6 +250,9 @@ class _PlayerEditorScreenState extends State<PlayerEditorScreen> with SingleTick
               
               await storage.saveCustomPreset(customPreset);
               
+              // Update Manager to show it immediately
+              preset.saveCustomPreset(nameController.text.trim());
+              
               Navigator.pop(context);
               
               if (mounted) {
@@ -483,8 +486,8 @@ class _PlayerEditorScreenState extends State<PlayerEditorScreen> with SingleTick
                     isDashed: true,
                   ),
                   _buildMoodCard(
-                    label: 'Lofi Slow',
-                    subtitle: null,
+                    label: 'Slow Reverb', // Renamed per request
+                    subtitle: 'Deep & Spacious',
                     icon: Icons.bedtime,
                     isSelected: manager.currentPreset == LofiPreset.lofiSlow,
                     onTap: () {
@@ -582,6 +585,45 @@ class _PlayerEditorScreenState extends State<PlayerEditorScreen> with SingleTick
                     iconColor: const Color(0xFF818CF8),
                     progressValue: 0.60,
                   ),
+                  
+                  // Saved Presets
+                  ...manager.savedPresets.asMap().entries.map((entry) {
+                    final index = entry.key;
+                    final preset = entry.value;
+                    final isSelected = manager.currentPreset == LofiPreset.custom && manager.customPresetName == preset['name'];
+                    
+                    return _buildMoodCard(
+                      label: preset['name'],
+                      subtitle: 'User Preset',
+                      icon: Icons.person_outline,
+                      isSelected: isSelected,
+                      onTap: () {
+                         HapticFeedback.mediumImpact();
+                         manager.applySavedPreset(index);
+                      },
+                      gradient: LinearGradient(
+                        colors: [Colors.teal.shade900, Colors.black],
+                      ),
+                      iconColor: Colors.tealAccent,
+                    );
+                  }).toList(),
+                  
+                  if (manager.currentPreset == LofiPreset.custom && manager.customPresetName == null)
+                    _buildMoodCard(
+                        label: 'Custom',
+                        subtitle: 'Modified',
+                        icon: Icons.tune,
+                        isSelected: true,
+                        onTap: () {}, // Already selected
+                        gradient: LinearGradient(
+                          colors: [Colors.orange.shade900, Colors.black],
+                        ),
+                        iconColor: Colors.orange,
+                        progressValue: 1.0,
+                    ),
+                        iconColor: Colors.orange,
+                        progressValue: 1.0,
+                    ),
                 ],
               );
             },
