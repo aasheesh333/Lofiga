@@ -1,7 +1,10 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_soloud/flutter_soloud.dart';
 import 'package:logging/logging.dart';
+import 'package:path_provider/path_provider.dart';
 import 'dart:math' as math;
 
 /// Singleton class to handle low-level audio processing using SoLoud.
@@ -260,11 +263,30 @@ class AudioEngine {
     if (!_isInitialized) return;
     try {
       if (!_atmosphereSources.containsKey(key)) {
-        final source = await _soloud!.loadAsset(assetPath);
+        // Copy to local file first to ensure SoLoud can read it reliably
+        final file = await _copyAssetToLocal(assetPath);
+        final source = await _soloud!.loadFile(file.path);
         _atmosphereSources[key] = source;
+        _log.info('Loaded atmosphere: $key from ${file.path}');
       }
     } catch (e) {
       _log.warning('Failed to load atmosphere $key: $e');
+    }
+  }
+
+  Future<File> _copyAssetToLocal(String assetPath) async {
+    try {
+      final byteData = await rootBundle.load(assetPath);
+      final directory = await getApplicationDocumentsDirectory();
+      final fileName = assetPath.split('/').last;
+      final file = File('${directory.path}/$fileName');
+      
+      // Always write to ensure latest version
+      await file.writeAsBytes(byteData.buffer.asUint8List(byteData.offsetInBytes, byteData.lengthInBytes));
+      return file;
+    } catch (e) {
+      _log.severe('Error copying asset $assetPath: $e');
+      rethrow;
     }
   }
 
