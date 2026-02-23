@@ -25,19 +25,22 @@ class ExportService {
 
       final String outputPath = '${downloadsDir!.path}/lofiga_export_${DateTime.now().millisecondsSinceEpoch}.mp3';
 
-      // 1. Get Sample Rate
+      // 1. Get Sample Rate safely
       int sampleRate = 44100;
-      await FFprobeKit.getMediaInformation(inputPath).then((session) async {
-         final info = session.getMediaInformation();
-         if (info != null && info.getStreams().isNotEmpty) {
-            final rate = info.getStreams().first.getSampleRate();
-            if (rate != null) {
-              sampleRate = int.tryParse(rate) ?? 44100;
-            }
-         }
-      });
+      try {
+        final session = await FFprobeKit.getMediaInformation(inputPath);
+        final info = session.getMediaInformation();
+        if (info != null && info.getStreams().isNotEmpty) {
+           final rate = info.getStreams().first.getSampleRate();
+           if (rate != null) {
+             sampleRate = int.tryParse(rate) ?? 44100;
+           }
+        }
+      } catch (e) {
+        debugPrint('FFprobe failed, defaulting to 44100: $e');
+      }
 
-      // Build FFmpeg Filter Complex
+      // Build FFmpeg Filter Complex safely
       List<String> filters = [];
 
       double pitchFactor = math.pow(2, preset.pitch / 12.0).toDouble();
@@ -47,29 +50,35 @@ class ExportService {
       if (combinedFactor != 1.0) {
         int newRate = (sampleRate * combinedFactor).toInt();
         filters.add('asetrate=$newRate');
-        filters.add('aresample=$sampleRate');
+        filters.add('aresample=44100'); // Force output to 44.1kHz to prevent encoder crashes
       }
 
       if (preset.trebleCut > 0) {
-        double freq = 20000 - (preset.trebleCut * 18000);
-        filters.add('lowpass=f=$freq');
+        // limit freq to avoid invalid lowpass values
+        double cutPct = preset.trebleCut.clamp(0.0, 1.0);
+        double freq = 20000 - (cutPct * 18000);
+        if (freq < 200) freq = 200;
+        filters.add('lowpass=f=${freq.toInt()}');
       }
 
       if (preset.bass > 0) {
-        double gain = preset.bass * 20;
+        double gain = (preset.bass * 20).clamp(0.0, 20.0);
         filters.add('equalizer=f=100:width_type=h:width=200:g=$gain');
       }
 
       if (preset.delay > 0) {
-        int delayMs = (preset.delay * 1000).toInt();
-        if (delayMs < 10) delayMs = 10;
+        int delayMs = (preset.delay * 1000).toInt().clamp(10, 2000);
         filters.add('aecho=0.8:0.6:$delayMs:0.3');
       }
 
       if (preset.reverb > 0) {
-        filters.add('freeverb=width=0.9:wet=${preset.reverb}:damp=0.5:room=0.8');
+        double rev = preset.reverb.clamp(0.0, 1.0);
+        filters.add('freeverb=width=0.9:wet=$rev:damp=0.5:room=0.8');
       }
 
+      // Loudnorm can sometimes cause issues if previous filters drop channels. 
+      // Aformat ensures standard stereo output before loudness normalization.
+      filters.add('aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo');
       filters.add('loudnorm=I=-16:TP=-1.5:LRA=11');
 
       // Construct the command arguments safely
