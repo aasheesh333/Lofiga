@@ -25,12 +25,12 @@ class PresetManager extends ChangeNotifier {
 
   // Core Values (mapped to 0.0 - 1.0 or specific ranges)
   // Initialized to match the default 'lofiSlow' preset
-  double _tempo = 0.85;
-  double _pitch = -2.0;
-  double _reverb = 0.65;
-  double _delay = 0.15;
-  double _bass = 0.50;
-  double _trebleCut = 0.30;
+  double _tempo = 0.90; // 10% slow instead of 15%
+  double _pitch = -1.0; // Less deep vocal effect
+  double _reverb = 0.50; // Moderate hall
+  double _delay = 0.15; // Subtle echo
+  double _bass = 0.30; // Moderate warmth
+  double _trebleCut = 0.00; // No treble cut as requested
 
   // Atmospheres
   double _rainVolume = 0.0;
@@ -137,12 +137,12 @@ class PresetManager extends ChangeNotifier {
       // "Slow Reverb" - Default requested. 
       // Deep mood, high reverb, slowed down. NO ATMOSPHERE.
       case LofiPreset.lofiSlow: // Renaming UI to "Slow Reverb"
-        _tempo = 0.85; // 15% slow
-        _pitch = -2.0; // Deep vocal effect
-        _reverb = 0.65; // Large hall (High WET)
-        _delay = 0.15; // Subtle echo
-        _bass = 0.50; // Boost warmth
-        _trebleCut = 0.30; 
+        _tempo = 0.90; 
+        _pitch = -1.0; 
+        _reverb = 0.50; 
+        _delay = 0.15; 
+        _bass = 0.30; 
+        _trebleCut = 0.00; 
         // No atmosphere per request
         _rainVolume = 0; _vinylVolume = 0; _windVolume = 0; _tapeVolume = 0;
         break;

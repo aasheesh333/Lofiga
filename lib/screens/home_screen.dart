@@ -316,6 +316,24 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
             const SizedBox(height: 24),
 
+            // File Picker & All Songs Header
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  _isSearching ? 'Search Results' : 'All Songs', 
+                  style: GoogleFonts.splineSans(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+                ),
+                if (!_isSearching)
+                  TextButton.icon(
+                    onPressed: () => _pickAudio(context),
+                    icon: const Icon(Icons.folder_open, size: 16, color: Colors.white54),
+                    label: Text('Open Files App', style: GoogleFonts.splineSans(color: Colors.white54)),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+
             // Use Expanded properly to allow list to scroll
             Expanded(
               child: RefreshIndicator(
@@ -402,24 +420,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       ),
                       const SizedBox(height: 24),
                     ],
-
-                    // File Picker & All Songs
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          _isSearching ? 'Search Results' : 'All Songs', 
-                          style: GoogleFonts.splineSans(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
-                        ),
-                        if (!_isSearching)
-                          TextButton.icon(
-                            onPressed: () => _pickAudio(context),
-                            icon: const Icon(Icons.folder_open, size: 16, color: Colors.white54),
-                            label: Text('Open Files App', style: GoogleFonts.splineSans(color: Colors.white54)),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
 
                     if (!_hasPermission)
                       Container(
