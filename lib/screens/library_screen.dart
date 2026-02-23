@@ -55,7 +55,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
       if (dir != null) {
         final List<FileSystemEntity> files = dir.listSync()
-            .where((f) => f.path.endsWith('.mp3'))
+            .where((f) => f.path.endsWith('.mp3') || f.path.endsWith('.m4a'))
             .toList();
             
         // Sort by modified date descending

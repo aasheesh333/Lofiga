@@ -23,7 +23,7 @@ class ExportService {
         downloadsDir = await getApplicationDocumentsDirectory();
       }
 
-      final String outputPath = '${downloadsDir!.path}/lofiga_export_${DateTime.now().millisecondsSinceEpoch}.mp3';
+      final String outputPath = '${downloadsDir!.path}/lofiga_export_${DateTime.now().millisecondsSinceEpoch}.m4a';
 
       // 1. Get Sample Rate safely
       int sampleRate = 44100;
@@ -76,20 +76,19 @@ class ExportService {
         filters.add('freeverb=width=0.9:wet=$rev:damp=0.5:room=0.8');
       }
 
-      // Loudnorm can sometimes cause issues if previous filters drop channels. 
-      // Aformat ensures standard stereo output before loudness normalization.
+      // Ensure a 44.1kHz stereo format for compatibility
       filters.add('aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo');
-      filters.add('loudnorm=I=-16:TP=-1.5:LRA=11');
 
       // Construct the command arguments safely
       List<String> args = ['-y', '-i', inputPath];
 
       if (filters.isNotEmpty) {
         String filterGraph = filters.join(',');
-        args.addAll(['-af', filterGraph]); // Better than -filter_complex for single streams
+        args.addAll(['-af', filterGraph]); 
       }
 
-      args.addAll(['-b:a', '320k', outputPath]);
+      // Use native AAC encoder which is ALWAYS available in FFmpeg, avoiding missing libmp3lame errors
+      args.addAll(['-c:a', 'aac', '-b:a', '256k', outputPath]);
 
       debugPrint('FFmpeg Command Args: ${args.join(' ')}');
 

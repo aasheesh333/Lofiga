@@ -198,12 +198,18 @@ class AudioEngine {
 
   // Stop all playback (used when leaving editor)
   void stop() {
+    _isPlaying = false; // Set this BEFORE sync so atmospheres know to pause
+    _syncAtmospheres(); 
+
     if (_musicHandle != null && _soloud != null) {
       _soloud!.stop(_musicHandle!);
       _musicHandle = null;
     }
-    _syncAtmospheres(); // This will pause them since _isPlaying becomes false
-    _isPlaying = false;
+    if (_musicSource != null && _soloud != null) {
+      _soloud!.disposeSource(_musicSource!);
+      _musicSource = null;
+    }
+    
     _stateController.add(false);
     _position = Duration.zero;
     _positionController.add(_position);
