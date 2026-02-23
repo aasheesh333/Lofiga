@@ -24,12 +24,13 @@ class PresetManager extends ChangeNotifier {
   final List<Map<String, dynamic>> _savedPresets = []; // TODO: Load from SharedPrefs
 
   // Core Values (mapped to 0.0 - 1.0 or specific ranges)
-  double _tempo = 1.0;
-  double _pitch = 0.0;
-  double _reverb = 0.0;
-  double _delay = 0.0;
-  double _bass = 0.0;
-  double _trebleCut = 0.0;
+  // Initialized to match the default 'lofiSlow' preset
+  double _tempo = 0.85;
+  double _pitch = -2.0;
+  double _reverb = 0.65;
+  double _delay = 0.15;
+  double _bass = 0.50;
+  double _trebleCut = 0.30;
 
   // Atmospheres
   double _rainVolume = 0.0;

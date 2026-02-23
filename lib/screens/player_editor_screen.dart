@@ -27,13 +27,17 @@ class PlayerEditorScreen extends StatefulWidget {
 
 class _PlayerEditorScreenState extends State<PlayerEditorScreen> with SingleTickerProviderStateMixin {
   late AudioEngine _engine;
+  late PresetManager _presetManager;
   bool _isExporting = false;
   late AnimationController _waveController;
+  Timer? _autoSaveTimer;
+  late VoidCallback _presetListener;
 
   @override
   void initState() {
     super.initState();
     _engine = AudioEngine();
+    _presetManager = context.read<PresetManager>();
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await _engine.init();
@@ -44,8 +48,19 @@ class _PlayerEditorScreenState extends State<PlayerEditorScreen> with SingleTick
            // Restore Effects
            _restoreConfig(widget.savedConfig!);
         } else {
-           context.read<PresetManager>().applyPreset(LofiPreset.lofiSlow); // Default
+           _presetManager.applyPreset(LofiPreset.lofiSlow); // Default
         }
+
+        // Auto-save listener
+        _presetListener = () {
+          if (_autoSaveTimer?.isActive ?? false) _autoSaveTimer!.cancel();
+          _autoSaveTimer = Timer(const Duration(seconds: 1), () {
+            if (mounted) _handleSave(silent: true);
+          });
+        };
+        _presetManager.addListener(_presetListener);
+        // Trigger initial save so it appears in recent immediately
+        _handleSave(silent: true);
       }
     });
 
@@ -57,6 +72,8 @@ class _PlayerEditorScreenState extends State<PlayerEditorScreen> with SingleTick
 
   @override
   void dispose() {
+    _autoSaveTimer?.cancel();
+    _presetManager.removeListener(_presetListener);
     _waveController.dispose();
     _engine.stop();
     super.dispose();
@@ -165,7 +182,7 @@ class _PlayerEditorScreenState extends State<PlayerEditorScreen> with SingleTick
     );
   }
 
-  void _handleSave() async {
+  void _handleSave({bool silent = false}) async {
     final preset = context.read<PresetManager>();
     final storage = StorageService();
     
@@ -191,7 +208,7 @@ class _PlayerEditorScreenState extends State<PlayerEditorScreen> with SingleTick
     
     await storage.saveConfig(config);
     
-    if (mounted) {
+    if (mounted && !silent) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(

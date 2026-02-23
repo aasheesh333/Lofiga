@@ -72,18 +72,18 @@ class ExportService {
 
       filters.add('loudnorm=I=-16:TP=-1.5:LRA=11');
 
-      String cmd = '-y -i "$inputPath" ';
+      List<String> args = ['-y', '-i', inputPath];
 
       if (filters.isNotEmpty) {
         String filterGraph = filters.join(',');
-        cmd += '-filter_complex "$filterGraph" ';
+        args.addAll(['-filter_complex', filterGraph]);
       }
 
-      cmd += '-b:a 320k "$outputPath"';
+      args.addAll(['-b:a', '320k', outputPath]);
 
-      debugPrint('FFmpeg Command: $cmd');
+      debugPrint('FFmpeg Command Args: ${args.join(' ')}');
 
-      final session = await FFmpegKit.execute(cmd);
+      final session = await FFmpegKit.executeWithArguments(args);
       final returnCode = await session.getReturnCode();
 
       if (ReturnCode.isSuccess(returnCode)) {
@@ -95,6 +95,10 @@ class ExportService {
          return null;
       } else {
          debugPrint('Export failed with code: $returnCode');
+         final logs = await session.getLogs();
+         for (var log in logs) {
+             debugPrint('FFmpegError: ${log.getMessage()}');
+         }
          return null;
       }
 

@@ -68,10 +68,14 @@ class StorageService {
   static const String _savedConfigsKey = 'saved_configs';
   static const String _customPresetsKey = 'custom_presets';
 
-  /// Save a configuration
+  /// Save a configuration (overwrites if same filePath exists)
   Future<void> saveConfig(SavedConfig config) async {
     final prefs = await SharedPreferences.getInstance();
     final configs = await loadAllConfigs();
+    
+    // Remove existing config for the same file if it exists
+    configs.removeWhere((c) => c.filePath == config.filePath);
+    
     configs.add(config);
     
     final jsonList = configs.map((c) => c.toJson()).toList();
