@@ -85,25 +85,34 @@ class _PlayerEditorScreenState extends State<PlayerEditorScreen> with SingleTick
       _isExporting = true;
     });
 
-    final preset = context.read<PresetManager>();
-    final path = await ExportService.exportTrack(
-      inputPath: widget.filePath,
-      preset: preset,
-      onProgress: (p) {},
-    );
+    try {
+      final preset = context.read<PresetManager>();
+      final path = await ExportService.exportTrack(
+        inputPath: widget.filePath,
+        preset: preset,
+        onProgress: (p) {},
+      );
 
-    if (mounted) {
-      setState(() => _isExporting = false);
-      if (path != null) {
+      if (mounted) {
+        setState(() => _isExporting = false);
+        if (path != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Exported to: $path'),
+              backgroundColor: Theme.of(context).primaryColor,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isExporting = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Exported to: $path'),
-            backgroundColor: Theme.of(context).primaryColor,
+            content: Text('Export Failed:\n$e', maxLines: 5, overflow: TextOverflow.ellipsis),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 8),
           ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Export Cancelled or Failed')),
         );
       }
     }

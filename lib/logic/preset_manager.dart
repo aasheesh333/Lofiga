@@ -30,7 +30,7 @@ class PresetManager extends ChangeNotifier {
   double _reverb = 0.50; // Moderate hall
   double _delay = 0.15; // Subtle echo
   double _bass = 0.30; // Moderate warmth
-  double _trebleCut = 0.00; // No treble cut as requested
+  double _trebleCut = 0.50; // Custom 50% treble cut
 
   // Atmospheres
   double _rainVolume = 0.0;
@@ -142,7 +142,7 @@ class PresetManager extends ChangeNotifier {
         _reverb = 0.50; 
         _delay = 0.15; 
         _bass = 0.30; 
-        _trebleCut = 0.00; 
+        _trebleCut = 0.50; 
         // No atmosphere per request
         _rainVolume = 0; _vinylVolume = 0; _windVolume = 0; _tapeVolume = 0;
         break;

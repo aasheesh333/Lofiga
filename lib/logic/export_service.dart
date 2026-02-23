@@ -72,51 +72,36 @@ class ExportService {
 
       filters.add('loudnorm=I=-16:TP=-1.5:LRA=11');
 
-      // Construct the command string properly handling paths with spaces
-      String cmd = '-y -i "$inputPath" ';
+      // Construct the command arguments safely
+      List<String> args = ['-y', '-i', inputPath];
 
       if (filters.isNotEmpty) {
         String filterGraph = filters.join(',');
-        cmd += '-filter_complex "$filterGraph" ';
+        args.addAll(['-af', filterGraph]); // Better than -filter_complex for single streams
       }
 
-      cmd += '-b:a 320k "$outputPath"';
+      args.addAll(['-b:a', '320k', outputPath]);
 
-      debugPrint('FFmpeg Command: $cmd');
+      debugPrint('FFmpeg Command Args: ${args.join(' ')}');
 
-      bool success = false;
-      bool isCancelled = false;
+      final session = await FFmpegKit.executeWithArguments(args);
+      final returnCode = await session.getReturnCode();
 
-      // Use executeAsync to avoid blocking the main thread and catch outputs
-      final session = await FFmpegKit.executeAsync(
-        cmd,
-        (session) async {
-           final returnCode = await session.getReturnCode();
-           if (ReturnCode.isSuccess(returnCode)) {
-              debugPrint('Export success');
-              success = true;
-           } else if (ReturnCode.isCancel(returnCode)) {
-              debugPrint('Export cancelled');
-              isCancelled = true;
-           } else {
-              debugPrint('Export failed with code: $returnCode');
-              final logs = await session.getLogs();
-              for (var log in logs) {
-                  debugPrint('FFmpegError: ${log.getMessage()}');
-              }
-           }
-        }
-      );
-
-      // Wait for completion
-      await session.getReturnCode();
-
-      if (success) return outputPath;
-      return null;
+      if (ReturnCode.isSuccess(returnCode)) {
+         debugPrint('Export success');
+         return outputPath;
+      } else {
+         final output = await session.getOutput();
+         final logs = await session.getLogs();
+         String logString = logs.map((l) => l.getMessage()).join('\n');
+         debugPrint('Export failed with code: $returnCode');
+         debugPrint('FFmpeg Output: $output');
+         throw Exception("FFmpeg Error ($returnCode): \n$logString\n$output");
+      }
 
     } catch (e) {
       debugPrint('Export Error: $e');
-      return null;
+      throw Exception(e.toString());
     }
   }
 
