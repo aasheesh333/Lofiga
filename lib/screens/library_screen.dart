@@ -123,7 +123,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
                       itemCount: _files.length,
                       itemBuilder: (context, index) {
                         final file = _files[index];
-                        final isPlaying = _playingFilePath == file.path && _isPlaying;
                         final fileName = file.uri.pathSegments.last;
                         
                         return GestureDetector(
