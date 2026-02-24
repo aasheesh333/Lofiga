@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'dart:ui'; // For BackdropFilter
 
 class SettingsScreen extends StatelessWidget {
@@ -104,9 +105,11 @@ class SettingsScreen extends StatelessWidget {
 
                        _buildSectionTitle('ABOUT'),
                        const SizedBox(height: 16),
-                       _buildSettingItem(context, 'Version', '1.0.0 (Beta)', Icons.info_outline),
-                       _buildSettingItem(context, 'Privacy Policy', '', Icons.privacy_tip),
-                       _buildSettingItem(context, 'Terms of Service', '', Icons.description),
+                       _buildSettingItem(context, 'Version', '1.0.0 (Beta)', Icons.info_outline, onTap: () {
+                         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Lofiga v1.0.0 is up to date!')));
+                       }),
+                       _buildSettingItem(context, 'Privacy Policy', '', Icons.privacy_tip, onTap: () => _launchURL('https://example.com/privacy')),
+                       _buildSettingItem(context, 'Terms of Service', '', Icons.description, onTap: () => _launchURL('https://example.com/terms')),
 
                        const SizedBox(height: 50),
                        
@@ -140,10 +143,22 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildSettingItem(BuildContext context, String title, String subtitle, IconData icon, {bool isSwitch = false}) {
+  Future<void> _launchURL(String urlString) async {
+    final Uri url = Uri.parse(urlString);
+    if (!await launchUrl(url)) {
+      debugPrint('Could not launch \$url');
+    }
+  }
+
+  Widget _buildSettingItem(BuildContext context, String title, String subtitle, IconData icon, {bool isSwitch = false, VoidCallback? onTap}) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       child: ListTile(
+        onTap: onTap ?? () {
+           if (!isSwitch && subtitle.isNotEmpty) {
+               ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('\$title setting coming soon!')));
+           }
+        },
         contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
@@ -163,7 +178,9 @@ class SettingsScreen extends StatelessWidget {
         trailing: isSwitch 
             ? Switch(
                 value: true, 
-                onChanged: (v){},
+                onChanged: (v){
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Dark theme is fixed for best experience!')));
+                },
                 activeColor: Theme.of(context).primaryColor,
                 activeTrackColor: Theme.of(context).primaryColor.withOpacity(0.3),
               )

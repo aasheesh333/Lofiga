@@ -1,7 +1,9 @@
+```dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart'; // Added import
 import 'package:lofiga/logic/preset_manager.dart';
 import 'package:lofiga/logic/audio_engine.dart';
 import 'package:lofiga/logic/export_service.dart';
@@ -192,16 +194,54 @@ class _PlayerEditorScreenState extends State<PlayerEditorScreen> with SingleTick
     );
   }
 
-  void _handleShare() {
-    // TODO: Implement share functionality
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Share feature coming soon',
-          style: GoogleFonts.splineSans(),
-        ),
-      ),
-    );
+  Future<void> _handleShare() async {
+    setState(() {
+      _isExporting = true;
+    });
+
+    try {
+      final preset = context.read<PresetManager>();
+      final path = await ExportService.exportTrack(
+        inputPath: widget.filePath,
+        preset: preset,
+        onProgress: (p) {},
+      );
+
+      if (mounted) {
+        setState(() => _isExporting = false);
+        if (path != null) {
+          final text = 'Listen to my new chill Lofi track generated with Lofiga! 🎧✨ Download the app to make your own vibes: [App Link]';
+          await Share.shareXFiles(
+            [XFile(path)],
+            text: text,
+            subject: 'My Lofiga Track',
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isExporting = false);
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            backgroundColor: const Color(0xFF2A1F36),
+            title: Text('Export Failed', style: GoogleFonts.splineSans(color: Colors.red)),
+            content: SingleChildScrollView(
+              child: SelectableText(
+                e.toString(),
+                style: GoogleFonts.splineSans(color: Colors.white70, fontSize: 12),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: Text('Close', style: GoogleFonts.splineSans(color: Colors.white)),
+              )
+            ],
+          ),
+        );
+      }
+    }
   }
 
   void _handleSave({bool silent = false}) async {
