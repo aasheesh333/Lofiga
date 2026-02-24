@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:lofiga/logic/audio_engine.dart';
+import 'package:lofiga/services/storage_service.dart';
 
 enum LofiPreset {
   normal,
@@ -38,7 +39,36 @@ class PresetManager extends ChangeNotifier {
   double _windVolume = 0.0;
   double _tapeVolume = 0.0;
 
-  PresetManager(this._audioEngine);
+  PresetManager(this._audioEngine) {
+    _loadSavedPresets();
+  }
+
+  Future<void> _loadSavedPresets() async {
+    try {
+      final storage = StorageService();
+      final loaded = await storage.loadCustomPresets();
+      _savedPresets.clear();
+      for (var p in loaded) {
+        _savedPresets.add({
+          'id': p.id,
+          'name': p.name,
+          'tempo': p.effectValues['tempo'] ?? 1.0,
+          'pitch': p.effectValues['pitch'] ?? 0.0,
+          'reverb': p.effectValues['reverb'] ?? 0.0,
+          'delay': p.effectValues['delay'] ?? 0.0,
+          'bass': p.effectValues['bass'] ?? 0.0,
+          'treble': p.effectValues['trebleCut'] ?? 0.0,
+          'rain': p.effectValues['rain'] ?? 0.0,
+          'vinyl': p.effectValues['vinyl'] ?? 0.0,
+          'wind': p.effectValues['wind'] ?? 0.0,
+          'tape': p.effectValues['tape'] ?? 0.0,
+        });
+      }
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Error loading saved presets: $e');
+    }
+  }
 
   // Getters
   LofiPreset get currentPreset => _currentPreset;
@@ -234,8 +264,32 @@ class PresetManager extends ChangeNotifier {
     }
   }
 
-  void saveCustomPreset(String name) {
+  void saveCustomPreset(String name, {String? id}) async {
+    final presetId = id ?? DateTime.now().millisecondsSinceEpoch.toString();
+    
+    final customPreset = CustomPreset(
+      id: presetId,
+      name: name,
+      effectValues: {
+        'tempo': _tempo,
+        'pitch': _pitch,
+        'reverb': _reverb,
+        'delay': _delay,
+        'bass': _bass,
+        'trebleCut': _trebleCut,
+        'rain': _rainVolume,
+        'vinyl': _vinylVolume,
+        'wind': _windVolume,
+        'tape': _tapeVolume,
+      },
+      createdAt: DateTime.now(),
+    );
+
+    final storage = StorageService();
+    await storage.saveCustomPreset(customPreset);
+
     _savedPresets.add({
+      'id': presetId,
       'name': name,
       'tempo': _tempo,
       'pitch': _pitch,
@@ -249,8 +303,23 @@ class PresetManager extends ChangeNotifier {
       'tape': _tapeVolume,
     });
     _customPresetName = name;
-    // TODO: Save to SharedPrefs
     notifyListeners();
+  }
+
+  Future<void> deleteCustomPreset(int index) async {
+    if (index >= 0 && index < _savedPresets.length) {
+      final p = _savedPresets[index];
+      final storage = StorageService();
+      if (p['id'] != null) {
+        await storage.deleteCustomPreset(p['id']);
+      }
+      if (_customPresetName == p['name']) {
+        _currentPreset = LofiPreset.custom;
+        _customPresetName = null;
+      }
+      _savedPresets.removeAt(index);
+      notifyListeners();
+    }
   }
 
   // Helper to load saved preset

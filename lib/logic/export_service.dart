@@ -103,6 +103,9 @@ class ExportService {
       if (ReturnCode.isSuccess(returnCode)) {
          debugPrint('Export success');
          return outputPath;
+      } else if (ReturnCode.isCancel(returnCode)) {
+         debugPrint('Export cancelled by user');
+         throw Exception("ExportCancelled");
       } else {
          final logs = await session.getLogs();
          List<String> logMsgs = logs.map((l) => l.getMessage().trim()).where((s) => s.isNotEmpty).toList();

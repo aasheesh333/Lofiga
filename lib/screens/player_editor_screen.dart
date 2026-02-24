@@ -106,6 +106,10 @@ class _PlayerEditorScreenState extends State<PlayerEditorScreen> with SingleTick
         }
       }
     } catch (e) {
+      if (e.toString().contains("ExportCancelled")) {
+         if (mounted) setState(() => _isExporting = false);
+         return;
+      }
       if (mounted) {
         setState(() => _isExporting = false);
         showDialog(
@@ -218,6 +222,10 @@ class _PlayerEditorScreenState extends State<PlayerEditorScreen> with SingleTick
         }
       }
     } catch (e) {
+      if (e.toString().contains("ExportCancelled")) {
+         if (mounted) setState(() => _isExporting = false);
+         return;
+      }
       if (mounted) {
         setState(() => _isExporting = false);
         showDialog(
@@ -334,29 +342,6 @@ class _PlayerEditorScreenState extends State<PlayerEditorScreen> with SingleTick
               }
               
               final preset = context.read<PresetManager>();
-              final storage = StorageService();
-              
-              final customPreset = CustomPreset(
-                id: DateTime.now().millisecondsSinceEpoch.toString(),
-                name: nameController.text.trim(),
-                effectValues: {
-                  'tempo': preset.tempo,
-                  'pitch': preset.pitch,
-                  'reverb': preset.reverb,
-                  'delay': preset.delay,
-                  'bass': preset.bass,
-                  'trebleCut': preset.trebleCut,
-                  'rain': preset.rainVolume,
-                  'vinyl': preset.vinylVolume,
-                  'wind': preset.windVolume,
-                  'tape': preset.tapeVolume,
-                },
-                createdAt: DateTime.now(),
-              );
-              
-              await storage.saveCustomPreset(customPreset);
-              
-              // Update Manager to show it immediately
               preset.saveCustomPreset(nameController.text.trim());
               
               Navigator.pop(context);
@@ -707,6 +692,10 @@ class _PlayerEditorScreenState extends State<PlayerEditorScreen> with SingleTick
                          HapticFeedback.mediumImpact();
                          manager.applySavedPreset(index);
                       },
+                      onDelete: () async {
+                         HapticFeedback.heavyImpact();
+                         await manager.deleteCustomPreset(index);
+                      },
                       gradient: LinearGradient(
                         colors: [Colors.teal.shade900, Colors.black],
                       ),
@@ -746,6 +735,7 @@ class _PlayerEditorScreenState extends State<PlayerEditorScreen> with SingleTick
     required Color iconColor,
     bool isDashed = false,
     double? progressValue,
+    VoidCallback? onDelete,
   }) {
     return GestureDetector(
       onTap: onTap,
@@ -815,7 +805,20 @@ class _PlayerEditorScreenState extends State<PlayerEditorScreen> with SingleTick
                   Row(
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
-                      if (isSelected && !isDashed)
+                      if (onDelete != null)
+                        GestureDetector(
+                          onTap: (onDelete),
+                          child: Container(
+                            width: 28,
+                            height: 28,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Colors.redAccent.withOpacity(0.2),
+                            ),
+                            child: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 16),
+                          ),
+                        )
+                      else if (isSelected && !isDashed)
                         Container(
                           width: 24,
                           height: 24,
