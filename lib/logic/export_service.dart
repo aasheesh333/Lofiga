@@ -99,12 +99,13 @@ class ExportService {
          debugPrint('Export success');
          return outputPath;
       } else {
-         final output = await session.getOutput();
          final logs = await session.getLogs();
-         String logString = logs.map((l) => l.getMessage()).join('\n');
-         debugPrint('Export failed with code: $returnCode');
-         debugPrint('FFmpeg Output: $output');
-         throw Exception("FFmpeg Error ($returnCode): \n$logString\n$output");
+         List<String> logMsgs = logs.map((l) => l.getMessage().trim()).where((s) => s.isNotEmpty).toList();
+         if (logMsgs.length > 15) {
+           logMsgs = logMsgs.sublist(logMsgs.length - 15);
+         }
+         String logString = logMsgs.join('\n');
+         throw Exception("FFmpeg Error ($returnCode):\n$logString");
       }
 
     } catch (e) {

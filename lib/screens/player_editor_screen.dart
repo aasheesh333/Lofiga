@@ -107,11 +107,23 @@ class _PlayerEditorScreenState extends State<PlayerEditorScreen> with SingleTick
     } catch (e) {
       if (mounted) {
         setState(() => _isExporting = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Export Failed:\n$e', maxLines: 5, overflow: TextOverflow.ellipsis),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 8),
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            backgroundColor: const Color(0xFF2A1F36),
+            title: Text('Export Failed', style: GoogleFonts.splineSans(color: Colors.red)),
+            content: SingleChildScrollView(
+              child: SelectableText(
+                e.toString(),
+                style: GoogleFonts.splineSans(color: Colors.white70, fontSize: 12),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: Text('Close', style: GoogleFonts.splineSans(color: Colors.white)),
+              )
+            ],
           ),
         );
       }
