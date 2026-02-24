@@ -103,9 +103,6 @@ class ExportService {
         args.addAll(['-af', filterGraph]); 
       }
 
-      String ext = settings.audioFormat;
-      String bitrate = settings.audioBitrate;
-
       if (ext == 'wav') {
          args.addAll(['-c:a', 'pcm_s16le', outputPath]);
       } else if (ext == 'mp3') {
