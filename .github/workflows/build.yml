@@ -58,13 +58,17 @@ jobs:
       - name: Build AAB (Signed)
         run: flutter build appbundle --release
 
-      - name: Upload Android Artifacts
+      - name: Upload Android APK
         uses: actions/upload-artifact@v4
         with:
-          name: android-builds
-          path: |
-            build/app/outputs/flutter-apk/*.apk
-            build/app/outputs/bundle/release/*.aab
+          name: app-release.apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+
+      - name: Upload Android AAB
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release.aab
+          path: build/app/outputs/bundle/release/app-release.aab
 
       - name: Build iOS (IPA - No CodeSign)
         # Note: 'flutter build ios' requires MacOS.
@@ -122,5 +126,5 @@ jobs:
       - name: Upload iOS Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ios-build
+          name: App.ipa
           path: App.ipa

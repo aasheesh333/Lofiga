@@ -62,8 +62,9 @@ class ExportService {
       }
 
       if (preset.bass > 0) {
+        // equalizer filter is not in min-gpl. Using bass filter instead.
         double gain = (preset.bass * 20).clamp(0.0, 20.0);
-        filters.add('equalizer=f=100:width_type=h:width=200:g=$gain');
+        filters.add('bass=g=$gain:f=100:w=0.5');
       }
 
       if (preset.delay > 0) {
@@ -72,8 +73,12 @@ class ExportService {
       }
 
       if (preset.reverb > 0) {
+        // freeverb filter is not in min-gpl. Simulating reverb with multi-tap echo.
+        // aecho=in_gain:out_gain:delays:decays
         double rev = preset.reverb.clamp(0.0, 1.0);
-        filters.add('freeverb=width=0.9:wet=$rev:damp=0.5:room=0.8');
+        int d1 = (40 + (rev * 40)).toInt(); // 40-80ms
+        int d2 = (90 + (rev * 60)).toInt(); // 90-150ms
+        filters.add('aecho=0.8:0.88:$d1|$d2:0.4|0.3');
       }
 
       // Ensure a 44.1kHz stereo format for compatibility
