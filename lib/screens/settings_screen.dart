@@ -2,9 +2,154 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:ui'; // For BackdropFilter
+import 'package:file_picker/file_picker.dart';
+import 'package:provider/provider.dart';
+import 'package:lofiga/services/storage_service.dart';
+import 'package:lofiga/theme/app_theme.dart';
 
-class SettingsScreen extends StatelessWidget {
+class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
+
+  @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  AppSettings _settings = AppSettings();
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSettings();
+  }
+
+  Future<void> _loadSettings() async {
+    final storage = StorageService();
+    final s = await storage.loadAppSettings();
+    setState(() {
+      _settings = s;
+      _isLoading = false;
+    });
+  }
+
+  Future<void> _saveSettings() async {
+    await StorageService().saveAppSettings(_settings);
+  }
+
+  Future<void> _selectExportPath() async {
+    String? selectedDirectory = await FilePicker.platform.getDirectoryPath();
+    if (selectedDirectory != null) {
+      setState(() {
+        _settings = AppSettings(
+          audioFormat: _settings.audioFormat,
+          audioBitrate: _settings.audioBitrate,
+          exportPath: selectedDirectory,
+          isDarkMode: _settings.isDarkMode,
+        );
+      });
+      await _saveSettings();
+    }
+  }
+
+  void _showAudioQualityDialog() {
+    String tempFormat = _settings.audioFormat;
+    String tempBitrate = _settings.audioBitrate;
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            List<String> bitrates = [];
+            if (tempFormat == 'mp3' || tempFormat == 'aac') {
+              bitrates = ['320k', '256k', '192k', '128k'];
+            } else if (tempFormat == 'wav') {
+              bitrates = ['Lossless'];
+              tempBitrate = 'Lossless';
+            }
+
+            final isDark = Theme.of(context).brightness == Brightness.dark;
+
+            return AlertDialog(
+              backgroundColor: isDark ? const Color(0xFF2A1F36) : Colors.white,
+              title: Text('Audio Quality', style: GoogleFonts.splineSans(color: isDark ? Colors.white : Colors.black87)),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  DropdownButtonFormField<String>(
+                    value: tempFormat,
+                    dropdownColor: isDark ? const Color(0xFF231B2E) : Colors.white,
+                    style: GoogleFonts.splineSans(color: isDark ? Colors.white : Colors.black87),
+                    decoration: InputDecoration(
+                        labelText: 'Format', 
+                        labelStyle: TextStyle(color: isDark ? Colors.white70 : Colors.black54)
+                    ),
+                    items: ['mp3', 'wav', 'aac']
+                        .map((f) => DropdownMenuItem(value: f, child: Text(f.toUpperCase())))
+                        .toList(),
+                    onChanged: (val) {
+                      if (val != null) {
+                        setStateDialog(() {
+                          tempFormat = val;
+                          if (val == 'wav') {
+                            tempBitrate = 'Lossless';
+                          } else if (tempBitrate == 'Lossless') {
+                            tempBitrate = '320k'; 
+                          }
+                        });
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<String>(
+                    value: tempBitrate,
+                    dropdownColor: isDark ? const Color(0xFF231B2E) : Colors.white,
+                    style: GoogleFonts.splineSans(color: isDark ? Colors.white : Colors.black87),
+                    decoration: InputDecoration(
+                        labelText: 'Quality / Bitrate', 
+                        labelStyle: TextStyle(color: isDark ? Colors.white70 : Colors.black54)
+                    ),
+                    items: bitrates
+                        .map((b) => DropdownMenuItem(value: b, child: Text(b)))
+                        .toList(),
+                    onChanged: (val) {
+                      if (val != null) {
+                        setStateDialog(() {
+                          tempBitrate = val;
+                        });
+                      }
+                    },
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: Text('Cancel', style: GoogleFonts.splineSans(color: isDark ? Colors.white54 : Colors.black54)),
+                ),
+                TextButton(
+                  onPressed: () async {
+                    Navigator.pop(ctx);
+                    setState(() {
+                      _settings = AppSettings(
+                        audioFormat: tempFormat,
+                        audioBitrate: tempBitrate,
+                        exportPath: _settings.exportPath,
+                        isDarkMode: _settings.isDarkMode,
+                      );
+                    });
+                    await _saveSettings();
+                  },
+                  child: Text('Save', style: GoogleFonts.splineSans(color: Theme.of(context).primaryColor, fontWeight: FontWeight.bold)),
+                ),
+              ],
+            );
+          }
+        );
+      }
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -45,65 +190,49 @@ class SettingsScreen extends StatelessWidget {
                          style: GoogleFonts.splineSans(
                            fontSize: 28,
                            fontWeight: FontWeight.bold,
-                           color: Colors.white,
+                           color: Theme.of(context).textTheme.displayLarge?.color ?? (Theme.of(context).brightness == Brightness.dark ? Colors.white : Colors.black87),
                          ),
                        ),
                      ],
                    ),
                  ),
 
-                 Expanded(
+                 if (_isLoading)
+                   const Expanded(child: Center(child: CircularProgressIndicator()))
+                 else
+                   Expanded(
                    child: ListView(
                      padding: const EdgeInsets.symmetric(horizontal: 24.0),
                      children: [
-                       // Profile Section
-                       Container(
-                         padding: const EdgeInsets.all(20),
-                         decoration: BoxDecoration(
-                           color: Colors.white.withOpacity(0.05),
-                           borderRadius: BorderRadius.circular(24),
-                           border: Border.all(color: Colors.white10),
-                         ),
-                         child: Row(
-                           children: [
-                             Container(
-                               width: 60, height: 60,
-                               decoration: BoxDecoration(
-                                 shape: BoxShape.circle,
-                                 color: Theme.of(context).primaryColor,
-                                 gradient: LinearGradient(
-                                   colors: [Theme.of(context).primaryColor, Colors.blue],
-                                   begin: Alignment.topLeft,
-                                   end: Alignment.bottomRight,
-                                 ),
-                               ),
-                               child: const Icon(Icons.person, color: Colors.white, size: 30),
-                             ),
-                             const SizedBox(width: 16),
-                             Column(
-                               crossAxisAlignment: CrossAxisAlignment.start,
-                               children: [
-                                 Text('Lofi Creator', style: GoogleFonts.splineSans(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white)),
-                                 Text('Free Plan', style: GoogleFonts.splineSans(color: Theme.of(context).colorScheme.secondary, fontSize: 12, fontWeight: FontWeight.bold)),
-                               ],
-                             ),
-                             const Spacer(),
-                             IconButton(onPressed: (){}, icon: const Icon(Icons.edit, color: Colors.white54)),
-                           ],
-                         ),
+                       // Removed Profile Section
+
+                       _buildSectionTitle(context, 'GENERAL'),
+                       const SizedBox(height: 16),
+                       _buildSettingItem(
+                         context, 
+                         'Audio Quality', 
+                         '${_settings.audioFormat.toUpperCase()} (${_settings.audioBitrate})', 
+                         Icons.graphic_eq, 
+                         onTap: _showAudioQualityDialog
+                       ),
+                       _buildSettingItem(
+                         context, 
+                         'Export Path', 
+                         _settings.exportPath.isEmpty ? 'Default App Directory' : _settings.exportPath, 
+                         Icons.folder_open, 
+                         onTap: _selectExportPath
+                       ),
+                       _buildSettingItem(
+                         context, 
+                         'Theme', 
+                         _settings.isDarkMode ? 'Dark Mode' : 'Light Mode', 
+                         Icons.dark_mode, 
+                         isSwitch: true
                        ),
 
                        const SizedBox(height: 32),
-                       
-                       _buildSectionTitle('GENERAL'),
-                       const SizedBox(height: 16),
-                       _buildSettingItem(context, 'Audio Quality', 'High (320kbps)', Icons.graphic_eq),
-                       _buildSettingItem(context, 'Export Path', '/Music/Lofiga', Icons.folder_open),
-                       _buildSettingItem(context, 'Theme', 'Dark Mode', Icons.dark_mode, isSwitch: true),
 
-                       const SizedBox(height: 32),
-
-                       _buildSectionTitle('ABOUT'),
+                       _buildSectionTitle(context, 'ABOUT'),
                        const SizedBox(height: 16),
                        _buildSettingItem(context, 'Version', '1.0.0 (Beta)', Icons.info_outline, onTap: () {
                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Lofiga v1.0.0 is up to date!')));
@@ -116,7 +245,7 @@ class SettingsScreen extends StatelessWidget {
                        Center(
                          child: Text(
                            'Made with ❤️ for Lofi Lovers',
-                           style: GoogleFonts.splineSans(color: Colors.white24, fontSize: 12),
+                           style: GoogleFonts.splineSans(color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.5), fontSize: 12),
                          ),
                        ),
                        const SizedBox(height: 100),
@@ -131,14 +260,14 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildSectionTitle(String title) {
+  Widget _buildSectionTitle(BuildContext context, String title) {
     return Text(
       title,
       style: GoogleFonts.splineSans(
         fontSize: 12,
         fontWeight: FontWeight.bold,
         letterSpacing: 2,
-        color: Colors.white54,
+        color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.5) ?? Colors.white54,
       ),
     );
   }
@@ -151,40 +280,52 @@ class SettingsScreen extends StatelessWidget {
   }
 
   Widget _buildSettingItem(BuildContext context, String title, String subtitle, IconData icon, {bool isSwitch = false, VoidCallback? onTap}) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       child: ListTile(
         onTap: onTap ?? () {
            if (!isSwitch && subtitle.isNotEmpty) {
-               ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('\$title setting coming soon!')));
+               ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$title setting coming soon!')));
            }
         },
         contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
-          side: const BorderSide(color: Colors.white10),
+          side: BorderSide(color: isDark ? Colors.white10 : Colors.black12),
         ),
-        tileColor: const Color(0xFF231B2E), // Surface color
+        tileColor: isDark ? const Color(0xFF231B2E) : Colors.white, // Surface color
         leading: Container(
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.05),
+            color: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.05),
             borderRadius: BorderRadius.circular(10),
           ),
-          child: Icon(icon, color: Colors.white70, size: 20),
+          child: Icon(icon, color: isDark ? Colors.white70 : Colors.black87, size: 20),
         ),
-        title: Text(title, style: GoogleFonts.splineSans(fontWeight: FontWeight.w600, fontSize: 14, color: Colors.white)),
-        subtitle: subtitle.isNotEmpty ? Text(subtitle, style: GoogleFonts.splineSans(fontSize: 12, color: Colors.white38)) : null,
+        title: Text(title, style: GoogleFonts.splineSans(fontWeight: FontWeight.w600, fontSize: 14, color: isDark ? Colors.white : Colors.black87)),
+        subtitle: subtitle.isNotEmpty ? Text(subtitle, style: GoogleFonts.splineSans(fontSize: 12, color: isDark ? Colors.white38 : Colors.black54)) : null,
         trailing: isSwitch 
             ? Switch(
-                value: true, 
-                onChanged: (v){
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Dark theme is fixed for best experience!')));
+                value: _settings.isDarkMode, 
+                onChanged: (v) async {
+                  setState(() {
+                    _settings = AppSettings(
+                      audioFormat: _settings.audioFormat,
+                      audioBitrate: _settings.audioBitrate,
+                      exportPath: _settings.exportPath,
+                      isDarkMode: v,
+                    );
+                  });
+                  await _saveSettings();
+                  themeProvider.setThemeMode(v ? ThemeMode.dark : ThemeMode.light);
                 },
                 activeColor: Theme.of(context).primaryColor,
                 activeTrackColor: Theme.of(context).primaryColor.withOpacity(0.3),
               )
-            : const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.white30),
+            : Icon(Icons.arrow_forward_ios, size: 14, color: isDark ? Colors.white30 : Colors.black38),
       ),
     );
   }

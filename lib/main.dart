@@ -25,14 +25,24 @@ class LofigaApp extends StatelessWidget {
           create: (context) => PresetManager(context.read<AudioEngine>()),
           update: (context, engine, previous) => previous ?? PresetManager(engine),
         ),
+        // Provide Theme context
+        ChangeNotifierProvider<ThemeProvider>(
+          create: (_) => ThemeProvider(),
+        ),
       ],
-      child: MaterialApp(
-        title: 'Lofiga',
-        debugShowCheckedModeBanner: false,
-        theme: AppTheme.darkTheme,
-        home: const SplashScreen(),
-        routes: {
-          '/home': (context) => const HomeScreen(),
+      child: Consumer<ThemeProvider>(
+        builder: (context, themeProvider, child) {
+          return MaterialApp(
+            title: 'Lofiga',
+            debugShowCheckedModeBanner: false,
+            theme: AppTheme.lightTheme,
+            darkTheme: AppTheme.darkTheme,
+            themeMode: themeProvider.themeMode,
+            home: const SplashScreen(),
+            routes: {
+              '/home': (context) => const HomeScreen(),
+            },
+          );
         },
       ),
     );

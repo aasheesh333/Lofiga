@@ -5,6 +5,7 @@ import 'package:ffmpeg_kit_flutter_new_min_gpl/ffprobe_kit.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:lofiga/logic/preset_manager.dart';
+import 'package:lofiga/services/storage_service.dart';
 import 'dart:math' as math;
 
 class ExportService {
@@ -16,14 +17,24 @@ class ExportService {
   }) async {
     bool success = false;
     try {
-      Directory? downloadsDir;
-      if (Platform.isAndroid) {
-        downloadsDir = await getExternalStorageDirectory();
+      final settings = await StorageService().loadAppSettings();
+      String ext = settings.audioFormat;
+      String bitrate = settings.audioBitrate;
+
+      String basePath;
+      if (settings.exportPath.isNotEmpty) {
+        basePath = settings.exportPath;
       } else {
-        downloadsDir = await getApplicationDocumentsDirectory();
+        Directory? downloadsDir;
+        if (Platform.isAndroid) {
+          downloadsDir = await getExternalStorageDirectory();
+        } else {
+          downloadsDir = await getApplicationDocumentsDirectory();
+        }
+        basePath = downloadsDir!.path;
       }
 
-      final String outputPath = '${downloadsDir!.path}/lofiga_export_${DateTime.now().millisecondsSinceEpoch}.m4a';
+      final String outputPath = '$basePath/lofiga_export_${DateTime.now().millisecondsSinceEpoch}.$ext';
 
       // 1. Get Sample Rate safely
       int sampleRate = 44100;
@@ -92,8 +103,17 @@ class ExportService {
         args.addAll(['-af', filterGraph]); 
       }
 
-      // Use native AAC encoder which is ALWAYS available in FFmpeg, avoiding missing libmp3lame errors
-      args.addAll(['-c:a', 'aac', '-b:a', '256k', outputPath]);
+      String ext = settings.audioFormat;
+      String bitrate = settings.audioBitrate;
+
+      if (ext == 'wav') {
+         args.addAll(['-c:a', 'pcm_s16le', outputPath]);
+      } else if (ext == 'mp3') {
+         args.addAll(['-c:a', 'libmp3lame', '-b:a', bitrate, outputPath]);
+      } else {
+         // Default to aac
+         args.addAll(['-c:a', 'aac', '-b:a', bitrate, outputPath]);
+      }
 
       debugPrint('FFmpeg Command Args: ${args.join(' ')}');
 

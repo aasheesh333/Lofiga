@@ -63,10 +63,40 @@ class CustomPreset {
   );
 }
 
+/// Model class for global application settings
+class AppSettings {
+  final String audioFormat;
+  final String audioBitrate;
+  final String exportPath;
+  final bool isDarkMode;
+
+  AppSettings({
+    this.audioFormat = 'mp3',
+    this.audioBitrate = '320k',
+    this.exportPath = '',
+    this.isDarkMode = true,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'audioFormat': audioFormat,
+    'audioBitrate': audioBitrate,
+    'exportPath': exportPath,
+    'isDarkMode': isDarkMode,
+  };
+
+  factory AppSettings.fromJson(Map<String, dynamic> json) => AppSettings(
+    audioFormat: json['audioFormat'] ?? 'mp3',
+    audioBitrate: json['audioBitrate'] ?? '320k',
+    exportPath: json['exportPath'] ?? '',
+    isDarkMode: json['isDarkMode'] ?? true,
+  );
+}
+
 /// Storage service for managing saved configurations and custom presets
 class StorageService {
   static const String _savedConfigsKey = 'saved_configs';
   static const String _customPresetsKey = 'custom_presets';
+  static const String _appSettingsKey = 'app_settings';
 
   /// Save a configuration (overwrites if same filePath exists)
   Future<void> saveConfig(SavedConfig config) async {
@@ -132,5 +162,26 @@ class StorageService {
     
     final jsonList = presets.map((p) => p.toJson()).toList();
     await prefs.setString(_customPresetsKey, jsonEncode(jsonList));
+  }
+
+  /// Save App Settings
+  Future<void> saveAppSettings(AppSettings settings) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_appSettingsKey, jsonEncode(settings.toJson()));
+  }
+
+  /// Load App Settings
+  Future<AppSettings> loadAppSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    final jsonString = prefs.getString(_appSettingsKey);
+    
+    if (jsonString == null) return AppSettings();
+    
+    try {
+      final jsonMap = jsonDecode(jsonString) as Map<String, dynamic>;
+      return AppSettings.fromJson(jsonMap);
+    } catch (_) {
+      return AppSettings();
+    }
   }
 }
