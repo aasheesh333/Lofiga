@@ -47,7 +47,12 @@ class ExportService {
       // Get preset string
       String presetStr = preset.customPresetName ?? preset.currentPreset.toString().split('.').last;
 
-      final String outputPath = '$basePath/${cleanName} - ${presetStr} - ${bitrate}.$ext';
+      final String finalOutputPath = '$basePath/${cleanName} - ${presetStr} - ${bitrate}.$ext';
+      
+      // On Android 11+, FFmpeg cannot write directly to external directories
+      // We must write to the app's temporary directory first, then copy with Flutter File
+      Directory tempDir = await getTemporaryDirectory();
+      final String tempOutputPath = '${tempDir.path}/temp_export_${DateTime.now().millisecondsSinceEpoch}.$ext';
 
       // 1. Get Sample Rate safely
       int sampleRate = 44100;
@@ -117,12 +122,12 @@ class ExportService {
       }
 
       if (ext == 'wav') {
-         args.addAll(['-c:a', 'pcm_s16le', outputPath]);
+         args.addAll(['-c:a', 'pcm_s16le', tempOutputPath]);
       } else if (ext == 'mp3') {
-         args.addAll(['-c:a', 'libmp3lame', '-b:a', bitrate, outputPath]);
+         args.addAll(['-c:a', 'libmp3lame', '-b:a', bitrate, tempOutputPath]);
       } else {
          // Default to aac
-         args.addAll(['-c:a', 'aac', '-b:a', bitrate, outputPath]);
+         args.addAll(['-c:a', 'aac', '-b:a', bitrate, tempOutputPath]);
       }
 
       debugPrint('FFmpeg Command Args: ${args.join(' ')}');
@@ -131,8 +136,21 @@ class ExportService {
       final returnCode = await session.getReturnCode();
 
       if (ReturnCode.isSuccess(returnCode)) {
-         debugPrint('Export success');
-         return outputPath;
+         debugPrint('FFmpeg Export success to temp directory. Copying to final destination...');
+         
+         // Safely copy the file from temp to the actual requested custom export path
+         try {
+           final tempFile = File(tempOutputPath);
+           if (await tempFile.exists()) {
+             await tempFile.copy(finalOutputPath);
+             // Cleanup temp file
+             await tempFile.delete();
+           }
+         } catch (copyError) {
+           throw Exception("FFmpeg succeeded but failed to save file to $finalOutputPath: $copyError");
+         }
+         
+         return finalOutputPath;
       } else if (ReturnCode.isCancel(returnCode)) {
          debugPrint('Export cancelled by user');
          throw Exception("ExportCancelled");

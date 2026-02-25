@@ -7,6 +7,7 @@ import 'package:just_audio/just_audio.dart' as ja; // Alias just_audio
 import 'package:audio_session/audio_session.dart';
 import 'package:logging/logging.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 import 'dart:math' as math;
 
 /// Singleton class to handle low-level audio processing using SoLoud.
@@ -156,6 +157,7 @@ class AudioEngine {
     _soloud!.setPause(_musicHandle!, true);
     _isPlaying = false;
     _stateController.add(false);
+    WakelockPlus.disable(); // Release wakelock when paused
     _syncAtmospheres();
   } else {
     // Currently not playing, so play/resume
@@ -178,6 +180,7 @@ class AudioEngine {
     
     _isPlaying = true;
     _stateController.add(true);
+    WakelockPlus.enable(); // Keep screen/CPU awake during playback
     _syncAtmospheres(); // Sync atmospheres with play state
   }
 }
@@ -199,6 +202,7 @@ class AudioEngine {
   // Stop all playback (used when leaving editor)
   void stop() {
     _isPlaying = false; // Set this BEFORE sync so atmospheres know to pause
+    WakelockPlus.disable(); // Ensure wakelock is released
     _syncAtmospheres(); 
 
     if (_musicHandle != null && _soloud != null) {

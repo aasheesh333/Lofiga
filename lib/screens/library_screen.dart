@@ -65,15 +65,28 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
   Future<void> _deleteFile(FileSystemEntity file) async {
     try {
-      await file.delete();
-      _loadFiles();
-      if (mounted) {
-         ScaffoldMessenger.of(context).showSnackBar(
-           const SnackBar(content: Text('File deleted')),
-         );
+      if (await file.exists()) {
+        await file.delete();
+        _loadFiles();
+        if (mounted) {
+           ScaffoldMessenger.of(context).showSnackBar(
+             const SnackBar(content: Text('File deleted successfully')),
+           );
+        }
+      } else {
+        if (mounted) {
+           ScaffoldMessenger.of(context).showSnackBar(
+             const SnackBar(content: Text('File not found')),
+           );
+        }
       }
     } catch (e) {
       debugPrint('Error deleting file: $e');
+      if (mounted) {
+         ScaffoldMessenger.of(context).showSnackBar(
+           SnackBar(content: Text('Cannot delete file (Permission Denied): $e')),
+         );
+      }
     }
   }
 

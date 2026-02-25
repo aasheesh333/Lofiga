@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:file_picker/file_picker.dart';
@@ -85,9 +86,26 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
   
   Future<void> _checkPermissionAndLoadSongs() async {
-    bool permissionStatus = await _audioQuery.permissionsStatus();
-    if (!permissionStatus) {
-      permissionStatus = await _audioQuery.permissionsRequest();
+    bool permissionStatus = false;
+    
+    if (Platform.isAndroid) {
+      if (await Permission.audio.isGranted || await Permission.storage.isGranted) {
+        permissionStatus = true;
+      } else {
+        Map<Permission, PermissionStatus> statuses = await [
+          Permission.audio,
+          Permission.storage,
+        ].request();
+        if (statuses[Permission.audio] == PermissionStatus.granted || 
+            statuses[Permission.storage] == PermissionStatus.granted) {
+          permissionStatus = true;
+        }
+      }
+    } else {
+      permissionStatus = await _audioQuery.permissionsStatus();
+      if (!permissionStatus) {
+        permissionStatus = await _audioQuery.permissionsRequest();
+      }
     }
     
     if (mounted) {
@@ -470,10 +488,17 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   Future<void> _pickAudio(BuildContext context) async {
     try {
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.custom, 
-        allowedExtensions: ['mp3', 'wav', 'm4a', 'aac', 'flac', 'ogg'],
-      );
+      FilePickerResult? result;
+      if (Platform.isAndroid) {
+        result = await FilePicker.platform.pickFiles(
+          type: FileType.audio,
+        );
+      } else {
+        result = await FilePicker.platform.pickFiles(
+          type: FileType.custom, 
+          allowedExtensions: ['mp3', 'wav', 'm4a', 'aac', 'flac', 'ogg'],
+        );
+      }
 
       if (result != null) {
         if (result.files.single.path != null) {
