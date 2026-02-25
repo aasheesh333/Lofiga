@@ -12,6 +12,7 @@ class ExportService {
 
   static Future<String?> exportTrack({
     required String inputPath,
+    required String fileName,
     required PresetManager preset,
     required Function(double) onProgress,
   }) async {
@@ -34,7 +35,19 @@ class ExportService {
         basePath = downloadsDir!.path;
       }
 
-      final String outputPath = '$basePath/lofiga_export_${DateTime.now().millisecondsSinceEpoch}.$ext';
+      // Extract base name without extension
+      String cleanName = fileName;
+      int dotIndex = cleanName.lastIndexOf('.');
+      if (dotIndex != -1) {
+        cleanName = cleanName.substring(0, dotIndex);
+      }
+      // Clean up name to be safe for filesystems
+      cleanName = cleanName.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+
+      // Get preset string
+      String presetStr = preset.customPresetName ?? preset.currentPreset.toString().split('.').last;
+
+      final String outputPath = '$basePath/${cleanName} - ${presetStr} - ${bitrate}.$ext';
 
       // 1. Get Sample Rate safely
       int sampleRate = 44100;

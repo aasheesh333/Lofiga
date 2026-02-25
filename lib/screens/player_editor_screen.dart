@@ -90,6 +90,7 @@ class _PlayerEditorScreenState extends State<PlayerEditorScreen> with SingleTick
       final preset = context.read<PresetManager>();
       final path = await ExportService.exportTrack(
         inputPath: widget.filePath,
+        fileName: widget.fileName,
         preset: preset,
         onProgress: (p) {},
       );
@@ -206,6 +207,7 @@ class _PlayerEditorScreenState extends State<PlayerEditorScreen> with SingleTick
       final preset = context.read<PresetManager>();
       final path = await ExportService.exportTrack(
         inputPath: widget.filePath,
+        fileName: widget.fileName,
         preset: preset,
         onProgress: (p) {},
       );

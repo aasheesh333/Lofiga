@@ -87,7 +87,7 @@ class _ExportedPlayerScreenState extends State<ExportedPlayerScreen> {
   String _formatDuration(Duration d) {
     final min = d.inMinutes;
     final sec = (d.inSeconds % 60).toString().padLeft(2, '0');
-    return '\$min:\$sec';
+    return '$min:$sec';
   }
 
   @override
