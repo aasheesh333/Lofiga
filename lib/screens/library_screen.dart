@@ -6,6 +6,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:lofiga/screens/player_editor_screen.dart'; // For Edit in Studio
 import 'package:lofiga/screens/exported_player_screen.dart'; // For Fullscreen Player
 import 'package:share_plus/share_plus.dart';
+import 'package:lofiga/services/storage_service.dart';
 
 class LibraryScreen extends StatefulWidget {
   const LibraryScreen({super.key});
@@ -27,16 +28,23 @@ class _LibraryScreenState extends State<LibraryScreen> {
   Future<void> _loadFiles() async {
     setState(() => _isLoading = true);
     try {
+      final settings = await StorageService().loadAppSettings();
+      String searchPath = settings.exportPath;
+
       Directory? dir;
-      if (Platform.isAndroid) {
-        dir = await getExternalStorageDirectory();
+      if (searchPath.isNotEmpty) {
+        dir = Directory(searchPath);
       } else {
-        dir = await getApplicationDocumentsDirectory();
+        if (Platform.isAndroid) {
+          dir = await getExternalStorageDirectory();
+        } else {
+          dir = await getApplicationDocumentsDirectory();
+        }
       }
 
-      if (dir != null) {
+      if (dir != null && await dir.exists()) {
         final List<FileSystemEntity> files = dir.listSync()
-            .where((f) => f.path.endsWith('.mp3') || f.path.endsWith('.m4a'))
+            .where((f) => f.path.endsWith('.mp3') || f.path.endsWith('.m4a') || f.path.endsWith('.wav') || f.path.endsWith('.aac'))
             .toList();
             
         // Sort by modified date descending
