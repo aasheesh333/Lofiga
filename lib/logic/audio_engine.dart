@@ -1,12 +1,9 @@
 import 'dart:async';
-import 'dart:io';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_soloud/flutter_soloud.dart';
-import 'package:just_audio/just_audio.dart' as ja; // Alias just_audio
+import 'package:just_audio/just_audio.dart' as ja;
 import 'package:audio_session/audio_session.dart';
 import 'package:logging/logging.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'dart:math' as math;
 
@@ -24,11 +21,9 @@ class AudioEngine {
 
   // Handles
   SoundHandle? _musicHandle;
-  // REMOVED: final Map<String, SoundHandle> _atmosphereHandles = {};
 
   // Sources
   AudioSource? _musicSource;
-  // REMOVED: final Map<String, AudioSource> _atmosphereSources = {};
 
   // Atmosphere Players (JustAudio)
   final Map<String, ja.AudioPlayer> _atmospherePlayers = {};
@@ -40,6 +35,10 @@ class AudioEngine {
   bool _isLooping = false;
   Duration _duration = Duration.zero;
   Duration _position = Duration.zero;
+  Timer? _pollingTimer; // Bug #11 fix: track the timer for cancellation
+
+  // Track which filters are available
+  bool _filtersAvailable = false;
 
   // Stream Controllers
   final _positionController = StreamController<Duration>.broadcast();
@@ -62,9 +61,34 @@ class AudioEngine {
       await _soloud!.init();
       _soloud!.setGlobalVolume(1.0);
       
-      // Configure Audio Session for iOS (Playback + Mixing)
-      final session = await AudioSession.instance;
-      await session.configure(const AudioSessionConfiguration.music());
+      // Configure Audio Session for both iOS AND Android
+      try {
+        final session = await AudioSession.instance;
+        await session.configure(const AudioSessionConfiguration(
+          avAudioSessionCategory: AVAudioSessionCategory.playback,
+          avAudioSessionCategoryOptions: AVAudioSessionCategoryOptions.mixWithOthers,
+          avAudioSessionMode: AVAudioSessionMode.defaultMode,
+          avAudioSessionRouteSharingPolicy: AVAudioSessionRouteSharingPolicy.defaultPolicy,
+          avAudioSessionSetActiveOptions: AVAudioSessionSetActiveOptions.none,
+          androidAudioAttributes: AndroidAudioAttributes(
+            contentType: AndroidAudioContentType.music,
+            usage: AndroidAudioUsage.media,
+          ),
+          androidAudioFocusGainType: AndroidAudioFocusGainType.gain,
+          androidWillPauseWhenDucked: true,
+        ));
+        // Listen for audio interruptions (calls, other apps)
+        session.interruptionEventStream.listen((event) {
+          if (event.begin) {
+            // Another app took audio focus — pause our playback
+            if (_isPlaying) {
+              togglePlayPause();
+            }
+          }
+        });
+      } catch (e) {
+        _log.warning('Audio session configuration warning: $e');
+      }
 
       _isInitialized = true;
       _log.info('SoLoud initialized');
@@ -119,6 +143,7 @@ class AudioEngine {
       _syncAtmospheres(); // Ensure atmospheres sync with playback
 
       // Enable Filters Global
+      _filtersAvailable = false;
       try {
         _soloud!.filters.biquadResonantFilter.activate();
         _soloud!.filters.echoFilter.activate();
@@ -127,20 +152,29 @@ class AudioEngine {
 
         // Add Limiter Filter to prevent clipping
         _soloud!.filters.limiterFilter.activate();
+        _filtersAvailable = true;
       } catch (e) {
-         _log.warning('Filter activation warning: $e');
+         _log.warning('Filter activation failed (device may not support all filters): $e');
+         // Bug #7: Flag that filters aren't fully available
+         _filtersAvailable = false;
       }
 
-      // Reset filter params (Global)
-      _soloud!.filters.freeverbFilter.wet.value = 0;
-      _soloud!.filters.echoFilter.wet.value = 0;
-      // Reset Biquad to disabled state (very high freq)
-      _soloud!.filters.biquadResonantFilter.frequency.value = 22000;
-      // Reset BassBoost
-      _soloud!.filters.bassBoostFilter.wet.value = 0;
-      // Set Limiter defaults (Threshold -1dB)
-      _soloud!.filters.limiterFilter.threshold.value = -1.0;
-      _soloud!.filters.limiterFilter.outputCeiling.value = -0.5;
+      if (_filtersAvailable) {
+        // Reset filter params (Global)
+        try {
+          _soloud!.filters.freeverbFilter.wet.value = 0;
+          _soloud!.filters.echoFilter.wet.value = 0;
+          // Reset Biquad to disabled state (very high freq)
+          _soloud!.filters.biquadResonantFilter.frequency.value = 22000;
+          // Reset BassBoost
+          _soloud!.filters.bassBoostFilter.wet.value = 0;
+          // Set Limiter defaults (Threshold -1dB)
+          _soloud!.filters.limiterFilter.threshold.value = -1.0;
+          _soloud!.filters.limiterFilter.outputCeiling.value = -0.5;
+        } catch (e) {
+          _log.warning('Filter reset failed: $e');
+        }
+      }
 
       _log.info('Track loaded: $filePath');
     } catch (e) {
@@ -222,8 +256,6 @@ class AudioEngine {
   // --- DSP Controls ---
 
   // Speed & Pitch (Varispeed: changing speed changes pitch)
-  // Limitation: Independent Time-Stretch is NOT supported.
-  // This implements "Tape Style" speed change.
   void setSpeedAndPitch(double tempo, double semitones) {
     if (_musicHandle == null || _soloud == null) return;
 
@@ -242,59 +274,70 @@ class AudioEngine {
   }
 
   double _semitoneToFactor(double semitones) {
-    // Correct Logarithmic Pitch Calculation: 2^(n/12)
     return math.pow(2, semitones / 12.0).toDouble();
   }
 
-  // Filters (Global)
-  // These update existing filter parameters, they do NOT recreate nodes.
-
+  // Filters (Global) — Bug #7: Guard all filter calls with _filtersAvailable
   void setReverb(double wet) {
-    if (_soloud == null) return;
+    if (_soloud == null || !_filtersAvailable) return;
 
-    if (wet > 0) {
-       _soloud!.filters.freeverbFilter.wet.value = wet;
-       _soloud!.filters.freeverbFilter.roomSize.value = wet;
-       _soloud!.filters.freeverbFilter.damp.value = 0.5;
-       _soloud!.filters.freeverbFilter.width.value = 1.0;
-       _soloud!.filters.freeverbFilter.freeze.value = 0.0;
-    } else {
-       _soloud!.filters.freeverbFilter.wet.value = 0.0;
+    try {
+      if (wet > 0) {
+         _soloud!.filters.freeverbFilter.wet.value = wet;
+         _soloud!.filters.freeverbFilter.roomSize.value = wet;
+         _soloud!.filters.freeverbFilter.damp.value = 0.5;
+         _soloud!.filters.freeverbFilter.width.value = 1.0;
+         _soloud!.filters.freeverbFilter.freeze.value = 0.0;
+      } else {
+         _soloud!.filters.freeverbFilter.wet.value = 0.0;
+      }
+    } catch (e) {
+      _log.warning('setReverb failed: $e');
     }
   }
 
   void setDelay(double wet) {
-    if (_soloud == null) return;
-    _soloud!.filters.echoFilter.wet.value = wet;
-    _soloud!.filters.echoFilter.delay.value = 0.5;
-    _soloud!.filters.echoFilter.decay.value = 0.5;
+    if (_soloud == null || !_filtersAvailable) return;
+    try {
+      _soloud!.filters.echoFilter.wet.value = wet;
+      _soloud!.filters.echoFilter.delay.value = 0.5;
+      _soloud!.filters.echoFilter.decay.value = 0.5;
+    } catch (e) {
+      _log.warning('setDelay failed: $e');
+    }
   }
 
   void setLowPass(double cutoffFactor) {
-    if (_soloud == null) return;
+    if (_soloud == null || !_filtersAvailable) return;
 
-    if (cutoffFactor > 0) {
-      double freq = 20000 - (cutoffFactor * 18000); // 0% = 20kHz, 100% = 2kHz
-      _soloud!.filters.biquadResonantFilter.type.value = 0; // LowPass
-      _soloud!.filters.biquadResonantFilter.frequency.value = freq;
-      _soloud!.filters.biquadResonantFilter.resonance.value = 2.0;
-    } else {
-      _soloud!.filters.biquadResonantFilter.frequency.value = 22000;
+    try {
+      if (cutoffFactor > 0) {
+        double freq = 20000 - (cutoffFactor * 18000);
+        _soloud!.filters.biquadResonantFilter.type.value = 0; // LowPass
+        _soloud!.filters.biquadResonantFilter.frequency.value = freq;
+        _soloud!.filters.biquadResonantFilter.resonance.value = 2.0;
+      } else {
+        _soloud!.filters.biquadResonantFilter.frequency.value = 22000;
+      }
+    } catch (e) {
+      _log.warning('setLowPass failed: $e');
     }
   }
 
   void setBassBoost(double strength) {
-    if (_soloud == null) return;
+    if (_soloud == null || !_filtersAvailable) return;
 
-    if (strength > 0) {
-      _soloud!.filters.bassBoostFilter.wet.value = 1.0;
-      _soloud!.filters.bassBoostFilter.boost.value = strength * 5.0; // Scale up
-    } else {
-      _soloud!.filters.bassBoostFilter.wet.value = 0.0;
+    try {
+      if (strength > 0) {
+        _soloud!.filters.bassBoostFilter.wet.value = 1.0;
+        _soloud!.filters.bassBoostFilter.boost.value = strength * 5.0;
+      } else {
+        _soloud!.filters.bassBoostFilter.wet.value = 0.0;
+      }
+    } catch (e) {
+      _log.warning('setBassBoost failed: $e');
     }
   }
-
-  // --- Atmosphere ---
 
   // --- Atmosphere (JustAudio Implementation) ---
 
@@ -308,8 +351,6 @@ class AudioEngine {
     if (player == null) return;
 
     final vol = _atmosphereVolumes[key] ?? 0.0;
-    // Play IF volume > 0 AND main music is playing
-    // (Or should we allow preview? For now, stick to sync)
     bool shouldPlay = vol > 0.01 && _isPlaying;
 
     if (shouldPlay) {
@@ -326,43 +367,37 @@ class AudioEngine {
     }
   }
 
-  // Obsolete: loadAtmosphere, _copyAssetToLocal, _startAtmosphere, _playAtmospheres, _pauseAtmospheres
-  // Removed to clean up SoLoud atmosphere logic.
-
-  // Obsolete methods removed.
-
-  // Internal Loop
+  // Internal Loop — Bug #11 fix: Timer is now tracked and cancellable
   void _startPositionPolling() {
-    Timer.periodic(const Duration(milliseconds: 100), (timer) {
+    _pollingTimer?.cancel(); // Cancel any existing timer first
+    _pollingTimer = Timer.periodic(const Duration(milliseconds: 100), (timer) {
       if (_musicHandle != null && _soloud != null) {
-        // Query actual position from SoLoud
-        final actualPosition = _soloud!.getPosition(_musicHandle!);
-        _position = actualPosition;
-        
-        if (_isPlaying) {
-        // Check if song has finished (not looping and reached/passed end OR invalid handle)
-        final bool isValid = _musicSource != null && _musicSource!.handles.contains(_musicHandle!);
-        
-        if ((!isValid || (_position >= _duration && _duration.inMilliseconds > 0)) && !_isLooping) {
-          // Song has finished - stop playback but keep position at end
-          _isPlaying = false;
-          _stateController.add(false);
-          _syncAtmospheres(); // Pauses atmospheres because _isPlaying is false
-          // Don't reset position to zero - this breaks handle validity check in togglePlayPause
-        } else {
-          // Still playing, emit current position
-          if (isValid) {
-             _positionController.add(_position);
+        try {
+          final actualPosition = _soloud!.getPosition(_musicHandle!);
+          _position = actualPosition;
+          
+          if (_isPlaying) {
+            final bool isValid = _musicSource != null && _musicSource!.handles.contains(_musicHandle!);
+            
+            if ((!isValid || (_position >= _duration && _duration.inMilliseconds > 0)) && !_isLooping) {
+              _isPlaying = false;
+              _stateController.add(false);
+              _syncAtmospheres();
+            } else {
+              if (isValid) {
+                 _positionController.add(_position);
+              }
+            }
           }
-        }
+        } catch (e) {
+          // Handle may have been invalidated — ignore silently
         }
       }
     });
   }
 
   void dispose() {
-    // Note: Since this is a singleton provided at app level,
-    // calling dispose() shuts down the engine globally.
+    _pollingTimer?.cancel(); // Bug #11 fix: Cancel the timer
     _soloud?.deinit();
     for (var player in _atmospherePlayers.values) {
       player.dispose();

@@ -12,6 +12,7 @@ import 'package:intl/intl.dart';
 import 'dart:ui'; // For BackdropFilter
 import 'package:on_audio_query/on_audio_query.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:path_provider/path_provider.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -29,6 +30,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   List<SongModel> _allSongs = [];
   List<SongModel> _filteredSongs = [];
   bool _hasPermission = false;
+  bool _isLoadingSongs = true;
   final TextEditingController _searchController = TextEditingController();
   bool _isSearching = false;
 
@@ -78,30 +80,65 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final storage = StorageService();
     final edits = await storage.loadAllConfigs();
     edits.sort((a, b) => b.savedAt.compareTo(a.savedAt));
+    
+    // Bug #9 fix: Filter out configs whose files no longer exist
+    final validEdits = <SavedConfig>[];
+    for (final edit in edits) {
+      if (await File(edit.filePath).exists()) {
+        validEdits.add(edit);
+      }
+    }
+    
     if (mounted) {
       setState(() {
-        _recentEdits = edits;
+        _recentEdits = validEdits;
       });
     }
   }
   
+  // Bug #8 fix: Completely rewritten permission handling
   Future<void> _checkPermissionAndLoadSongs() async {
+    setState(() => _isLoadingSongs = true);
+    
     bool permissionStatus = false;
     
     if (Platform.isAndroid) {
-      if (await Permission.audio.isGranted || await Permission.storage.isGranted) {
-        permissionStatus = true;
-      } else {
-        Map<Permission, PermissionStatus> statuses = await [
-          Permission.audio,
-          Permission.storage,
-        ].request();
-        if (statuses[Permission.audio] == PermissionStatus.granted || 
-            statuses[Permission.storage] == PermissionStatus.granted) {
+      // Android 13+ (API 33+): Use READ_MEDIA_AUDIO
+      // Android 10-12 (API 29-32): Use READ_EXTERNAL_STORAGE
+      // Android <10 (API <29): Use READ_EXTERNAL_STORAGE + WRITE_EXTERNAL_STORAGE
+      
+      final androidInfo = await _getAndroidSdkVersion();
+      
+      if (androidInfo >= 33) {
+        // Android 13+: Only READ_MEDIA_AUDIO matters
+        var status = await Permission.audio.status;
+        if (status.isGranted) {
           permissionStatus = true;
+        } else if (status.isDenied) {
+          status = await Permission.audio.request();
+          permissionStatus = status.isGranted;
+        } else if (status.isPermanentlyDenied) {
+          // User previously denied and checked "Don't ask again"
+          if (mounted) {
+            _showPermissionDeniedDialog();
+          }
+        }
+      } else {
+        // Android 10-12: Use storage permission
+        var status = await Permission.storage.status;
+        if (status.isGranted) {
+          permissionStatus = true;
+        } else if (status.isDenied) {
+          status = await Permission.storage.request();
+          permissionStatus = status.isGranted;
+        } else if (status.isPermanentlyDenied) {
+          if (mounted) {
+            _showPermissionDeniedDialog();
+          }
         }
       }
     } else {
+      // iOS
       permissionStatus = await _audioQuery.permissionsStatus();
       if (!permissionStatus) {
         permissionStatus = await _audioQuery.permissionsRequest();
@@ -109,12 +146,76 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
     
     if (mounted) {
-      setState(() => _hasPermission = permissionStatus);
+      setState(() {
+        _hasPermission = permissionStatus;
+        _isLoadingSongs = false;
+      });
     }
     
     if (permissionStatus) {
       _loadSongs();
     }
+  }
+
+  // Helper to get Android SDK version
+  Future<int> _getAndroidSdkVersion() async {
+    try {
+      // on_audio_query's DeviceModel doesn't expose SDK, using a simpler approach
+      // For Android 13+, Permission.audio exists. For older, it doesn't.
+      // We can check by trying the audio permission — if it's not applicable,
+      // it will return a specific status.
+      final audioStatus = await Permission.audio.status;
+      // If audio permission is not applicable (old Android), it returns granted
+      // On Android 13+, it returns denied/granted based on actual state
+      // Heuristic: try both and see which one is meaningful
+      if (audioStatus != PermissionStatus.granted) {
+        // Likely Android 13+ where audio perm is needed
+        return 33;
+      }
+      // Check if storage is also granted
+      final storageStatus = await Permission.storage.status;
+      if (storageStatus.isGranted) {
+        return 29; // Assume older Android with storage granted
+      }
+      return 33; // Default to treating as Android 13+
+    } catch (e) {
+      return 33; // Default
+    }
+  }
+
+  void _showPermissionDeniedDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF2A1F36),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(
+          'Permission Required',
+          style: GoogleFonts.splineSans(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        content: Text(
+          'Audio permission is permanently denied. Please enable it from Settings to see your songs.',
+          style: GoogleFonts.splineSans(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Cancel', style: GoogleFonts.splineSans(color: Colors.white54)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF993DF5),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            onPressed: () {
+              Navigator.pop(ctx);
+              openAppSettings(); // Opens OS app settings
+            },
+            child: Text('Open Settings', style: GoogleFonts.splineSans(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
   }
   
   Future<void> _loadSongs() async {
@@ -129,8 +230,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       // Filter out atmosphere files and short clips
       final filteredList = songs.where((song) {
         final title = song.title.toLowerCase();
-        // Exclude common atmosphere keywords if they appear to be assets/loops
-        // Also exclude very short files (< 10 seconds) to avoid UI sounds
         bool isAtmosphere = title.contains('rain_') || 
                             title.contains('wind_') || 
                             title.contains('vinyl_') || 
@@ -144,7 +243,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       if (mounted) {
         setState(() {
           _allSongs = filteredList;
-          // Re-apply search filter if needed
           if (_searchController.text.isNotEmpty) {
              _onSearchChanged();
           } else {
@@ -157,13 +255,35 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
+  // Bug #9 fix: Copy picked file to app's persistent directory so path survives cache clears
+  Future<String> _persistPickedFile(String cachedPath, String fileName) async {
+    try {
+      final appDir = await getApplicationDocumentsDirectory();
+      final musicDir = Directory('${appDir.path}/picked_music');
+      if (!await musicDir.exists()) {
+        await musicDir.create(recursive: true);
+      }
+      
+      final destPath = '${musicDir.path}/$fileName';
+      final destFile = File(destPath);
+      
+      // Only copy if not already persisted
+      if (!await destFile.exists()) {
+        await File(cachedPath).copy(destPath);
+      }
+      
+      return destPath;
+    } catch (e) {
+      debugPrint('Failed to persist picked file, using original path: $e');
+      return cachedPath; // Fallback to original path
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     // List of screens for navigation
     final List<Widget> screens = [
       _buildHomeContent(),
-      // Editor is now integrated into PlayerEditorScreen, so index 1 might be redundant or a direct jump
-      // For now, let's keep placeholder or navigate directly
       Container(),
       const LibraryScreen(),
       const SettingsScreen(),
@@ -200,7 +320,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               ),
             ),
           ),
-          // Blur the glows slightly more
           BackdropFilter(
             filter: ImageFilter.blur(sigmaX: 60, sigmaY: 60),
             child: Container(color: Colors.transparent),
@@ -208,11 +327,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
            // Screen Content
            screens[_currentIndex],
-
-           // Mini-Player Bar (Bottom) - Removed as we move to full screen editing flow
-           // But user might want it if they navigate away.
-           // For this specific task, "Player & Lofi Editor" implies a focused editing session.
-           // We will remove the MiniPlayerBar for now to focus on the new flow.
 
            Positioned(
              left: 0,
@@ -239,8 +353,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
               _buildNavItem(Icons.home, 'Home', 0),
-              // We'll hide Editor tab since it's now context-driven by selecting a song
-              // _buildNavItem(Icons.tune, 'Editor', 1),
               _buildNavItem(Icons.library_music, 'Library', 2),
               _buildNavItem(Icons.settings, 'Settings', 3),
             ],
@@ -282,7 +394,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   // Extracted Home Tab Content
   Widget _buildHomeContent() {
     return SafeArea(
-      bottom: false, // Allow content to go behind bottom nav
+      bottom: false,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 24.0),
         child: Column(
@@ -463,11 +575,23 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                             const SizedBox(height: 12),
                             ElevatedButton(
                               style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
-                              onPressed: _checkPermissionAndLoadSongs,
+                              onPressed: () async {
+                                // Bug #8 fix: Try requesting permission again, or open settings if permanently denied
+                                await _checkPermissionAndLoadSongs();
+                                if (!_hasPermission && mounted) {
+                                  // If still no permission, open app settings
+                                  _showPermissionDeniedDialog();
+                                }
+                              },
                               child: const Text('Allow Access'),
                             ),
                           ],
                         ),
+                      )
+                    else if (_isLoadingSongs)
+                      const Padding(
+                        padding: EdgeInsets.all(32),
+                        child: Center(child: CircularProgressIndicator(color: Color(0xFF993DF5))),
                       )
                     else if (_filteredSongs.isEmpty)
                        Padding(
@@ -505,6 +629,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           String filePath = result.files.single.path!;
           String fileName = result.files.single.name;
           
+          // Bug #9 fix: On Android, FilePicker returns cached paths that get cleared.
+          // Persist the file to app's documents directory for reliable access.
+          if (Platform.isAndroid) {
+            filePath = await _persistPickedFile(filePath, fileName);
+          }
+          
           // Navigate to Player Editor directly
           if (mounted) {
             Navigator.of(context).push(
@@ -516,7 +646,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         } else {
           if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Error: Selected file path is null (iOS iCloud file?)')),
+              const SnackBar(content: Text('Error: Selected file path is null')),
             );
           }
         }

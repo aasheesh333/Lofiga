@@ -25,24 +25,33 @@ class _LibraryScreenState extends State<LibraryScreen> {
     _loadFiles();
   }
 
+  // Bug #3 fix: Use the same directory logic as export_service.dart
+  Future<String> _getExportDirectory() async {
+    final settings = await StorageService().loadAppSettings();
+    
+    if (settings.exportPath.isNotEmpty) {
+      final customDir = Directory(settings.exportPath);
+      if (await customDir.exists()) {
+        return settings.exportPath;
+      }
+    }
+    
+    // Default: app documents / Lofiga Exports (same as export_service.dart)
+    final appDir = await getApplicationDocumentsDirectory();
+    final exportDir = Directory('${appDir.path}/Lofiga Exports');
+    if (!await exportDir.exists()) {
+      await exportDir.create(recursive: true);
+    }
+    return exportDir.path;
+  }
+
   Future<void> _loadFiles() async {
     setState(() => _isLoading = true);
     try {
-      final settings = await StorageService().loadAppSettings();
-      String searchPath = settings.exportPath;
+      final searchPath = await _getExportDirectory();
+      final dir = Directory(searchPath);
 
-      Directory? dir;
-      if (searchPath.isNotEmpty) {
-        dir = Directory(searchPath);
-      } else {
-        if (Platform.isAndroid) {
-          dir = await getExternalStorageDirectory();
-        } else {
-          dir = await getApplicationDocumentsDirectory();
-        }
-      }
-
-      if (dir != null && await dir.exists()) {
+      if (await dir.exists()) {
         final List<FileSystemEntity> files = dir.listSync()
             .where((f) => f.path.endsWith('.mp3') || f.path.endsWith('.m4a') || f.path.endsWith('.wav') || f.path.endsWith('.aac'))
             .toList();
@@ -56,6 +65,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
             _isLoading = false;
           });
         }
+      } else {
+        if (mounted) setState(() => _isLoading = false);
       }
     } catch (e) {
       debugPrint('Error loading files: $e');
@@ -63,28 +74,69 @@ class _LibraryScreenState extends State<LibraryScreen> {
     }
   }
 
+  // Bug #4 fix: Better error handling for file deletion
   Future<void> _deleteFile(FileSystemEntity file) async {
+    // Show confirmation dialog first
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF2A1F36),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text('Delete File?', style: GoogleFonts.splineSans(color: Colors.white, fontWeight: FontWeight.bold)),
+        content: Text(
+          'This will permanently delete this exported file.',
+          style: GoogleFonts.splineSans(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('Cancel', style: GoogleFonts.splineSans(color: Colors.white54)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text('Delete', style: GoogleFonts.splineSans(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
     try {
       if (await file.exists()) {
         await file.delete();
         _loadFiles();
         if (mounted) {
            ScaffoldMessenger.of(context).showSnackBar(
-             const SnackBar(content: Text('File deleted successfully')),
+             SnackBar(
+               content: Text('File deleted successfully', style: GoogleFonts.splineSans()),
+               backgroundColor: const Color(0xFF993DF5),
+             ),
            );
         }
       } else {
         if (mounted) {
            ScaffoldMessenger.of(context).showSnackBar(
-             const SnackBar(content: Text('File not found')),
+             const SnackBar(content: Text('File not found — it may have been already deleted')),
            );
+           _loadFiles(); // Refresh list anyway
         }
       }
     } catch (e) {
       debugPrint('Error deleting file: $e');
       if (mounted) {
          ScaffoldMessenger.of(context).showSnackBar(
-           SnackBar(content: Text('Cannot delete file (Permission Denied): $e')),
+           SnackBar(
+             content: Text(
+               'Cannot delete file. Try deleting it from your file manager.',
+               style: GoogleFonts.splineSans(),
+             ),
+             duration: const Duration(seconds: 4),
+           ),
          );
       }
     }
@@ -136,121 +188,131 @@ class _LibraryScreenState extends State<LibraryScreen> {
                             'No generated songs yet',
                             style: GoogleFonts.splineSans(color: Colors.white54),
                           ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Export a track from the editor to see it here',
+                            style: GoogleFonts.splineSans(color: Colors.white38, fontSize: 12),
+                          ),
                         ],
                       ),
                     )
-                  : ListView.builder(
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-                      itemCount: _files.length,
-                      itemBuilder: (context, index) {
-                        final file = _files[index];
-                        final fileName = file.uri.pathSegments.last;
-                        
-                        return GestureDetector(
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => ExportedPlayerScreen(
-                                  filePath: file.path,
-                                  fileName: fileName,
+                  : RefreshIndicator(
+                      onRefresh: _loadFiles,
+                      color: const Color(0xFF993DF5),
+                      backgroundColor: const Color(0xFF2A1F36),
+                      child: ListView.builder(
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                        itemCount: _files.length,
+                        itemBuilder: (context, index) {
+                          final file = _files[index];
+                          final fileName = file.uri.pathSegments.last;
+                          
+                          return GestureDetector(
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => ExportedPlayerScreen(
+                                    filePath: file.path,
+                                    fileName: fileName,
+                                  )
                                 )
-                              )
-                            ).then((_) => _loadFiles()); // Refresh on back
-                          },
-                          child: Container(
-                            margin: const EdgeInsets.only(bottom: 12),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF231B2E),
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(
-                                 color: Colors.white.withOpacity(0.05)
-                              ),
-                            ),
-                            child: ListTile(
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                              leading: Container(
-                                width: 48, 
-                                height: 48,
-                                decoration: const BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: Colors.white10,
-                                ),
-                                child: const Icon(
-                                  Icons.play_arrow, 
-                                  color: Colors.white
+                              ).then((_) => _loadFiles()); // Refresh on back
+                            },
+                            child: Container(
+                              margin: const EdgeInsets.only(bottom: 12),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF231B2E),
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                   color: Colors.white.withOpacity(0.05)
                                 ),
                               ),
-                              title: Text(
-                                fileName, 
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: GoogleFonts.splineSans(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w600
+                              child: ListTile(
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                leading: Container(
+                                  width: 48, 
+                                  height: 48,
+                                  decoration: const BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: Colors.white10,
+                                  ),
+                                  child: const Icon(
+                                    Icons.play_arrow, 
+                                    color: Colors.white
+                                  ),
                                 ),
-                              ),
-                              subtitle: Text(
-                                'Tap to open player',
-                                style: GoogleFonts.splineSans(color: Colors.white38, fontSize: 12),
-                              ),
-                              trailing: PopupMenuButton<String>(
-                                icon: const Icon(Icons.more_vert, color: Colors.white38),
-                                color: const Color(0xFF2A1F36),
-                                onSelected: (value) {
-                                  if (value == 'edit') {
-                                     Navigator.push(
-                                       context, 
-                                       MaterialPageRoute(
-                                         builder: (context) => PlayerEditorScreen(
-                                            filePath: file.path, 
-                                            fileName: fileName
+                                title: Text(
+                                  fileName, 
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: GoogleFonts.splineSans(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w600
+                                  ),
+                                ),
+                                subtitle: Text(
+                                  'Tap to open player',
+                                  style: GoogleFonts.splineSans(color: Colors.white38, fontSize: 12),
+                                ),
+                                trailing: PopupMenuButton<String>(
+                                  icon: const Icon(Icons.more_vert, color: Colors.white38),
+                                  color: const Color(0xFF2A1F36),
+                                  onSelected: (value) {
+                                    if (value == 'edit') {
+                                       Navigator.push(
+                                         context, 
+                                         MaterialPageRoute(
+                                           builder: (context) => PlayerEditorScreen(
+                                              filePath: file.path, 
+                                              fileName: fileName
+                                           )
                                          )
-                                       )
-                                     );
-                                  } else if (value == 'share') {
-                                     _shareFile(file.path);
-                                  } else if (value == 'delete') {
-                                     _deleteFile(file);
-                                  }
-                                },
-                                itemBuilder: (context) => [
-                                  PopupMenuItem(
-                                    value: 'share',
-                                    child: Row(
-                                      children: [
-                                        const Icon(Icons.share, color: Colors.white, size: 18),
-                                        const SizedBox(width: 8),
-                                        Text('Share', style: GoogleFonts.splineSans(color: Colors.white)),
-                                      ],
+                                       );
+                                    } else if (value == 'share') {
+                                       _shareFile(file.path);
+                                    } else if (value == 'delete') {
+                                       _deleteFile(file);
+                                    }
+                                  },
+                                  itemBuilder: (context) => [
+                                    PopupMenuItem(
+                                      value: 'share',
+                                      child: Row(
+                                        children: [
+                                          const Icon(Icons.share, color: Colors.white, size: 18),
+                                          const SizedBox(width: 8),
+                                          Text('Share', style: GoogleFonts.splineSans(color: Colors.white)),
+                                        ],
+                                      ),
                                     ),
-                                  ),
-                                  PopupMenuItem(
-                                    value: 'edit',
-                                    child: Row(
-                                      children: [
-                                        const Icon(Icons.tune, color: Colors.white, size: 18),
-                                        const SizedBox(width: 8),
-                                        Text('Edit in Studio', style: GoogleFonts.splineSans(color: Colors.white)),
-                                      ],
+                                    PopupMenuItem(
+                                      value: 'edit',
+                                      child: Row(
+                                        children: [
+                                          const Icon(Icons.tune, color: Colors.white, size: 18),
+                                          const SizedBox(width: 8),
+                                          Text('Edit in Studio', style: GoogleFonts.splineSans(color: Colors.white)),
+                                        ],
+                                      ),
                                     ),
-                                  ),
-                                  PopupMenuItem(
-                                    value: 'delete',
-                                    child: Row(
-                                      children: [
-                                        const Icon(Icons.delete, color: Colors.redAccent, size: 18),
-                                        const SizedBox(width: 8),
-                                        Text('Delete', style: GoogleFonts.splineSans(color: Colors.redAccent)),
-                                      ],
+                                    PopupMenuItem(
+                                      value: 'delete',
+                                      child: Row(
+                                        children: [
+                                          const Icon(Icons.delete, color: Colors.redAccent, size: 18),
+                                          const SizedBox(width: 8),
+                                          Text('Delete', style: GoogleFonts.splineSans(color: Colors.redAccent)),
+                                        ],
+                                      ),
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
                             ),
-                          ),
-                        );
-                      },
+                          );
+                        },
+                      ),
                     ),
              ),
           ],

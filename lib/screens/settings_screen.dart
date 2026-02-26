@@ -6,6 +6,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:lofiga/services/storage_service.dart';
 import 'package:lofiga/theme/app_theme.dart';
+import 'dart:io';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -37,18 +38,80 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await StorageService().saveAppSettings(_settings);
   }
 
+  // Bug #10 fix: Better directory selection with SAF handling
   Future<void> _selectExportPath() async {
-    String? selectedDirectory = await FilePicker.platform.getDirectoryPath();
-    if (selectedDirectory != null) {
-      setState(() {
-        _settings = AppSettings(
-          audioFormat: _settings.audioFormat,
-          audioBitrate: _settings.audioBitrate,
-          exportPath: selectedDirectory,
-          isDarkMode: _settings.isDarkMode,
+    try {
+      String? selectedDirectory = await FilePicker.platform.getDirectoryPath();
+      if (selectedDirectory != null) {
+        // On Android 11+, FilePicker.getDirectoryPath() may return a content URI
+        // which FFmpeg can't use. Check if it's a valid filesystem path.
+        if (Platform.isAndroid && selectedDirectory.startsWith('content://')) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  'Android restriction: Cannot use this folder directly. Using default export path instead.',
+                  style: GoogleFonts.splineSans(),
+                ),
+                duration: const Duration(seconds: 4),
+                backgroundColor: Colors.orange,
+              ),
+            );
+          }
+          return; // Don't save content URI as export path
+        }
+        
+        // Validate the directory exists and is writable
+        final dir = Directory(selectedDirectory);
+        if (await dir.exists()) {
+          setState(() {
+            _settings = AppSettings(
+              audioFormat: _settings.audioFormat,
+              audioBitrate: _settings.audioBitrate,
+              exportPath: selectedDirectory,
+              isDarkMode: _settings.isDarkMode,
+            );
+          });
+          await _saveSettings();
+          
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Export path updated', style: GoogleFonts.splineSans()),
+                backgroundColor: const Color(0xFF993DF5),
+              ),
+            );
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Error selecting directory: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error selecting folder: $e')),
         );
-      });
-      await _saveSettings();
+      }
+    }
+  }
+
+  // Reset export path to default
+  Future<void> _resetExportPath() async {
+    setState(() {
+      _settings = AppSettings(
+        audioFormat: _settings.audioFormat,
+        audioBitrate: _settings.audioBitrate,
+        exportPath: '', // Empty = default
+        isDarkMode: _settings.isDarkMode,
+      );
+    });
+    await _saveSettings();
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Export path reset to default', style: GoogleFonts.splineSans()),
+          backgroundColor: const Color(0xFF993DF5),
+        ),
+      );
     }
   }
 
@@ -166,7 +229,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                height: 400,
                decoration: BoxDecoration(
                  shape: BoxShape.circle,
-                 color: const Color(0xFF3DF5E6).withOpacity(0.05), // Cyan tint
+                 color: const Color(0xFF3DF5E6).withOpacity(0.05),
                  backgroundBlendMode: BlendMode.screen,
                ),
              ),
@@ -204,8 +267,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                    child: ListView(
                      padding: const EdgeInsets.symmetric(horizontal: 24.0),
                      children: [
-                       // Removed Profile Section
-
                        _buildSectionTitle(context, 'GENERAL'),
                        const SizedBox(height: 16),
                        _buildSettingItem(
@@ -218,10 +279,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
                        _buildSettingItem(
                          context, 
                          'Export Path', 
-                         _settings.exportPath.isEmpty ? 'Default App Directory' : _settings.exportPath, 
+                         _settings.exportPath.isEmpty ? 'Default (Lofiga Exports)' : _settings.exportPath, 
                          Icons.folder_open, 
-                         onTap: _selectExportPath
+                         onTap: _selectExportPath,
+                         // Show reset option if custom path is set
+                         onLongPress: _settings.exportPath.isNotEmpty ? _resetExportPath : null,
                        ),
+                       if (_settings.exportPath.isNotEmpty)
+                         Padding(
+                           padding: const EdgeInsets.only(left: 16, bottom: 12),
+                           child: GestureDetector(
+                             onTap: _resetExportPath,
+                             child: Text(
+                               'Long press or tap here to reset to default',
+                               style: GoogleFonts.splineSans(color: Colors.white38, fontSize: 11),
+                             ),
+                           ),
+                         ),
                        _buildSettingItem(
                          context, 
                          'Theme', 
@@ -279,53 +353,56 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  Widget _buildSettingItem(BuildContext context, String title, String subtitle, IconData icon, {bool isSwitch = false, VoidCallback? onTap}) {
+  Widget _buildSettingItem(BuildContext context, String title, String subtitle, IconData icon, {bool isSwitch = false, VoidCallback? onTap, VoidCallback? onLongPress}) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      child: ListTile(
-        onTap: onTap ?? () {
-           if (!isSwitch && subtitle.isNotEmpty) {
-               ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$title setting coming soon!')));
-           }
-        },
-        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: BorderSide(color: isDark ? Colors.white10 : Colors.black12),
-        ),
-        tileColor: isDark ? const Color(0xFF231B2E) : Colors.white, // Surface color
-        leading: Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.05),
-            borderRadius: BorderRadius.circular(10),
+      child: GestureDetector(
+        onLongPress: onLongPress,
+        child: ListTile(
+          onTap: onTap ?? () {
+             if (!isSwitch && subtitle.isNotEmpty) {
+                 ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$title setting coming soon!')));
+             }
+          },
+          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(color: isDark ? Colors.white10 : Colors.black12),
           ),
-          child: Icon(icon, color: isDark ? Colors.white70 : Colors.black87, size: 20),
+          tileColor: isDark ? const Color(0xFF231B2E) : Colors.white,
+          leading: Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: isDark ? Colors.white70 : Colors.black87, size: 20),
+          ),
+          title: Text(title, style: GoogleFonts.splineSans(fontWeight: FontWeight.w600, fontSize: 14, color: isDark ? Colors.white : Colors.black87)),
+          subtitle: subtitle.isNotEmpty ? Text(subtitle, style: GoogleFonts.splineSans(fontSize: 12, color: isDark ? Colors.white38 : Colors.black54)) : null,
+          trailing: isSwitch 
+              ? Switch(
+                  value: _settings.isDarkMode, 
+                  onChanged: (v) async {
+                    setState(() {
+                      _settings = AppSettings(
+                        audioFormat: _settings.audioFormat,
+                        audioBitrate: _settings.audioBitrate,
+                        exportPath: _settings.exportPath,
+                        isDarkMode: v,
+                      );
+                    });
+                    await _saveSettings();
+                    themeProvider.setThemeMode(v ? ThemeMode.dark : ThemeMode.light);
+                  },
+                  activeColor: Theme.of(context).primaryColor,
+                  activeTrackColor: Theme.of(context).primaryColor.withOpacity(0.3),
+                )
+              : Icon(Icons.arrow_forward_ios, size: 14, color: isDark ? Colors.white30 : Colors.black38),
         ),
-        title: Text(title, style: GoogleFonts.splineSans(fontWeight: FontWeight.w600, fontSize: 14, color: isDark ? Colors.white : Colors.black87)),
-        subtitle: subtitle.isNotEmpty ? Text(subtitle, style: GoogleFonts.splineSans(fontSize: 12, color: isDark ? Colors.white38 : Colors.black54)) : null,
-        trailing: isSwitch 
-            ? Switch(
-                value: _settings.isDarkMode, 
-                onChanged: (v) async {
-                  setState(() {
-                    _settings = AppSettings(
-                      audioFormat: _settings.audioFormat,
-                      audioBitrate: _settings.audioBitrate,
-                      exportPath: _settings.exportPath,
-                      isDarkMode: v,
-                    );
-                  });
-                  await _saveSettings();
-                  themeProvider.setThemeMode(v ? ThemeMode.dark : ThemeMode.light);
-                },
-                activeColor: Theme.of(context).primaryColor,
-                activeTrackColor: Theme.of(context).primaryColor.withOpacity(0.3),
-              )
-            : Icon(Icons.arrow_forward_ios, size: 14, color: isDark ? Colors.white30 : Colors.black38),
       ),
     );
   }

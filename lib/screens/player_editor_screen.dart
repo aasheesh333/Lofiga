@@ -50,7 +50,7 @@ class _PlayerEditorScreenState extends State<PlayerEditorScreen> with SingleTick
            // Restore Effects
            _restoreConfig(widget.savedConfig!);
         } else {
-           _presetManager.applyPreset(LofiPreset.lofiSlow); // Default
+           _presetManager.applyPreset(LofiPreset.lofiSlow); // Default: Slow Reverb
         }
 
         // Auto-save listener

@@ -10,6 +10,30 @@ import 'dart:math' as math;
 
 class ExportService {
 
+  /// Bug #2 fix: Get the correct export directory for the platform
+  /// On Android: uses app's documents directory (reliable, accessible)
+  /// On iOS: uses application documents directory
+  static Future<String> _getExportDirectory() async {
+    final settings = await StorageService().loadAppSettings();
+    
+    // If user set a custom path, use it
+    if (settings.exportPath.isNotEmpty) {
+      final customDir = Directory(settings.exportPath);
+      if (await customDir.exists()) {
+        return settings.exportPath;
+      }
+      // If custom path doesn't exist (e.g. SAF content URI), fall back
+    }
+    
+    // Default: use app documents directory with a "Lofiga Exports" subfolder
+    final appDir = await getApplicationDocumentsDirectory();
+    final exportDir = Directory('${appDir.path}/Lofiga Exports');
+    if (!await exportDir.exists()) {
+      await exportDir.create(recursive: true);
+    }
+    return exportDir.path;
+  }
+
   static Future<String?> exportTrack({
     required String inputPath,
     required String fileName,
@@ -22,18 +46,8 @@ class ExportService {
       String ext = settings.audioFormat;
       String bitrate = settings.audioBitrate;
 
-      String basePath;
-      if (settings.exportPath.isNotEmpty) {
-        basePath = settings.exportPath;
-      } else {
-        Directory? downloadsDir;
-        if (Platform.isAndroid) {
-          downloadsDir = await getExternalStorageDirectory();
-        } else {
-          downloadsDir = await getApplicationDocumentsDirectory();
-        }
-        basePath = downloadsDir!.path;
-      }
+      // Bug #2/#10 fix: Use reliable export directory
+      String basePath = await _getExportDirectory();
 
       // Extract base name without extension
       String cleanName = fileName;
@@ -49,8 +63,7 @@ class ExportService {
 
       final String finalOutputPath = '$basePath/${cleanName} - ${presetStr} - ${bitrate}.$ext';
       
-      // On Android 11+, FFmpeg cannot write directly to external directories
-      // We must write to the app's temporary directory first, then copy with Flutter File
+      // Use temp directory for FFmpeg output, then move to final location
       Directory tempDir = await getTemporaryDirectory();
       final String tempOutputPath = '${tempDir.path}/temp_export_${DateTime.now().millisecondsSinceEpoch}.$ext';
 
@@ -79,11 +92,10 @@ class ExportService {
       if (combinedFactor != 1.0) {
         int newRate = (sampleRate * combinedFactor).toInt();
         filters.add('asetrate=$newRate');
-        filters.add('aresample=44100'); // Force output to 44.1kHz to prevent encoder crashes
+        filters.add('aresample=44100');
       }
 
       if (preset.trebleCut > 0) {
-        // limit freq to avoid invalid lowpass values
         double cutPct = preset.trebleCut.clamp(0.0, 1.0);
         double freq = 20000 - (cutPct * 18000);
         if (freq < 200) freq = 200;
@@ -91,7 +103,6 @@ class ExportService {
       }
 
       if (preset.bass > 0) {
-        // equalizer filter is not in min-gpl. Using bass filter instead.
         double gain = (preset.bass * 20).clamp(0.0, 20.0);
         filters.add('bass=g=$gain:f=100:w=0.5');
       }
@@ -102,15 +113,12 @@ class ExportService {
       }
 
       if (preset.reverb > 0) {
-        // freeverb filter is not in min-gpl. Simulating reverb with multi-tap echo.
-        // aecho=in_gain:out_gain:delays:decays
         double rev = preset.reverb.clamp(0.0, 1.0);
-        int d1 = (40 + (rev * 40)).toInt(); // 40-80ms
-        int d2 = (90 + (rev * 60)).toInt(); // 90-150ms
+        int d1 = (40 + (rev * 40)).toInt();
+        int d2 = (90 + (rev * 60)).toInt();
         filters.add('aecho=0.8:0.88:$d1|$d2:0.4|0.3');
       }
 
-      // Ensure a 44.1kHz stereo format for compatibility
       filters.add('aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo');
 
       // Construct the command arguments safely
@@ -126,7 +134,6 @@ class ExportService {
       } else if (ext == 'mp3') {
          args.addAll(['-c:a', 'libmp3lame', '-b:a', bitrate, tempOutputPath]);
       } else {
-         // Default to aac
          args.addAll(['-c:a', 'aac', '-b:a', bitrate, tempOutputPath]);
       }
 
@@ -138,12 +145,10 @@ class ExportService {
       if (ReturnCode.isSuccess(returnCode)) {
          debugPrint('FFmpeg Export success to temp directory. Copying to final destination...');
          
-         // Safely copy the file from temp to the actual requested custom export path
          try {
            final tempFile = File(tempOutputPath);
            if (await tempFile.exists()) {
              await tempFile.copy(finalOutputPath);
-             // Cleanup temp file
              await tempFile.delete();
            }
          } catch (copyError) {
