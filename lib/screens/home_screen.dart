@@ -96,52 +96,61 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
   
-  // Bug #8 fix: Completely rewritten permission handling
+  // Permission handling — simple approach: request both, use whichever works
   Future<void> _checkPermissionAndLoadSongs() async {
-    setState(() => _isLoadingSongs = true);
+    if (mounted) setState(() => _isLoadingSongs = true);
     
     bool permissionStatus = false;
     
-    if (Platform.isAndroid) {
-      // Android 13+ (API 33+): Use READ_MEDIA_AUDIO
-      // Android 10-12 (API 29-32): Use READ_EXTERNAL_STORAGE
-      // Android <10 (API <29): Use READ_EXTERNAL_STORAGE + WRITE_EXTERNAL_STORAGE
-      
-      final androidInfo = await _getAndroidSdkVersion();
-      
-      if (androidInfo >= 33) {
-        // Android 13+: Only READ_MEDIA_AUDIO matters
-        var status = await Permission.audio.status;
-        if (status.isGranted) {
+    try {
+      if (Platform.isAndroid) {
+        // Try audio permission first (Android 13+)
+        // Then storage permission (Android 12 and below)
+        // Request both — one will work depending on Android version
+        
+        // Check if already granted
+        final audioGranted = await Permission.audio.isGranted;
+        final storageGranted = await Permission.storage.isGranted;
+        
+        if (audioGranted || storageGranted) {
           permissionStatus = true;
-        } else if (status.isDenied) {
-          status = await Permission.audio.request();
-          permissionStatus = status.isGranted;
-        } else if (status.isPermanentlyDenied) {
-          // User previously denied and checked "Don't ask again"
-          if (mounted) {
-            _showPermissionDeniedDialog();
+        } else {
+          // Request both permissions — Android will only show the relevant one
+          final results = await [
+            Permission.audio,
+            Permission.storage,
+          ].request();
+          
+          permissionStatus = (results[Permission.audio]?.isGranted ?? false) ||
+                             (results[Permission.storage]?.isGranted ?? false);
+          
+          // If both denied, check if permanently denied
+          if (!permissionStatus) {
+            final audioPermanent = await Permission.audio.isPermanentlyDenied;
+            final storagePermanent = await Permission.storage.isPermanentlyDenied;
+            
+            if ((audioPermanent || storagePermanent) && mounted) {
+              _showPermissionDeniedDialog();
+            }
           }
         }
       } else {
-        // Android 10-12: Use storage permission
-        var status = await Permission.storage.status;
-        if (status.isGranted) {
-          permissionStatus = true;
-        } else if (status.isDenied) {
-          status = await Permission.storage.request();
-          permissionStatus = status.isGranted;
-        } else if (status.isPermanentlyDenied) {
-          if (mounted) {
-            _showPermissionDeniedDialog();
-          }
+        // iOS — use on_audio_query's built-in permission handling
+        permissionStatus = await _audioQuery.permissionsStatus();
+        if (!permissionStatus) {
+          permissionStatus = await _audioQuery.permissionsRequest();
         }
       }
-    } else {
-      // iOS
-      permissionStatus = await _audioQuery.permissionsStatus();
-      if (!permissionStatus) {
-        permissionStatus = await _audioQuery.permissionsRequest();
+    } catch (e) {
+      debugPrint('Permission error: $e');
+      // If permission_handler throws, try on_audio_query as fallback
+      try {
+        permissionStatus = await _audioQuery.permissionsStatus();
+        if (!permissionStatus) {
+          permissionStatus = await _audioQuery.permissionsRequest();
+        }
+      } catch (e2) {
+        debugPrint('Fallback permission also failed: $e2');
       }
     }
     
@@ -154,32 +163,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     
     if (permissionStatus) {
       _loadSongs();
-    }
-  }
-
-  // Helper to get Android SDK version
-  Future<int> _getAndroidSdkVersion() async {
-    try {
-      // on_audio_query's DeviceModel doesn't expose SDK, using a simpler approach
-      // For Android 13+, Permission.audio exists. For older, it doesn't.
-      // We can check by trying the audio permission — if it's not applicable,
-      // it will return a specific status.
-      final audioStatus = await Permission.audio.status;
-      // If audio permission is not applicable (old Android), it returns granted
-      // On Android 13+, it returns denied/granted based on actual state
-      // Heuristic: try both and see which one is meaningful
-      if (audioStatus != PermissionStatus.granted) {
-        // Likely Android 13+ where audio perm is needed
-        return 33;
-      }
-      // Check if storage is also granted
-      final storageStatus = await Permission.storage.status;
-      if (storageStatus.isGranted) {
-        return 29; // Assume older Android with storage granted
-      }
-      return 33; // Default to treating as Android 13+
-    } catch (e) {
-      return 33; // Default
     }
   }
 

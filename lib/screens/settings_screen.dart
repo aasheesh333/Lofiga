@@ -26,12 +26,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _loadSettings() async {
-    final storage = StorageService();
-    final s = await storage.loadAppSettings();
-    setState(() {
-      _settings = s;
-      _isLoading = false;
-    });
+    try {
+      final storage = StorageService();
+      final s = await storage.loadAppSettings();
+      if (mounted) {
+        setState(() {
+          _settings = s;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading settings: $e');
+      if (mounted) {
+        setState(() {
+          _settings = AppSettings(); // Use defaults
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   Future<void> _saveSettings() async {
