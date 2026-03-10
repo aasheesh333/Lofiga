@@ -53,10 +53,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      // Reload songs when app comes to foreground (e.g. after downloading a file)
-      if (_hasPermission) {
-        _loadSongs();
-      }
+      // CRITICAL: Re-check permissions every time app resumes
+      // This handles the case where user manually granted permission from Settings
+      _checkPermissionAndLoadSongs();
     }
   }
 
@@ -81,7 +80,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final edits = await storage.loadAllConfigs();
     edits.sort((a, b) => b.savedAt.compareTo(a.savedAt));
     
-    // Bug #9 fix: Filter out configs whose files no longer exist
+    // Filter out configs whose files no longer exist
     final validEdits = <SavedConfig>[];
     for (final edit in edits) {
       if (await File(edit.filePath).exists()) {
@@ -96,7 +95,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
   
-  // Permission handling — simple approach: request both, use whichever works
+  // Permission handling — use on_audio_query's built-in handler as primary
   Future<void> _checkPermissionAndLoadSongs() async {
     if (mounted) setState(() => _isLoadingSongs = true);
     
@@ -104,38 +103,47 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     
     try {
       if (Platform.isAndroid) {
-        // Try audio permission first (Android 13+)
-        // Then storage permission (Android 12 and below)
-        // Request both — one will work depending on Android version
+        // Step 1: Check if we already have permission via on_audio_query
+        // This is the most reliable check — it handles all Android versions internally
+        permissionStatus = await _audioQuery.permissionsStatus();
         
-        // Check if already granted
-        final audioGranted = await Permission.audio.isGranted;
-        final storageGranted = await Permission.storage.isGranted;
+        if (!permissionStatus) {
+          // Step 2: Use on_audio_query's own permission request
+          // This handles READ_MEDIA_AUDIO vs READ_EXTERNAL_STORAGE automatically
+          permissionStatus = await _audioQuery.permissionsRequest();
+        }
         
-        if (audioGranted || storageGranted) {
-          permissionStatus = true;
-        } else {
-          // Request both permissions — Android will only show the relevant one
-          final results = await [
-            Permission.audio,
-            Permission.storage,
-          ].request();
+        if (!permissionStatus) {
+          // Step 3: Fallback — try permission_handler individually
+          // Try audio permission first (Android 13+)
+          try {
+            var audioStatus = await Permission.audio.request();
+            if (audioStatus.isGranted) {
+              permissionStatus = true;
+            }
+          } catch (e) {
+            debugPrint('Audio permission request error: $e');
+          }
           
-          permissionStatus = (results[Permission.audio]?.isGranted ?? false) ||
-                             (results[Permission.storage]?.isGranted ?? false);
-          
-          // If both denied, check if permanently denied
+          // If audio didn't work, try storage (Android 12 and below)
           if (!permissionStatus) {
-            final audioPermanent = await Permission.audio.isPermanentlyDenied;
-            final storagePermanent = await Permission.storage.isPermanentlyDenied;
-            
-            if ((audioPermanent || storagePermanent) && mounted) {
-              _showPermissionDeniedDialog();
+            try {
+              var storageStatus = await Permission.storage.request();
+              if (storageStatus.isGranted) {
+                permissionStatus = true;
+              }
+            } catch (e) {
+              debugPrint('Storage permission request error: $e');
             }
           }
         }
+        
+        // Final re-check via on_audio_query after granting
+        if (!permissionStatus) {
+          permissionStatus = await _audioQuery.permissionsStatus();
+        }
       } else {
-        // iOS — use on_audio_query's built-in permission handling
+        // iOS
         permissionStatus = await _audioQuery.permissionsStatus();
         if (!permissionStatus) {
           permissionStatus = await _audioQuery.permissionsRequest();
@@ -143,15 +151,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       }
     } catch (e) {
       debugPrint('Permission error: $e');
-      // If permission_handler throws, try on_audio_query as fallback
-      try {
-        permissionStatus = await _audioQuery.permissionsStatus();
-        if (!permissionStatus) {
-          permissionStatus = await _audioQuery.permissionsRequest();
-        }
-      } catch (e2) {
-        debugPrint('Fallback permission also failed: $e2');
-      }
     }
     
     if (mounted) {
@@ -177,7 +176,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           style: GoogleFonts.splineSans(color: Colors.white, fontWeight: FontWeight.bold),
         ),
         content: Text(
-          'Audio permission is permanently denied. Please enable it from Settings to see your songs.',
+          'Audio file access is needed to show your songs.\n\nPlease enable "Music & Audio" permission in app settings.',
           style: GoogleFonts.splineSans(color: Colors.white70),
         ),
         actions: [
@@ -190,9 +189,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               backgroundColor: const Color(0xFF993DF5),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(ctx);
-              openAppSettings(); // Opens OS app settings
+              await openAppSettings(); // Properly awaited
             },
             child: Text('Open Settings', style: GoogleFonts.splineSans(color: Colors.white)),
           ),
