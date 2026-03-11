@@ -118,23 +118,50 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
   
-  /// Request permission using on_audio_query's built-in handler.
-  /// This is the ONLY reliable way — permission_handler v12 requires
-  /// Gradle compile flags that our build doesn't have, causing it to
-  /// silently return permanentlyDenied without showing the OS popup.
+  /// Request permission using permission_handler.
+  /// This requires PERMISSION_AUDIO and PERMISSION_STORAGE in gradle.properties
   Future<void> _checkPermissionAndLoadSongs() async {
     if (mounted) setState(() => _isLoadingSongs = true);
     
     bool permissionStatus = false;
     
     try {
-      // Step 1: Check if already granted
-      permissionStatus = await _audioQuery.permissionsStatus();
-      
-      if (!permissionStatus) {
-        // Step 2: Request via on_audio_query — this shows the native Android dialog
-        // on_audio_query handles READ_MEDIA_AUDIO vs READ_EXTERNAL_STORAGE internally
-        permissionStatus = await _audioQuery.permissionsRequest();
+      if (Platform.isAndroid) {
+        // 1. Check if already granted
+        final audioGranted = await Permission.audio.isGranted;
+        final storageGranted = await Permission.storage.isGranted;
+        
+        if (audioGranted || storageGranted) {
+          permissionStatus = true;
+        } else {
+          // 2. Not granted, request them
+          // We try audio first (API 33+), then storage (API < 33)
+          try {
+            var audioReq = await Permission.audio.request();
+            if (audioReq.isGranted) {
+              permissionStatus = true;
+            }
+          } catch (e) {
+            debugPrint('Audio permission request error: $e');
+          }
+          
+          if (!permissionStatus) {
+            try {
+              var storageReq = await Permission.storage.request();
+              if (storageReq.isGranted) {
+                permissionStatus = true;
+              }
+            } catch (e) {
+              debugPrint('Storage permission request error: $e');
+            }
+          }
+        }
+      } else {
+        // iOS
+        permissionStatus = await _audioQuery.permissionsStatus();
+        if (!permissionStatus) {
+          permissionStatus = await _audioQuery.permissionsRequest();
+        }
       }
     } catch (e) {
       debugPrint('Permission error: $e');
