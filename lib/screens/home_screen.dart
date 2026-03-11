@@ -95,7 +95,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
   
-  // Permission handling — use on_audio_query's built-in handler as primary
+  // Permission handling — reliable approach prioritizing permission_handler for Android
   Future<void> _checkPermissionAndLoadSongs() async {
     if (mounted) setState(() => _isLoadingSongs = true);
     
@@ -103,33 +103,31 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     
     try {
       if (Platform.isAndroid) {
-        // Step 1: Check if we already have permission via on_audio_query
-        // This is the most reliable check — it handles all Android versions internally
-        permissionStatus = await _audioQuery.permissionsStatus();
+        // Use permission_handler as the source of truth for Android
+        // on_audio_query's built-in check is unreliable on Android 13+
         
-        if (!permissionStatus) {
-          // Step 2: Use on_audio_query's own permission request
-          // This handles READ_MEDIA_AUDIO vs READ_EXTERNAL_STORAGE automatically
-          permissionStatus = await _audioQuery.permissionsRequest();
-        }
+        // 1. Check if already granted
+        final audioGranted = await Permission.audio.isGranted;
+        final storageGranted = await Permission.storage.isGranted;
         
-        if (!permissionStatus) {
-          // Step 3: Fallback — try permission_handler individually
-          // Try audio permission first (Android 13+)
+        if (audioGranted || storageGranted) {
+          permissionStatus = true;
+        } else {
+          // 2. Not granted, request them
+          // We try audio first (API 33+), then storage (API < 33)
           try {
-            var audioStatus = await Permission.audio.request();
-            if (audioStatus.isGranted) {
+            var audioReq = await Permission.audio.request();
+            if (audioReq.isGranted) {
               permissionStatus = true;
             }
           } catch (e) {
             debugPrint('Audio permission request error: $e');
           }
           
-          // If audio didn't work, try storage (Android 12 and below)
           if (!permissionStatus) {
             try {
-              var storageStatus = await Permission.storage.request();
-              if (storageStatus.isGranted) {
+              var storageReq = await Permission.storage.request();
+              if (storageReq.isGranted) {
                 permissionStatus = true;
               }
             } catch (e) {
@@ -138,9 +136,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           }
         }
         
-        // Final re-check via on_audio_query after granting
+        // 3. Fallback to on_audio_query if permission_handler failed completely
         if (!permissionStatus) {
-          permissionStatus = await _audioQuery.permissionsStatus();
+           permissionStatus = await _audioQuery.permissionsStatus();
+           if (!permissionStatus) {
+             permissionStatus = await _audioQuery.permissionsRequest();
+           }
         }
       } else {
         // iOS
@@ -189,9 +190,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               backgroundColor: const Color(0xFF993DF5),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
-            onPressed: () async {
+            onPressed: () {
+              // CRITICAL: Don't 'await' openAppSettings()!
+              // On Android, it suspends execution until the user returns,
+              // which makes the button feel unresponsive and hangs the dialog.
+              openAppSettings(); 
               Navigator.pop(ctx);
-              await openAppSettings(); // Properly awaited
             },
             child: Text('Open Settings', style: GoogleFonts.splineSans(color: Colors.white)),
           ),
