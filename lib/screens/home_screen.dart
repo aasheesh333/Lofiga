@@ -95,24 +95,25 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     bool permissionStatus = false;
     
     if (Platform.isAndroid) {
-      // Check if already granted
-      if (await Permission.manageExternalStorage.isGranted ||
-          await Permission.audio.isGranted || 
-          await Permission.storage.isGranted) {
+      // Step 1: Check if any permission is already granted
+      if (await Permission.audio.isGranted || 
+          await Permission.storage.isGranted ||
+          await Permission.manageExternalStorage.isGranted) {
         permissionStatus = true;
       } else {
-        // Try requesting manage external storage (All files access)
-        final manageStatus = await Permission.manageExternalStorage.request();
-        if (manageStatus.isGranted) {
+        // Step 2: Request audio + storage first (works on all Android versions)
+        Map<Permission, PermissionStatus> statuses = await [
+          Permission.audio,
+          Permission.storage,
+        ].request();
+        
+        if (statuses[Permission.audio] == PermissionStatus.granted || 
+            statuses[Permission.storage] == PermissionStatus.granted) {
           permissionStatus = true;
         } else {
-          // Fallback: try audio/storage permissions
-          Map<Permission, PermissionStatus> statuses = await [
-            Permission.audio,
-            Permission.storage,
-          ].request();
-          if (statuses[Permission.audio] == PermissionStatus.granted || 
-              statuses[Permission.storage] == PermissionStatus.granted) {
+          // Step 3: Try manageExternalStorage as fallback (Android 11+)
+          final manageStatus = await Permission.manageExternalStorage.request();
+          if (manageStatus.isGranted) {
             permissionStatus = true;
           } else {
             // All denied — show dialog to open settings
