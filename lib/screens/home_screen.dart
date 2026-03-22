@@ -92,54 +92,64 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Future<void> _checkPermissionAndLoadSongs() async {
     if (_isCheckingPermission) return;
     _isCheckingPermission = true;
-    bool permissionStatus = false;
     
-    if (Platform.isAndroid) {
-      // Step 1: Check if any permission is already granted
-      if (await Permission.audio.isGranted || 
-          await Permission.storage.isGranted ||
-          await Permission.manageExternalStorage.isGranted) {
-        permissionStatus = true;
-      } else {
-        // Step 2: Request audio + storage first (works on all Android versions)
-        Map<Permission, PermissionStatus> statuses = await [
-          Permission.audio,
-          Permission.storage,
-        ].request();
-        
-        if (statuses[Permission.audio] == PermissionStatus.granted || 
-            statuses[Permission.storage] == PermissionStatus.granted) {
+    try {
+      bool permissionStatus = false;
+      
+      // Step 1: Check if already granted via on_audio_query
+      permissionStatus = await _audioQuery.permissionsStatus();
+      debugPrint('Lofiga: permissionsStatus = $permissionStatus');
+      
+      // Step 2: If not granted, request via on_audio_query (works on all Android versions)
+      if (!permissionStatus) {
+        permissionStatus = await _audioQuery.permissionsRequest();
+        debugPrint('Lofiga: permissionsRequest = $permissionStatus');
+      }
+      
+      // Step 3: If still not granted, try permission_handler as fallback
+      if (!permissionStatus && Platform.isAndroid) {
+        // Try storage permission (works on Android < 13)
+        var storageStatus = await Permission.storage.request();
+        debugPrint('Lofiga: storage permission = $storageStatus');
+        if (storageStatus.isGranted) {
           permissionStatus = true;
-        } else {
-          // Step 3: Try manageExternalStorage as fallback (Android 11+)
-          final manageStatus = await Permission.manageExternalStorage.request();
-          if (manageStatus.isGranted) {
+        }
+        
+        // Try audio permission (works on Android 13+)
+        if (!permissionStatus) {
+          var audioStatus = await Permission.audio.request();
+          debugPrint('Lofiga: audio permission = $audioStatus');
+          if (audioStatus.isGranted) {
             permissionStatus = true;
-          } else {
-            // All denied — show dialog to open settings
-            if (mounted) {
-              _showPermissionSettingsDialog();
-            }
-            _isCheckingPermission = false;
-            return;
           }
         }
       }
-    } else {
-      permissionStatus = await _audioQuery.permissionsStatus();
+      
+      // Step 4: If still denied, show dialog
       if (!permissionStatus) {
-        permissionStatus = await _audioQuery.permissionsRequest();
+        debugPrint('Lofiga: all permissions denied, showing settings dialog');
+        if (mounted) {
+          _showPermissionSettingsDialog();
+        }
+        return;
       }
-    }
-    
-    if (mounted) {
-      setState(() => _hasPermission = permissionStatus);
-    }
-    
-    if (permissionStatus) {
+      
+      // Permission granted - update state and load songs
+      debugPrint('Lofiga: permission granted! Loading songs...');
+      if (mounted) {
+        setState(() => _hasPermission = true);
+      }
       _loadSongs();
+      
+    } catch (e) {
+      debugPrint('Lofiga: permission error: $e');
+      // On error, try showing settings dialog
+      if (mounted) {
+        _showPermissionSettingsDialog();
+      }
+    } finally {
+      _isCheckingPermission = false;
     }
-    _isCheckingPermission = false;
   }
 
   void _showPermissionSettingsDialog() {
