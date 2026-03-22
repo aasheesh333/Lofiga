@@ -12,7 +12,6 @@ import 'package:intl/intl.dart';
 import 'dart:ui'; // For BackdropFilter
 import 'package:on_audio_query/on_audio_query.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -39,7 +38,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _loadRecentEdits();
-    _checkInitialPermission();
+    _initPermissionFlow();
     _searchController.addListener(_onSearchChanged);
   }
   
@@ -54,8 +53,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       if (!_hasPermission) {
-        // Re-check permission when returning from settings
-        _checkInitialPermission();
+        // Re-check permission when returning from background
+        _initPermissionFlow();
       } else {
         // Reload songs when app comes to foreground (e.g. after downloading a file)
         _loadSongs();
@@ -90,28 +89,35 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
   
-  Future<void> _checkInitialPermission() async {
+  Future<void> _initPermissionFlow() async {
     if (_isCheckingPermission) return;
     _isCheckingPermission = true;
     
     try {
       bool permissionStatus = false;
+      
       if (Platform.isAndroid) {
+        // 1. Check if already granted
         if (await Permission.audio.isGranted || await Permission.storage.isGranted) {
           permissionStatus = true;
-        }
-      } else {
-        permissionStatus = await _audioQuery.permissionsStatus();
-      }
-      
-      // If granted initially or reported denied but we load songs anyway (emulator workaround)
-      if (!permissionStatus) {
-        try {
-          final songs = await _audioQuery.querySongs();
-          if (songs.isNotEmpty) {
+        } else {
+          // 2. Not granted. Automatically show system popup by requesting.
+          Map<Permission, PermissionStatus> statuses = await [
+            Permission.audio,
+            Permission.storage,
+          ].request();
+          
+          if (statuses[Permission.audio] == PermissionStatus.granted || 
+              statuses[Permission.storage] == PermissionStatus.granted) {
             permissionStatus = true;
           }
-        } catch (_) {}
+        }
+      } else {
+        // iOS
+        permissionStatus = await _audioQuery.permissionsStatus();
+        if (!permissionStatus) {
+          permissionStatus = await _audioQuery.permissionsRequest();
+        }
       }
       
       if (mounted) {
@@ -125,177 +131,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _requestPermission() async {
-    if (_isCheckingPermission) return;
-    _isCheckingPermission = true;
-    
-    try {
-      bool permissionStatus = false;
-      
-      if (Platform.isAndroid) {
-        if (await Permission.audio.isGranted || await Permission.storage.isGranted) {
-          permissionStatus = true;
-        } else {
-          Map<Permission, PermissionStatus> statuses = await [
-            Permission.audio,
-            Permission.storage,
-          ].request();
-          
-          if (statuses[Permission.audio] == PermissionStatus.granted || 
-              statuses[Permission.storage] == PermissionStatus.granted) {
-            permissionStatus = true;
-          }
-        }
-      } else {
-        permissionStatus = await _audioQuery.permissionsStatus();
-        if (!permissionStatus) {
-          permissionStatus = await _audioQuery.permissionsRequest();
-        }
-      }
-      
-      if (!permissionStatus) {
-        if (mounted) {
-          _showPermissionSettingsDialog();
-        }
-        return;
-      }
-      
-      if (mounted) {
-        setState(() => _hasPermission = true);
-      }
-      _loadSongs();
-      
-    } catch (e) {
-      if (mounted) {
-        _showPermissionSettingsDialog();
-      }
-    } finally {
-      _isCheckingPermission = false;
-    }
-  }
-
-  void _showPermissionSettingsDialog() {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (BuildContext ctx) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFF231B2E),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          title: Text(
-            'Permission Required',
-            style: GoogleFonts.splineSans(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-              fontSize: 22,
-            ),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Audio file access is needed to show your songs.',
-                style: GoogleFonts.splineSans(color: Colors.white70, fontSize: 14),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'Please enable "Music & Audio" permission in app settings.',
-                style: GoogleFonts.splineSans(color: Colors.white54, fontSize: 13),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: Text(
-                'Cancel',
-                style: GoogleFonts.splineSans(color: Colors.white54),
-              ),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Theme.of(context).primaryColor,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              ),
-              onPressed: () {
-                Navigator.of(ctx).pop();
-                _openSettings();
-              },
-              child: Text(
-                'Open Settings',
-                style: GoogleFonts.splineSans(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  Future<void> _openSettings() async {
-    try {
-      // Method 1: Try openAppSettings from permission_handler
-      bool opened = await openAppSettings();
-      debugPrint('Lofiga: openAppSettings result = $opened');
-      if (opened) return;
-    } catch (e) {
-      debugPrint('Lofiga: openAppSettings failed: $e');
-    }
-    
-    try {
-      // Method 2: Try Android intent URI via url_launcher
-      final uri = Uri.parse('package:com.example.lofiga');
-      final settingsUri = Uri(
-        scheme: 'android-app',
-        host: 'com.android.settings',
-        path: '/com.android.settings.applications.InstalledAppDetails',
-        queryParameters: {'id': 'com.example.lofiga'},
-      );
-      
-      if (await canLaunchUrl(settingsUri)) {
-        await launchUrl(settingsUri);
-        debugPrint('Lofiga: launched settings via intent URI');
-        return;
-      }
-    } catch (e) {
-      debugPrint('Lofiga: intent URI failed: $e');
-    }
-    
-    try {
-      // Method 3: Try opening general settings
-      final generalSettings = Uri.parse('app-settings:');
-      if (await canLaunchUrl(generalSettings)) {
-        await launchUrl(generalSettings);
-        debugPrint('Lofiga: launched general settings');
-        return;
-      }
-    } catch (e) {
-      debugPrint('Lofiga: general settings failed: $e');
-    }
-    
-    debugPrint('Lofiga: all settings methods failed');
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Could not open settings. Please go to your device Settings > Apps > Lofiga > Permissions and allow Storage/Audio.',
-            style: GoogleFonts.splineSans(color: Colors.white),
-          ),
-          backgroundColor: Colors.redAccent,
-          duration: const Duration(seconds: 5),
-        ),
-      );
-    }
-  }
 
   Future<void> _loadSongs() async {
     try {
@@ -623,28 +458,28 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       Container(
                         padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(
-                          color: Colors.orange.withOpacity(0.1),
+                          color: Colors.redAccent.withOpacity(0.1),
                           borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: Colors.orange.withOpacity(0.3)),
+                          border: Border.all(color: Colors.redAccent.withOpacity(0.3)),
                         ),
                         child: Column(
                           children: [
-                            const Icon(Icons.folder_off, size: 40, color: Colors.orange),
+                            const Icon(Icons.folder_off, size: 40, color: Colors.redAccent),
                             const SizedBox(height: 8),
                             Text(
-                              'Permission Required',
-                              style: GoogleFonts.splineSans(color: Colors.orange, fontWeight: FontWeight.bold),
+                              'Storage Access Required',
+                              style: GoogleFonts.splineSans(color: Colors.redAccent, fontWeight: FontWeight.bold),
                             ),
                             Text(
-                              'Grant access to load all system songs.',
+                              'We need permission to find and load audio files from your device. Please allow it or enable it in App Settings.',
                               textAlign: TextAlign.center,
                               style: GoogleFonts.splineSans(color: Colors.white54, fontSize: 12),
                             ),
                             const SizedBox(height: 12),
                             ElevatedButton(
-                              style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
-                              onPressed: _requestPermission,
-                              child: const Text('Allow Access'),
+                              style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+                              onPressed: _initPermissionFlow,
+                              child: const Text('Try Again'),
                             ),
                           ],
                         ),
