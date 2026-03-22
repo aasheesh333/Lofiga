@@ -96,38 +96,39 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     
     try {
       bool permissionStatus = false;
+      debugPrint('Lofiga: starting permission check...');
       
-      // Step 1: Check if already granted via on_audio_query
-      permissionStatus = await _audioQuery.permissionsStatus();
-      debugPrint('Lofiga: permissionsStatus = $permissionStatus');
-      
-      // Step 2: If not granted, request via on_audio_query (works on all Android versions)
-      if (!permissionStatus) {
-        permissionStatus = await _audioQuery.permissionsRequest();
-        debugPrint('Lofiga: permissionsRequest = $permissionStatus');
-      }
-      
-      // Step 3: If still not granted, try permission_handler as fallback
-      if (!permissionStatus && Platform.isAndroid) {
-        // Try storage permission (works on Android < 13)
-        var storageStatus = await Permission.storage.request();
-        debugPrint('Lofiga: storage permission = $storageStatus');
-        if (storageStatus.isGranted) {
+      if (Platform.isAndroid) {
+        // Step 1: Check if already granted
+        if (await Permission.audio.isGranted || await Permission.storage.isGranted) {
           permissionStatus = true;
-        }
-        
-        // Try audio permission (works on Android 13+)
-        if (!permissionStatus) {
-          var audioStatus = await Permission.audio.request();
-          debugPrint('Lofiga: audio permission = $audioStatus');
-          if (audioStatus.isGranted) {
+          debugPrint('Lofiga: permission already granted');
+        } else {
+          // Step 2: Request BOTH simultaneously. 
+          // DO NOT make rapid sequential requests, as Android's anti-spam will block the popup globally.
+          // By passing an array, Android filters the valid permissions for the specific OS version
+          // and shows exactly ONE system popup.
+          debugPrint('Lofiga: requesting audio and storage permissions...');
+          Map<Permission, PermissionStatus> statuses = await [
+            Permission.audio,
+            Permission.storage,
+          ].request();
+          
+          if (statuses[Permission.audio] == PermissionStatus.granted || 
+              statuses[Permission.storage] == PermissionStatus.granted) {
             permissionStatus = true;
+            debugPrint('Lofiga: permission granted by user');
           }
         }
+      } else {
+        // iOS
+        permissionStatus = await _audioQuery.permissionsStatus();
+        if (!permissionStatus) {
+          permissionStatus = await _audioQuery.permissionsRequest();
+        }
       }
       
-      // Step 4: If permission checks failed, still try loading songs
-      // (LD Player and some emulators grant permissions at install but report denied)
+      // Step 3: Try loading songs even if permission reported denied (LDPlayer auto-grants sometimes)
       if (!permissionStatus) {
         debugPrint('Lofiga: permission checks failed, trying to load songs anyway...');
         try {
@@ -141,7 +142,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         }
       }
       
-      // Step 5: If truly denied, show dialog
+      // Step 4: If truly denied, show Open Settings dialog
       if (!permissionStatus) {
         debugPrint('Lofiga: all permissions denied, showing settings dialog');
         if (mounted) {
@@ -150,7 +151,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         return;
       }
       
-      // Permission granted - update state and load songs
+      // Permission granted - load songs
       debugPrint('Lofiga: permission granted! Loading songs...');
       if (mounted) {
         setState(() => _hasPermission = true);
@@ -159,7 +160,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       
     } catch (e) {
       debugPrint('Lofiga: permission error: $e');
-      // On error, try showing settings dialog
       if (mounted) {
         _showPermissionSettingsDialog();
       }
