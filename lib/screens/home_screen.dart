@@ -29,6 +29,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   List<SongModel> _allSongs = [];
   List<SongModel> _filteredSongs = [];
   bool _hasPermission = false;
+  bool _isCheckingPermission = false;
   final TextEditingController _searchController = TextEditingController();
   bool _isSearching = false;
 
@@ -51,8 +52,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      // Reload songs when app comes to foreground (e.g. after downloading a file)
-      if (_hasPermission) {
+      if (!_hasPermission) {
+        // Re-check permission when returning from settings
+        _checkPermissionAndLoadSongs();
+      } else {
+        // Reload songs when app comes to foreground (e.g. after downloading a file)
         _loadSongs();
       }
     }
@@ -86,19 +90,38 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
   
   Future<void> _checkPermissionAndLoadSongs() async {
+    if (_isCheckingPermission) return;
+    _isCheckingPermission = true;
     bool permissionStatus = false;
     
     if (Platform.isAndroid) {
-      if (await Permission.audio.isGranted || await Permission.storage.isGranted) {
+      // Check if already granted
+      if (await Permission.manageExternalStorage.isGranted ||
+          await Permission.audio.isGranted || 
+          await Permission.storage.isGranted) {
         permissionStatus = true;
       } else {
-        Map<Permission, PermissionStatus> statuses = await [
-          Permission.audio,
-          Permission.storage,
-        ].request();
-        if (statuses[Permission.audio] == PermissionStatus.granted || 
-            statuses[Permission.storage] == PermissionStatus.granted) {
+        // Try requesting manage external storage (All files access)
+        final manageStatus = await Permission.manageExternalStorage.request();
+        if (manageStatus.isGranted) {
           permissionStatus = true;
+        } else {
+          // Fallback: try audio/storage permissions
+          Map<Permission, PermissionStatus> statuses = await [
+            Permission.audio,
+            Permission.storage,
+          ].request();
+          if (statuses[Permission.audio] == PermissionStatus.granted || 
+              statuses[Permission.storage] == PermissionStatus.granted) {
+            permissionStatus = true;
+          } else {
+            // All denied — show dialog to open settings
+            if (mounted) {
+              _showPermissionSettingsDialog();
+            }
+            _isCheckingPermission = false;
+            return;
+          }
         }
       }
     } else {
@@ -115,6 +138,74 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     if (permissionStatus) {
       _loadSongs();
     }
+    _isCheckingPermission = false;
+  }
+
+  void _showPermissionSettingsDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext ctx) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF231B2E),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: Text(
+            'Permission Required',
+            style: GoogleFonts.splineSans(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 22,
+            ),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Audio file access is needed to show your songs.',
+                style: GoogleFonts.splineSans(color: Colors.white70, fontSize: 14),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Please enable "Music & Audio" permission in app settings.',
+                style: GoogleFonts.splineSans(color: Colors.white54, fontSize: 13),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: Text(
+                'Cancel',
+                style: GoogleFonts.splineSans(color: Colors.white54),
+              ),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Theme.of(context).primaryColor,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              ),
+              onPressed: () {
+                Navigator.of(ctx).pop();
+                openAppSettings();
+              },
+              child: Text(
+                'Open Settings',
+                style: GoogleFonts.splineSans(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
   }
   
   Future<void> _loadSongs() async {
