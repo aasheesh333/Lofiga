@@ -12,6 +12,7 @@ import 'package:intl/intl.dart';
 import 'dart:ui'; // For BackdropFilter
 import 'package:on_audio_query/on_audio_query.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -125,7 +126,22 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         }
       }
       
-      // Step 4: If still denied, show dialog
+      // Step 4: If permission checks failed, still try loading songs
+      // (LD Player and some emulators grant permissions at install but report denied)
+      if (!permissionStatus) {
+        debugPrint('Lofiga: permission checks failed, trying to load songs anyway...');
+        try {
+          final songs = await _audioQuery.querySongs();
+          if (songs.isNotEmpty) {
+            debugPrint('Lofiga: songs loaded despite permission check failing (emulator?)');
+            permissionStatus = true;
+          }
+        } catch (e) {
+          debugPrint('Lofiga: cannot load songs without permission: $e');
+        }
+      }
+      
+      // Step 5: If truly denied, show dialog
       if (!permissionStatus) {
         debugPrint('Lofiga: all permissions denied, showing settings dialog');
         if (mounted) {
@@ -203,7 +219,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               ),
               onPressed: () {
                 Navigator.of(ctx).pop();
-                openAppSettings();
+                _openSettings();
               },
               child: Text(
                 'Open Settings',
@@ -218,7 +234,51 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       },
     );
   }
-  
+
+  Future<void> _openSettings() async {
+    try {
+      // Method 1: Try openAppSettings from permission_handler
+      bool opened = await openAppSettings();
+      debugPrint('Lofiga: openAppSettings result = $opened');
+      if (opened) return;
+    } catch (e) {
+      debugPrint('Lofiga: openAppSettings failed: $e');
+    }
+    
+    try {
+      // Method 2: Try Android intent URI via url_launcher
+      final uri = Uri.parse('package:com.example.lofiga');
+      final settingsUri = Uri(
+        scheme: 'android-app',
+        host: 'com.android.settings',
+        path: '/com.android.settings.applications.InstalledAppDetails',
+        queryParameters: {'id': 'com.example.lofiga'},
+      );
+      
+      if (await canLaunchUrl(settingsUri)) {
+        await launchUrl(settingsUri);
+        debugPrint('Lofiga: launched settings via intent URI');
+        return;
+      }
+    } catch (e) {
+      debugPrint('Lofiga: intent URI failed: $e');
+    }
+    
+    try {
+      // Method 3: Try opening general settings
+      final generalSettings = Uri.parse('app-settings:');
+      if (await canLaunchUrl(generalSettings)) {
+        await launchUrl(generalSettings);
+        debugPrint('Lofiga: launched general settings');
+        return;
+      }
+    } catch (e) {
+      debugPrint('Lofiga: general settings failed: $e');
+    }
+    
+    debugPrint('Lofiga: all settings methods failed');
+  }
+
   Future<void> _loadSongs() async {
     try {
       final songs = await _audioQuery.querySongs(
