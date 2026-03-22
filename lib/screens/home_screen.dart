@@ -39,7 +39,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _loadRecentEdits();
-    _checkPermissionAndLoadSongs();
+    _checkInitialPermission();
     _searchController.addListener(_onSearchChanged);
   }
   
@@ -55,7 +55,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     if (state == AppLifecycleState.resumed) {
       if (!_hasPermission) {
         // Re-check permission when returning from settings
-        _checkPermissionAndLoadSongs();
+        _checkInitialPermission();
       } else {
         // Reload songs when app comes to foreground (e.g. after downloading a file)
         _loadSongs();
@@ -90,25 +90,52 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
   
-  Future<void> _checkPermissionAndLoadSongs() async {
+  Future<void> _checkInitialPermission() async {
     if (_isCheckingPermission) return;
     _isCheckingPermission = true;
     
     try {
       bool permissionStatus = false;
-      debugPrint('Lofiga: starting permission check...');
-      
       if (Platform.isAndroid) {
-        // Step 1: Check if already granted
         if (await Permission.audio.isGranted || await Permission.storage.isGranted) {
           permissionStatus = true;
-          debugPrint('Lofiga: permission already granted');
+        }
+      } else {
+        permissionStatus = await _audioQuery.permissionsStatus();
+      }
+      
+      // If granted initially or reported denied but we load songs anyway (emulator workaround)
+      if (!permissionStatus) {
+        try {
+          final songs = await _audioQuery.querySongs();
+          if (songs.isNotEmpty) {
+            permissionStatus = true;
+          }
+        } catch (_) {}
+      }
+      
+      if (mounted) {
+        setState(() => _hasPermission = permissionStatus);
+      }
+      if (permissionStatus) {
+        _loadSongs();
+      }
+    } finally {
+      _isCheckingPermission = false;
+    }
+  }
+
+  Future<void> _requestPermission() async {
+    if (_isCheckingPermission) return;
+    _isCheckingPermission = true;
+    
+    try {
+      bool permissionStatus = false;
+      
+      if (Platform.isAndroid) {
+        if (await Permission.audio.isGranted || await Permission.storage.isGranted) {
+          permissionStatus = true;
         } else {
-          // Step 2: Request BOTH simultaneously. 
-          // DO NOT make rapid sequential requests, as Android's anti-spam will block the popup globally.
-          // By passing an array, Android filters the valid permissions for the specific OS version
-          // and shows exactly ONE system popup.
-          debugPrint('Lofiga: requesting audio and storage permissions...');
           Map<Permission, PermissionStatus> statuses = await [
             Permission.audio,
             Permission.storage,
@@ -117,49 +144,28 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           if (statuses[Permission.audio] == PermissionStatus.granted || 
               statuses[Permission.storage] == PermissionStatus.granted) {
             permissionStatus = true;
-            debugPrint('Lofiga: permission granted by user');
           }
         }
       } else {
-        // iOS
         permissionStatus = await _audioQuery.permissionsStatus();
         if (!permissionStatus) {
           permissionStatus = await _audioQuery.permissionsRequest();
         }
       }
       
-      // Step 3: Try loading songs even if permission reported denied (LDPlayer auto-grants sometimes)
       if (!permissionStatus) {
-        debugPrint('Lofiga: permission checks failed, trying to load songs anyway...');
-        try {
-          final songs = await _audioQuery.querySongs();
-          if (songs.isNotEmpty) {
-            debugPrint('Lofiga: songs loaded despite permission check failing (emulator?)');
-            permissionStatus = true;
-          }
-        } catch (e) {
-          debugPrint('Lofiga: cannot load songs without permission: $e');
-        }
-      }
-      
-      // Step 4: If truly denied, show Open Settings dialog
-      if (!permissionStatus) {
-        debugPrint('Lofiga: all permissions denied, showing settings dialog');
         if (mounted) {
           _showPermissionSettingsDialog();
         }
         return;
       }
       
-      // Permission granted - load songs
-      debugPrint('Lofiga: permission granted! Loading songs...');
       if (mounted) {
         setState(() => _hasPermission = true);
       }
       _loadSongs();
       
     } catch (e) {
-      debugPrint('Lofiga: permission error: $e');
       if (mounted) {
         _showPermissionSettingsDialog();
       }
@@ -277,6 +283,18 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
     
     debugPrint('Lofiga: all settings methods failed');
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Could not open settings. Please go to your device Settings > Apps > Lofiga > Permissions and allow Storage/Audio.',
+            style: GoogleFonts.splineSans(color: Colors.white),
+          ),
+          backgroundColor: Colors.redAccent,
+          duration: const Duration(seconds: 5),
+        ),
+      );
+    }
   }
 
   Future<void> _loadSongs() async {
@@ -625,7 +643,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                             const SizedBox(height: 12),
                             ElevatedButton(
                               style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
-                              onPressed: _checkPermissionAndLoadSongs,
+                              onPressed: _requestPermission,
                               child: const Text('Allow Access'),
                             ),
                           ],
