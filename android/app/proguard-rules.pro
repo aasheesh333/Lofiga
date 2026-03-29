@@ -9,3 +9,5 @@
 # Plugins
 -keep class * implements io.flutter.plugin.common.PluginRegistry$PluginRegistrantCallback { *; }
 -keep class * implements io.flutter.plugin.common.MethodChannel$MethodCallHandler { *; }
+
+-dontwarn io.flutter.**

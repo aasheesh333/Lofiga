@@ -33,10 +33,16 @@ jobs:
           channel: "stable"
           cache: true
 
-      - name: Initialize Flutter Project
-        run: |
-          flutter create . --org com.example
-          flutter pub get
+      - name: Cache pub dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.pub-cache
+          key: ${{ runner.os }}-pub-${{ hashFiles('**/pubspec.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pub-
+
+      - name: Install Dependencies
+        run: flutter pub get
 
       - name: Setup Keystore (Android)
         run: |
@@ -47,9 +53,6 @@ jobs:
 
       - name: Make Gradlew Executable
         run: chmod +x android/gradlew
-
-      - name: Check Flutter Setup
-        run: flutter doctor -v
 
       - name: Configure Android Signing & SDK Versions
 
@@ -100,10 +103,16 @@ jobs:
           channel: "stable"
           cache: true
 
-      - name: Initialize Flutter Project
-        run: |
-          flutter create . --org com.example
-          flutter pub get
+      - name: Cache pub dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.pub-cache
+          key: ${{ runner.os }}-pub-${{ hashFiles('**/pubspec.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pub-
+
+      - name: Install Dependencies
+        run: flutter pub get
 
       - name: Update Pod Specs
         working-directory: ios
