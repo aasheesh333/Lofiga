@@ -97,26 +97,25 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       bool permissionStatus = false;
       
       if (Platform.isAndroid) {
-        // 1. Check all forms of storage permission
-        if (await Permission.audio.isGranted || 
-            await Permission.manageExternalStorage.isGranted || 
-            await Permission.storage.isGranted) {
+        // 1. Check if we already have some form of valid permission
+        if (await Permission.manageExternalStorage.isGranted ||
+            await Permission.storage.isGranted ||
+            await Permission.audio.isGranted) {
           permissionStatus = true;
         } else {
-          // 2. Request Audio Permission for Android 13+
-          final audioStatus = await Permission.audio.request();
-          if (audioStatus.isGranted) {
+          // 2. Request All Files Access (Manage External Storage) first
+          final manageStatus = await Permission.manageExternalStorage.request();
+          if (manageStatus.isGranted) {
             permissionStatus = true;
           } else {
-            // 3. Request All Storage (manageExternalStorage) for Android 11-12
-            // This will open a settings toggle page on Android 11+ and might do a system popup on Android 10-
-            final manageStatus = await Permission.manageExternalStorage.request();
-            if (manageStatus.isGranted) {
+            // 3. If All Files Access is denied/not available, fallback to Storage
+            final storageStatus = await Permission.storage.request();
+            if (storageStatus.isGranted) {
               permissionStatus = true;
             } else {
-              // 4. Fallback to normal storage request (for Android 10 and below, or emulators)
-              final storageStatus = await Permission.storage.request();
-              if (storageStatus.isGranted) {
+              // 4. Fallback to Audio permission (especially for Android 13+)
+              final audioStatus = await Permission.audio.request();
+              if (audioStatus.isGranted) {
                 permissionStatus = true;
               }
             }
@@ -481,15 +480,29 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                               style: GoogleFonts.splineSans(color: Colors.redAccent, fontWeight: FontWeight.bold),
                             ),
                             Text(
-                              'We need permission to find and load audio files from your device. Please allow it or enable it in App Settings.',
+                              'We need permission to analyze audio files and show them on the home screen. Please allow full file access or enable it in App Settings.',
                               textAlign: TextAlign.center,
                               style: GoogleFonts.splineSans(color: Colors.white54, fontSize: 12),
                             ),
                             const SizedBox(height: 12),
-                            ElevatedButton(
-                              style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
-                              onPressed: _initPermissionFlow,
-                              child: const Text('Try Again'),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                ElevatedButton(
+                                  style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+                                  onPressed: _initPermissionFlow,
+                                  child: const Text('Try Again'),
+                                ),
+                                const SizedBox(width: 12),
+                                OutlinedButton(
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: Colors.white,
+                                    side: const BorderSide(color: Colors.white54),
+                                  ),
+                                  onPressed: () => openAppSettings(),
+                                  child: const Text('Open Settings'),
+                                ),
+                              ],
                             ),
                           ],
                         ),
