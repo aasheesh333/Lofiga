@@ -12,6 +12,7 @@ import 'package:intl/intl.dart';
 import 'dart:ui'; // For BackdropFilter
 import 'package:on_audio_query/on_audio_query.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:device_info_plus/device_info_plus.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -97,27 +98,36 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       bool permissionStatus = false;
       
       if (Platform.isAndroid) {
-        // 1. Check if we already have some form of valid permission
-        if (await Permission.manageExternalStorage.isGranted ||
-            await Permission.storage.isGranted ||
-            await Permission.audio.isGranted) {
-          permissionStatus = true;
-        } else {
-          // 2. Request All Files Access (Manage External Storage) first
-          final manageStatus = await Permission.manageExternalStorage.request();
-          if (manageStatus.isGranted) {
+        final deviceInfo = DeviceInfoPlugin();
+        final androidInfo = await deviceInfo.androidInfo;
+        final sdkInt = androidInfo.version.sdkInt;
+
+        if (sdkInt >= 30) { // Android 11+ (API 30+)
+          // 1. Check if already granted
+          if (await Permission.manageExternalStorage.isGranted || await Permission.audio.isGranted) {
             permissionStatus = true;
           } else {
-            // 3. If All Files Access is denied/not available, fallback to Storage
-            final storageStatus = await Permission.storage.request();
-            if (storageStatus.isGranted) {
+            // 2. Request manageExternalStorage first for full file access
+            final manageStatus = await Permission.manageExternalStorage.request();
+            if (manageStatus.isGranted) {
               permissionStatus = true;
             } else {
-              // 4. Fallback to Audio permission (especially for Android 13+)
+              // 3. Fallback to audio if full access is denied
               final audioStatus = await Permission.audio.request();
               if (audioStatus.isGranted) {
                 permissionStatus = true;
               }
+            }
+          }
+        } else { // Android 10 and below (API 29-)
+          // For older Android versions, manageExternalStorage doesn't exist and can cause a crash.
+          // We must use standard storage permissions.
+          if (await Permission.storage.isGranted) {
+            permissionStatus = true;
+          } else {
+            final storageStatus = await Permission.storage.request();
+            if (storageStatus.isGranted) {
+              permissionStatus = true;
             }
           }
         }
