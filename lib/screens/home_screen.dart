@@ -13,6 +13,7 @@ import 'dart:ui'; // For BackdropFilter
 import 'package:on_audio_query/on_audio_query.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:device_info_plus/device_info_plus.dart';
+import 'package:lofiga/services/audio_query_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -26,7 +27,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   List<SavedConfig> _recentEdits = [];
   
   // All Songs Logic
-  final OnAudioQuery _audioQuery = OnAudioQuery();
+  final AudioQueryService _audioQuery = AudioQueryService();
   List<SongModel> _allSongs = [];
   List<SongModel> _filteredSongs = [];
   bool _hasPermission = false;
@@ -153,12 +154,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   Future<void> _loadSongs() async {
     try {
-      final songs = await _audioQuery.querySongs(
-        sortType: SongSortType.DATE_ADDED,
-        orderType: OrderType.DESC_OR_GREATER,
-        uriType: UriType.EXTERNAL,
-        ignoreCase: true,
-      );
+      final songs = await _audioQuery.querySongs();
       
       // Filter out atmosphere files and short clips
       final filteredList = songs.where((song) {
@@ -685,14 +681,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(12),
-                child: QueryArtworkWidget(
+                child: Platform.isIOS ? QueryArtworkWidget(
                   id: song.id,
                   type: ArtworkType.AUDIO,
                   nullArtworkWidget: const Icon(Icons.music_note, color: Colors.white38),
                   errorBuilder: (context, exception, stackTrace) {
                     return const Icon(Icons.music_note, color: Colors.white38);
                   },
-                ),
+                ) : const Icon(Icons.music_note, color: Colors.white38), // Simplified fallback for Android
               ),
             ),
             const SizedBox(width: 16),
