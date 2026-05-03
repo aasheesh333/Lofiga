@@ -1,6 +1,7 @@
 package com.example.lofiga
 
 import android.content.ContentUris
+import android.content.Context
 import android.database.Cursor
 import android.net.Uri
 import android.os.Build
@@ -14,6 +15,13 @@ class MainActivity: FlutterActivity() {
     private val CHANNEL = "com.example.lofiga/audio_query"
 
     override fun configureFlutterEngine(@NonNull flutterEngine: FlutterEngine) {
+        // Fix for Android 9 JNI FindClass crash on some devices (e.g. Xiaomi MIUI):
+        // Ensure the thread context classloader is set before plugins are initialized.
+        // Without this, native libraries loaded by Flutter plugins may fail to find
+        // Java classes through JNI, causing a SIGSEGV in FindClassUnchecked.
+        val contextClassLoader = javaClass.classLoader
+        Thread.currentThread().setContextClassLoader(contextClassLoader)
+
         super.configureFlutterEngine(flutterEngine)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler {
             call, result ->
