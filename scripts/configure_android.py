@@ -15,63 +15,66 @@ try:
         content = f.read()
 
     # Update SDK versions using direct replacement
-    # Using raw strings for regex to avoid escaping issues
     # Bumped to 35 for plugin compatibility
     if kotlin_dsl:
-        content = re.sub(r'compileSdk\s*=\s*flutter.compileSdkVersion', 'compileSdk = 35', content)
-        content = re.sub(r'minSdk\s*=\s*flutter.minSdkVersion', 'minSdk = 24', content)
-        content = re.sub(r'targetSdk\s*=\s*flutter.targetSdkVersion', 'targetSdk = 35', content)
+        # Handle both hardcoded values and flutter.compileSdkVersion references
+        content = re.sub(r'compileSdk\s*=\s*(flutter\.compileSdkVersion|\d+)', 'compileSdk = 35', content)
+        content = re.sub(r'minSdk\s*=\s*(flutter\.minSdkVersion|\d+)', 'minSdk = 24', content)
+        content = re.sub(r'targetSdk\s*=\s*(flutter\.targetSdkVersion|\d+)', 'targetSdk = 35', content)
     else:
-        content = re.sub(r'compileSdkVersion\s*flutter.compileSdkVersion', 'compileSdkVersion 35', content)
-        content = re.sub(r'minSdkVersion\s*flutter.minSdkVersion', 'minSdkVersion 24', content)
-        content = re.sub(r'targetSdkVersion\s*flutter.targetSdkVersion', 'targetSdkVersion 35', content)
+        content = re.sub(r'compileSdkVersion\s*(flutter\.compileSdkVersion|\d+)', 'compileSdkVersion 35', content)
+        content = re.sub(r'minSdkVersion\s*(flutter\.minSdkVersion|\d+)', 'minSdkVersion 24', content)
+        content = re.sub(r'targetSdkVersion\s*(flutter\.targetSdkVersion|\d+)', 'targetSdkVersion 35', content)
 
-    # Append Signing Config
-    # Check if we already appended (basic check)
-    if 'signingConfigs {' not in content or 'storeFile = file("../../release.keystore")' not in content:
-        print("Appending signing config...")
-        
-        content_kotlin = '''
-android {
-    signingConfigs {
-        create("release") {
-            storeFile = file("../../release.keystore")
-            storePassword = "lofiga2024"
-            keyAlias = "lofiga"
-            keyPassword = "lofiga2024"
-        }
-    }
-    buildTypes {
-        getByName("release") {
-            signingConfig = signingConfigs.getByName("release")
-        }
-    }
-}
-'''
-        content_groovy = '''
-android {
-    signingConfigs {
-        release {
-            storeFile file('../../release.keystore')
-            storePassword 'lofiga2024'
-            keyAlias 'lofiga'
-            keyPassword 'lofiga2024'
-        }
-    }
-    buildTypes {
-        release {
-            signingConfig signingConfigs.release
-        }
-    }
-}
-'''
-        content += (content_kotlin if kotlin_dsl else content_groovy)
+    # Check if signing config already exists
+    if 'storeFile = file("../../release.keystore")' in content:
+        print("Signing config already present. Skipping.")
     else:
-        print("Signing config already present (or partially present). Skipping append.")
+        print("Injecting signing config into existing android block...")
+
+        if kotlin_dsl:
+            # Insert signingConfigs before buildTypes {
+            content = content.replace(
+                '    buildTypes {',
+                '    signingConfigs {\n'
+                '        create("release") {\n'
+                '            storeFile = file("../../release.keystore")\n'
+                '            storePassword = "lofiga2024"\n'
+                '            keyAlias = "lofiga"\n'
+                '            keyPassword = "lofiga2024"\n'
+                '        }\n'
+                '    }\n'
+                '\n'
+                '    buildTypes {'
+            )
+            # Replace the debug signing config in release build type with our release signing config
+            content = content.replace(
+                '            signingConfig = signingConfigs.getByName("debug")',
+                '            signingConfig = signingConfigs.getByName("release")'
+            )
+        else:
+            # Groovy version - same approach
+            content = content.replace(
+                '    buildTypes {',
+                '    signingConfigs {\n'
+                '        release {\n'
+                '            storeFile file(\'../../release.keystore\')\n'
+                '            storePassword \'lofiga2024\'\n'
+                '            keyAlias \'lofiga\'\n'
+                '            keyPassword \'lofiga2024\'\n'
+                '        }\n'
+                '    }\n'
+                '\n'
+                '    buildTypes {'
+            )
+            content = content.replace(
+                '            signingConfig signingConfigs.debug',
+                '            signingConfig signingConfigs.release'
+            )
 
     with open(filename, 'w') as f:
         f.write(content)
-        
+
     print(f"Successfully updated {filename}")
 
 except Exception as e:

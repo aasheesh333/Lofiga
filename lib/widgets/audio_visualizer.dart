@@ -65,7 +65,7 @@ class _AudioVisualizerPainter extends CustomPainter {
           0.3 * math.sin(phase * 2 + offset) +
           0.2 * math.sin(phase * 3 + offset * 1.5) +
           0.1 * math.sin(phase * 5 + offset * 2.2) +
-          0.1 * (math.random() - 0.5); // Add some noise for realism
+          0.1 * (math.Random().nextDouble() - 0.5); // Add some noise for realism
       
       // Normalize to 0-1 range and apply to height
       double normalizedHeight = ((value + 1) / 2).clamp(0.0, 1.0);
