@@ -35,10 +35,4 @@ class OnAudioQueryPlugin : FlutterPlugin, MethodCallHandler {
         // Intentionally empty.
     }
 
-    companion object {
-        @JvmStatic
-        fun registerWith(registrar: io.flutter.plugin.common.PluginRegistry.Registrar) {
-            // Legacy registration – intentionally empty.
-        }
     }
-}
