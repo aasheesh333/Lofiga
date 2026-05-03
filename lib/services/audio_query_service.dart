@@ -2,59 +2,63 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:on_audio_query/on_audio_query.dart';
 
+/// Unified audio query service.
+///
+/// **Android**: Uses a custom native MethodChannel (in MainActivity.kt)
+/// to query MediaStore directly, avoiding all third-party native libs
+/// that may crash on older Android versions.
+///
+/// **iOS**: Uses the on_audio_query package (Apple-only, no native lib risk).
 class AudioQueryService {
-  final OnAudioQuery _iosAudioQuery = OnAudioQuery();
-  static const MethodChannel _androidChannel = MethodChannel('com.example.lofiga/audio_query');
+  OnAudioQuery? _iosAudioQuery;
+  static const MethodChannel _androidChannel =
+      MethodChannel('com.example.lofiga/audio_query');
+
+  /// Lazily-created iOS query instance.
+  /// Not created on Android — prevents any JNI native library loading.
+  OnAudioQuery get _iosQuery => _iosAudioQuery ??= OnAudioQuery();
 
   Future<bool> permissionsStatus() async {
     if (Platform.isIOS) {
-      return await _iosAudioQuery.permissionsStatus();
+      return await _iosQuery.permissionsStatus();
     }
-    // Handled purely by permission_handler in HomeScreen for Android.
     return true;
   }
 
   Future<bool> permissionsRequest() async {
     if (Platform.isIOS) {
-      return await _iosAudioQuery.permissionsRequest();
+      return await _iosQuery.permissionsRequest();
     }
     return true;
   }
 
-  Future<List<SongModel>> querySongs() async {
+  Future<List<Map<String, dynamic>>> querySongs() async {
     if (Platform.isIOS) {
-      // Use the existing package for iOS so we don't break anything.
-      return await _iosAudioQuery.querySongs(
+      return (await _iosQuery.querySongs(
         sortType: SongSortType.DATE_ADDED,
         orderType: OrderType.DESC_OR_GREATER,
         uriType: UriType.EXTERNAL,
         ignoreCase: true,
-      );
+      ))
+          .map((s) => <String, dynamic>{
+                'id': s.id,
+                'title': s.title,
+                'artist': s.artist,
+                'data': s.data,
+                'duration': s.duration,
+                'date_added': s.dateAdded,
+              })
+          .toList();
     } else if (Platform.isAndroid) {
-      // Use custom MethodChannel for Android to avoid native crash on Android 9
+      // Custom native channel – no on_audio_query / libdartjni.so.
       try {
-        final List<dynamic> result = await _androidChannel.invokeMethod('querySongs');
-        List<SongModel> songs = [];
-        for (var item in result) {
-          final map = Map<String, dynamic>.from(item as Map);
-
-          // Map to SongModel expected properties
-          final mapped = {
-            "_id": map["id"],
-            "title": map["title"],
-            "artist": map["artist"],
-            "_data": map["data"],
-            "duration": map["duration"],
-            "date_added": map["date_added"],
-          };
-
-          // Use SongModel internal constructor via parsing if possible, or construct dummy map.
-          // Since SongModel expects a specific map, we format it as such.
-          songs.add(SongModel(mapped));
-        }
-        return songs;
+        final List<dynamic> result =
+            await _androidChannel.invokeMethod('querySongs');
+        return result
+            .map((item) => Map<String, dynamic>.from(item as Map))
+            .toList();
       } on PlatformException catch (e) {
-        print("Failed to query songs natively: '\${e.message}'.");
+        print("Failed to query songs natively: '${e.message}'.");
         return [];
       }
     }

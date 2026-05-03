@@ -10,7 +10,6 @@ import 'package:lofiga/screens/settings_screen.dart';
 import 'package:lofiga/services/storage_service.dart';
 import 'package:intl/intl.dart'; 
 import 'dart:ui'; // For BackdropFilter
-import 'package:on_audio_query/on_audio_query.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:lofiga/services/audio_query_service.dart';
@@ -28,8 +27,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   
   // All Songs Logic
   final AudioQueryService _audioQuery = AudioQueryService();
-  List<SongModel> _allSongs = [];
-  List<SongModel> _filteredSongs = [];
+  List<Map<String, dynamic>> _allSongs = [];
+  List<Map<String, dynamic>> _filteredSongs = [];
   bool _hasPermission = false;
   bool _isCheckingPermission = false;
   final TextEditingController _searchController = TextEditingController();
@@ -73,8 +72,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       } else {
         _isSearching = true;
         _filteredSongs = _allSongs.where((song) {
-          return song.title.toLowerCase().contains(query) || 
-                 (song.artist?.toLowerCase().contains(query) ?? false);
+          final title = (song['title'] as String? ?? '').toLowerCase();
+          final artist = (song['artist'] as String? ?? '').toLowerCase();
+          return title.contains(query) || artist.contains(query);
         }).toList();
       }
     });
@@ -158,7 +158,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       
       // Filter out atmosphere files and short clips
       final filteredList = songs.where((song) {
-        final title = song.title.toLowerCase();
+        final title = (song['title'] as String? ?? '').toLowerCase();
+        final duration = song['duration'] as int? ?? 0;
         // Exclude common atmosphere keywords if they appear to be assets/loops
         // Also exclude very short files (< 10 seconds) to avoid UI sounds
         bool isAtmosphere = title.contains('rain_') || 
@@ -166,7 +167,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                             title.contains('vinyl_') || 
                             title.contains('tape_loop');
                             
-        bool isShort = (song.duration ?? 0) < 10000; // 10 seconds
+        bool isShort = duration < 10000; // 10 seconds
         
         return !isAtmosphere && !isShort;
       }).toList();
@@ -650,14 +651,17 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
   }
 
-  Widget _buildSongItem(SongModel song) {
+  Widget _buildSongItem(Map<String, dynamic> song) {
+    final songTitle = (song['title'] as String? ?? 'Unknown');
+    final songArtist = (song['artist'] as String? ?? 'Unknown Artist');
+    final songData = (song['data'] as String? ?? '');
     return GestureDetector(
       onTap: () {
         Navigator.of(context).push(
            MaterialPageRoute(
              builder: (context) => PlayerEditorScreen(
-                filePath: song.data,
-                fileName: song.title,
+                filePath: songData,
+                fileName: songTitle,
              ),
            ),
         ).then((_) => _loadRecentEdits());
@@ -679,17 +683,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 borderRadius: BorderRadius.circular(12),
                 color: const Color(0xFF352B42),
               ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: Platform.isIOS ? QueryArtworkWidget(
-                  id: song.id,
-                  type: ArtworkType.AUDIO,
-                  nullArtworkWidget: const Icon(Icons.music_note, color: Colors.white38),
-                  errorBuilder: (context, exception, stackTrace) {
-                    return const Icon(Icons.music_note, color: Colors.white38);
-                  },
-                ) : const Icon(Icons.music_note, color: Colors.white38), // Simplified fallback for Android
-              ),
+              child: const Icon(Icons.music_note, color: Colors.white38),
             ),
             const SizedBox(width: 16),
             Expanded(
@@ -697,14 +691,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    song.title, 
+                    songTitle, 
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.splineSans(fontWeight: FontWeight.w600, fontSize: 15, color: Colors.white),
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    song.artist ?? 'Unknown Artist', 
+                    songArtist, 
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.splineSans(color: Colors.white38, fontSize: 12),
