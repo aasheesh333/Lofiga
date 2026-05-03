@@ -15,16 +15,16 @@ try:
         content = f.read()
 
     # Update SDK versions using direct replacement
-    # Bumped to 35 for plugin compatibility
+    # compileSdk 36 required by AndroidX browser/core-ktx 1.17.0+
     if kotlin_dsl:
         # Handle both hardcoded values and flutter.compileSdkVersion references
-        content = re.sub(r'compileSdk\s*=\s*(flutter\.compileSdkVersion|\d+)', 'compileSdk = 35', content)
+        content = re.sub(r'compileSdk\s*=\s*(flutter\.compileSdkVersion|\d+)', 'compileSdk = 36', content)
         content = re.sub(r'minSdk\s*=\s*(flutter\.minSdkVersion|\d+)', 'minSdk = 24', content)
-        content = re.sub(r'targetSdk\s*=\s*(flutter\.targetSdkVersion|\d+)', 'targetSdk = 35', content)
+        content = re.sub(r'targetSdk\s*=\s*(flutter\.targetSdkVersion|\d+)', 'targetSdk = 36', content)
     else:
-        content = re.sub(r'compileSdkVersion\s*(flutter\.compileSdkVersion|\d+)', 'compileSdkVersion 35', content)
+        content = re.sub(r'compileSdkVersion\s*(flutter\.compileSdkVersion|\d+)', 'compileSdkVersion 36', content)
         content = re.sub(r'minSdkVersion\s*(flutter\.minSdkVersion|\d+)', 'minSdkVersion 24', content)
-        content = re.sub(r'targetSdkVersion\s*(flutter\.targetSdkVersion|\d+)', 'targetSdkVersion 35', content)
+        content = re.sub(r'targetSdkVersion\s*(flutter\.targetSdkVersion|\d+)', 'targetSdkVersion 36', content)
 
     # Check if signing config already exists
     if 'storeFile = file("../../release.keystore")' in content:
