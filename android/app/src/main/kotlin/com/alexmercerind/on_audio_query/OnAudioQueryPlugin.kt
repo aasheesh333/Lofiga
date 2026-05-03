@@ -6,7 +6,6 @@ import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler
 import io.flutter.plugin.common.MethodChannel.Result
-import io.flutter.plugin.common.PluginRegistry.Registrar
 
 /**
  * No-op shadow plugin that replaces on_audio_query's real Android native plugin.
@@ -38,7 +37,7 @@ class OnAudioQueryPlugin : FlutterPlugin, MethodCallHandler {
 
     companion object {
         @JvmStatic
-        fun registerWith(registrar: Registrar) {
+        fun registerWith(registrar: io.flutter.plugin.common.PluginRegistry.Registrar) {
             // Legacy registration – intentionally empty.
         }
     }
