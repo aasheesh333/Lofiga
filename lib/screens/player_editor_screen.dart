@@ -7,6 +7,7 @@ import 'package:lofiga/logic/preset_manager.dart';
 import 'package:lofiga/logic/audio_engine.dart';
 import 'package:lofiga/logic/export_service.dart';
 import 'package:lofiga/services/storage_service.dart';
+import 'package:lofiga/widgets/audio_visualizer.dart';
 import 'dart:async';
 import 'dart:ui';
 import 'dart:math' as math;
@@ -395,6 +396,21 @@ class _PlayerEditorScreenState extends State<PlayerEditorScreen> with SingleTick
                   ),
                 ),
               ],
+            ),
+          ),
+
+          // Audio Visualizer
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 80, // Position above the bottom player bar
+            child: Container(
+              height: 60,
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: AudioVisualizer(
+                animationValue: _waveController.value,
+                color: const Color(0xFF993DF5),
+              ),
             ),
           ),
 
