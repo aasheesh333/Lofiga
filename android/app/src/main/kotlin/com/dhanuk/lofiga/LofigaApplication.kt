@@ -19,15 +19,13 @@ class LofigaApplication : FlutterApplication() {
 
     override fun attachBaseContext(@NonNull base: Context) {
         super.attachBaseContext(base)
-        // On Xiaomi MIUI Android 9, JNIEnv* on the main thread can be null when
-        // Flutter's Dart JNI code (libdartjni.so) calls FindClass. Pre-loading
-        // libflutter.so triggers JNI_OnLoad which captures the JavaVM*, ensuring
-        // subsequent JNI calls get a valid JNIEnv*.
-        try {
-            System.loadLibrary("flutter")
-        } catch (_: UnsatisfiedLinkError) {
-            // libflutter.so may not be loadable at this point — best effort
-        }
+        // On Xiaomi MIUI Android 9, dart:jni's FindClassUnchecked crashes because
+        // libdartjni.so's JNI_OnLoad may not have properly captured the JavaVM*
+        // when the library is loaded implicitly. Pre-loading both libflutter.so
+        // and libdartjni.so here forces their JNI_OnLoad to run early on the main
+        // thread, ensuring the JNI environment is properly set up.
+        try { System.loadLibrary("flutter") } catch (_: UnsatisfiedLinkError) { }
+        try { System.loadLibrary("dartjni") } catch (_: UnsatisfiedLinkError) { }
         ensureClassLoader()
         preloadCommonClasses()
     }
