@@ -16,9 +16,9 @@ class MainActivity: FlutterActivity() {
     private val CHANNEL = "com.dhanuk.lofiga/audio_query"
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
         // Ensure proper classloader is set before any Flutter initialization
         ensureProperClassLoader()
+        super.onCreate(savedInstanceState)
     }
 
     override fun configureFlutterEngine(@NonNull flutterEngine: FlutterEngine) {
@@ -43,17 +43,19 @@ class MainActivity: FlutterActivity() {
     private fun ensureProperClassLoader() {
         try {
             // Try to get the application context and use its classloader fix
-            val appContext = applicationContext
-            if (appContext is LofigaApplication) {
-                appContext.ensureProperClassLoader()
+            val app = application
+            if (app is LofigaApplication) {
+                app.ensureProperClassLoader()
             } else {
                 // Fallback to using current classloader
-                Thread.currentThread().setContextClassLoader(javaClass.classLoader)
+                val cl = javaClass.classLoader
+                Thread.currentThread().setContextClassLoader(cl)
             }
         } catch (e: Exception) {
             // Fallback to default classloader if app context is not available
             try {
-                Thread.currentThread().setContextClassLoader(javaClass.classLoader)
+                val cl = javaClass.classLoader
+                Thread.currentThread().setContextClassLoader(cl)
             } catch (inner: Exception) {
                 // If even that fails, we keep the existing classloader
             }
