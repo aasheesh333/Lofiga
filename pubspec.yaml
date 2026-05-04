@@ -22,7 +22,6 @@ dependencies:
   shared_preferences: ^2.2.2
   logging: ^1.2.0
   console: ^4.1.0
-  on_audio_query: ^2.9.0
   intl: ^0.19.0
   share_plus: ^10.1.2
   url_launcher: ^6.3.1
