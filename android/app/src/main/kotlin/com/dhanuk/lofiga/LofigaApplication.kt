@@ -26,13 +26,7 @@ class LofigaApplication : FlutterApplication() {
         try {
             System.loadLibrary("flutter")
         } catch (_: UnsatisfiedLinkError) {
-            // Fallback: try loading from the app's native lib path
-            try {
-                val libDir = applicationInfo.nativeLibDir
-                System.load("$libDir/libflutter.so")
-            } catch (_: Exception) {
-                // Best effort
-            }
+            // libflutter.so may not be loadable at this point — best effort
         }
         ensureClassLoader()
         preloadCommonClasses()
