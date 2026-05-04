@@ -5,6 +5,7 @@ import android.content.Context
 import android.database.Cursor
 import android.net.Uri
 import android.os.Build
+import android.os.Bundle
 import android.provider.MediaStore
 import androidx.annotation.NonNull
 import io.flutter.embedding.android.FlutterActivity
@@ -14,13 +15,20 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity: FlutterActivity() {
     private val CHANNEL = "com.dhanuk.lofiga/audio_query"
 
+    override fun onCreate(savedInstanceState: Bundle?) {
+        // Fix for Android 9 JNI FindClass crash on some devices (e.g. Xiaomi MIUI):
+        // Set classloader EARLIEST possible in the Activity lifecycle, before
+        // FlutterEngine/plugin initialization triggered by super.onCreate().
+        Thread.currentThread().setContextClassLoader(javaClass.classLoader)
+        super.onCreate(savedInstanceState)
+    }
+
     override fun configureFlutterEngine(@NonNull flutterEngine: FlutterEngine) {
         // Fix for Android 9 JNI FindClass crash on some devices (e.g. Xiaomi MIUI):
         // Ensure the thread context classloader is set before plugins are initialized.
         // Without this, native libraries loaded by Flutter plugins may fail to find
         // Java classes through JNI, causing a SIGSEGV in FindClassUnchecked.
-        val contextClassLoader = javaClass.classLoader
-        Thread.currentThread().setContextClassLoader(contextClassLoader)
+        Thread.currentThread().setContextClassLoader(javaClass.classLoader)
 
         super.configureFlutterEngine(flutterEngine)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler {

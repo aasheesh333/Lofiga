@@ -5,14 +5,18 @@ import androidx.annotation.NonNull
 import io.flutter.app.FlutterApplication
 
 class LofigaApplication : FlutterApplication() {
+    override fun onCreate() {
+        super.onCreate()
+        // Guard 2: Set classloader when Application.onCreate runs (after attachBaseContext).
+        Thread.currentThread().setContextClassLoader(javaClass.classLoader)
+    }
+
     override fun attachBaseContext(@NonNull base: Context) {
-        // Fix for Android 9 JNI FindClass crash on some devices (e.g. Xiaomi MIUI):
-        // Set the thread context classloader as early as possible, before any Flutter
-        // engine or plugin initialization takes place. On affected devices the thread
-        // context classloader can be null at startup, causing a SIGSEGV in native code
-        // when Flutter plugins attempt JNI FindClass calls.
-        val contextClassLoader = javaClass.classLoader
-        Thread.currentThread().setContextClassLoader(contextClassLoader)
         super.attachBaseContext(base)
+        // Guard 1: Set classloader at the earliest possible point in the Application
+        // lifecycle, before any Flutter engine or plugin initialization.
+        // On Xiaomi Android 9 the thread context classloader can be null at startup,
+        // causing a SIGSEGV in FindClassUnchecked when native/Dart code calls FindClass.
+        Thread.currentThread().setContextClassLoader(javaClass.classLoader)
     }
 }
