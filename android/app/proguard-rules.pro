@@ -13,7 +13,7 @@
 # Prevents JNI class lookup crashes on older Android versions (e.g. Android 9 MIUI).
 # Native libraries (flutter_soloud, ffmpeg_kit, just_audio) may call FindClass
 # through JNI, which requires their Java counterparts to be kept.
--keep class com.example.lofiga.** { *; }
+-keep class com.dhanuk.lofiga.** { *; }
 
 -dontwarn io.flutter.**
 

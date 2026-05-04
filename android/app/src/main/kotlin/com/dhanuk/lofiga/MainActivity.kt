@@ -1,4 +1,4 @@
-package com.example.lofiga
+package com.dhanuk.lofiga
 
 import android.content.ContentUris
 import android.content.Context
@@ -12,7 +12,7 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity: FlutterActivity() {
-    private val CHANNEL = "com.example.lofiga/audio_query"
+    private val CHANNEL = "com.dhanuk.lofiga/audio_query"
 
     override fun configureFlutterEngine(@NonNull flutterEngine: FlutterEngine) {
         // Fix for Android 9 JNI FindClass crash on some devices (e.g. Xiaomi MIUI):

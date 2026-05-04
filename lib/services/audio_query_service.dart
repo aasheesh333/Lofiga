@@ -8,7 +8,7 @@ import 'package:flutter/services.dart';
 /// - **iOS**: Native Swift code uses MPMediaQuery from the MediaPlayer framework.
 class AudioQueryService {
   static const MethodChannel _channel =
-      MethodChannel('com.example.lofiga/audio_query');
+      MethodChannel('com.dhanuk.lofiga/audio_query');
 
   Future<bool> permissionsStatus() async {
     if (Platform.isIOS) {

@@ -12,7 +12,7 @@
 
     <application
         android:label="lofiga"
-        android:name="${applicationName}"
+        android:name=".LofigaApplication"
         android:icon="@mipmap/ic_launcher"
         android:extractNativeLibs="true"
         android:largeHeap="true">
