@@ -14,16 +14,26 @@ class LofigaApplication : FlutterApplication() {
 
     override fun onCreate() {
         super.onCreate()
-        // Guard 2: Set classloader when Application.onCreate runs.
         ensureClassLoader()
-        // Pre-register commonly used Flutter/plugin Java classes so that JNI
-        // FindClass can find them even when the thread context classloader is null.
-        preloadCommonClasses()
     }
 
     override fun attachBaseContext(@NonNull base: Context) {
         super.attachBaseContext(base)
-        // Guard 1: Set classloader at the earliest possible point.
+        // On Xiaomi MIUI Android 9, JNIEnv* on the main thread can be null when
+        // Flutter's Dart JNI code (libdartjni.so) calls FindClass. Pre-loading
+        // libflutter.so triggers JNI_OnLoad which captures the JavaVM*, ensuring
+        // subsequent JNI calls get a valid JNIEnv*.
+        try {
+            System.loadLibrary("flutter")
+        } catch (_: UnsatisfiedLinkError) {
+            // Fallback: try loading from the app's native lib path
+            try {
+                val libDir = applicationInfo.nativeLibDir
+                System.load("$libDir/libflutter.so")
+            } catch (_: Exception) {
+                // Best effort
+            }
+        }
         ensureClassLoader()
         preloadCommonClasses()
     }
@@ -32,27 +42,6 @@ class LofigaApplication : FlutterApplication() {
         val cl = javaClass.classLoader
         appClassLoader = cl
         Thread.currentThread().setContextClassLoader(cl)
-        // Also propagate to any already-running Flutter-internal threads.
-        propagateClassLoader(cl)
-    }
-
-    private fun propagateClassLoader(cl: ClassLoader?) {
-        if (cl == null) return
-        try {
-            val threads = arrayOfNulls<Thread>(Thread.activeCount() * 2)
-            Thread.enumerate(threads)
-            for (t in threads) {
-                if (t != null) {
-                    try {
-                        t.setContextClassLoader(cl)
-                    } catch (_: SecurityException) {
-                        // Can't set on some threads
-                    }
-                }
-            }
-        } catch (_: Exception) {
-            // Best effort
-        }
     }
 
     private fun preloadCommonClasses() {
