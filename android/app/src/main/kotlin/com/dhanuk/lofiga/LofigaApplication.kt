@@ -8,6 +8,7 @@ class LofigaApplication : FlutterApplication() {
     companion object {
         // Keep a static reference so native/JNI code can access the classloader
         // even when Thread.currentThread().getContextClassLoader() returns null.
+        @JvmField
         var appClassLoader: ClassLoader? = null
             private set
     }
@@ -25,7 +26,7 @@ class LofigaApplication : FlutterApplication() {
         // and libdartjni.so here forces their JNI_OnLoad to run early on the main
         // thread, ensuring the JNI environment is properly set up.
         try { System.loadLibrary("flutter") } catch (_: UnsatisfiedLinkError) { }
-        try { System.loadLibrary("dartjni") } catch (_: UnsatisfiedLinkError) { }
+        try { System.loadLibrary("dartjni") } catch (_: java.lang.UnsatisfiedLinkError) { }
         ensureClassLoader()
         preloadCommonClasses()
     }
@@ -70,5 +71,11 @@ class LofigaApplication : FlutterApplication() {
                 // Not all classes may exist on all devices
             }
         }
+    }
+    
+    // Add a method to ensure classloader is properly set
+    fun ensureProperClassLoader() {
+        val cl = appClassLoader ?: javaClass.classLoader
+        Thread.currentThread().setContextClassLoader(cl)
     }
 }

@@ -16,11 +16,9 @@ class MainActivity: FlutterActivity() {
     private val CHANNEL = "com.dhanuk.lofiga/audio_query"
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        // Fix for Android 9 JNI FindClass crash on some devices (e.g. Xiaomi MIUI):
-        // Set classloader EARLIEST possible in the Activity lifecycle, before
-        // FlutterEngine/plugin initialization triggered by super.onCreate().
-        Thread.currentThread().setContextClassLoader(javaClass.classLoader)
         super.onCreate(savedInstanceState)
+        // Ensure proper classloader is set before any Flutter initialization
+        ensureProperClassLoader()
     }
 
     override fun configureFlutterEngine(@NonNull flutterEngine: FlutterEngine) {
@@ -28,7 +26,7 @@ class MainActivity: FlutterActivity() {
         // Ensure the thread context classloader is set before plugins are initialized.
         // Without this, native libraries loaded by Flutter plugins may fail to find
         // Java classes through JNI, causing a SIGSEGV in FindClassUnchecked.
-        Thread.currentThread().setContextClassLoader(javaClass.classLoader)
+        ensureProperClassLoader()
 
         super.configureFlutterEngine(flutterEngine)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler {
@@ -38,6 +36,26 @@ class MainActivity: FlutterActivity() {
                 result.success(songs)
             } else {
                 result.notImplemented()
+            }
+        }
+    }
+
+    private fun ensureProperClassLoader() {
+        try {
+            // Try to get the application context and use its classloader fix
+            val appContext = applicationContext
+            if (appContext is LofigaApplication) {
+                appContext.ensureProperClassLoader()
+            } else {
+                // Fallback to using current classloader
+                Thread.currentThread().setContextClassLoader(javaClass.classLoader)
+            }
+        } catch (e: Exception) {
+            // Fallback to default classloader if app context is not available
+            try {
+                Thread.currentThread().setContextClassLoader(javaClass.classLoader)
+            } catch (inner: Exception) {
+                // If even that fails, we keep the existing classloader
             }
         }
     }
