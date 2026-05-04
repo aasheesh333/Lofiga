@@ -16,18 +16,15 @@ class MainActivity: FlutterActivity() {
     private val CHANNEL = "com.dhanuk.lofiga/audio_query"
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        // Ensure proper classloader is set before any Flutter initialization
-        ensureProperClassLoader()
+        // Set classloader BEFORE calling super.onCreate()
+        forceSetClassLoader()
         super.onCreate(savedInstanceState)
     }
 
     override fun configureFlutterEngine(@NonNull flutterEngine: FlutterEngine) {
-        // Fix for Android 9 JNI FindClass crash on some devices (e.g. Xiaomi MIUI):
-        // Ensure the thread context classloader is set before plugins are initialized.
-        // Without this, native libraries loaded by Flutter plugins may fail to find
-        // Java classes through JNI, causing a SIGSEGV in FindClassUnchecked.
-        ensureProperClassLoader()
-
+        // Set classloader BEFORE Flutter engine configuration
+        forceSetClassLoader()
+        
         super.configureFlutterEngine(flutterEngine)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler {
             call, result ->
@@ -40,16 +37,18 @@ class MainActivity: FlutterActivity() {
         }
     }
 
-    private fun ensureProperClassLoader() {
+    private fun forceSetClassLoader() {
         try {
-            // Try to get the application context and use its classloader fix
+            // Force set the classloader immediately
+            val cl = javaClass.classLoader
+            if (cl != null) {
+                Thread.currentThread().setContextClassLoader(cl)
+            }
+            
+            // Also try to get application classloader
             val app = application
             if (app is LofigaApplication) {
                 app.ensureProperClassLoader()
-            } else {
-                // Fallback to using current classloader
-                val cl = javaClass.classLoader
-                Thread.currentThread().setContextClassLoader(cl)
             }
         } catch (e: Exception) {
             // Fallback to default classloader if app context is not available

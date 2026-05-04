@@ -11,96 +11,90 @@ class LofigaApplication : FlutterApplication() {
         @JvmStatic
         var appClassLoader: ClassLoader? = null
         
-        // Add a static initializer to ensure classloader is set early
+        // Static initializer to set classloader as early as possible
         init {
             try {
-                // Try to set the classloader early during class loading
+                // Set classloader immediately when class is loaded
                 val cl = LofigaApplication::class.java.classLoader
                 appClassLoader = cl
                 if (cl != null) {
                     Thread.currentThread().setContextClassLoader(cl)
                 }
             } catch (e: Exception) {
-                // Ignore exceptions during static initialization
+                // Ignore any exceptions during static initialization
             }
         }
     }
     
     override fun onCreate() {
+        // Ensure classloader is set before any Flutter code runs
+        forceSetClassLoader()
         super.onCreate()
         ensureClassLoader()
     }
 
     override fun attachBaseContext(@NonNull base: Context) {
+        // Set classloader as early as possible
+        forceSetClassLoader()
+        
         super.attachBaseContext(base)
-        // On Xiaomi MIUI Android 9, dart:jni's FindClassUnchecked crashes because
-        // libdartjni.so's JNI_OnLoad may not have properly captured the JavaVM*
-        // when the library is loaded implicitly. Pre-loading both libflutter.so
-        // and libdartjni.so here forces their JNI_OnLoad to run early on the main
-        // thread, ensuring the JNI environment is properly set up.
-        try { 
-            System.loadLibrary("flutter") 
-        } catch (_: UnsatisfiedLinkError) { }
-        try { 
-            System.loadLibrary("dartjni") 
-        } catch (_: java.lang.UnsatisfiedLinkError) { }
         
-        // Preload common classes that might be needed by JNI
-        preloadCommonClasses()
+        // Force load native libraries immediately
+        forceLoadNativeLibraries()
         
+        // Preload critical classes
+        preloadCriticalClasses()
+        
+        // Ensure classloader is set
         ensureClassLoader()
     }
 
-    private fun ensureClassLoader() {
-        val cl = javaClass.classLoader
-        appClassLoader = cl
-        Thread.currentThread().setContextClassLoader(cl)
+    private fun forceSetClassLoader() {
+        try {
+            val cl = javaClass.classLoader ?: return
+            appClassLoader = cl
+            Thread.currentThread().setContextClassLoader(cl)
+        } catch (e: Exception) {
+            // Ignore exceptions
+        }
     }
 
-    private fun preloadCommonClasses() {
+    private fun forceLoadNativeLibraries() {
+        try {
+            // Load libraries in specific order to ensure proper initialization
+            System.loadLibrary("flutter")
+        } catch (_: UnsatisfiedLinkError) { }
+        
+        try {
+            System.loadLibrary("dartjni")
+        } catch (_: UnsatisfiedLinkError) { }
+    }
+
+    private fun preloadCriticalClasses() {
         val classLoader = appClassLoader ?: return
-        val classes = arrayOf(
-            // Flutter engine classes that are commonly used
+        // Only preload the most critical classes that are likely to be accessed
+        val criticalClasses = arrayOf(
             "io.flutter.embedding.engine.FlutterEngine",
             "io.flutter.embedding.android.FlutterActivity",
             "io.flutter.plugin.common.MethodChannel",
-            "io.flutter.plugin.common.BinaryMessenger",
-            "io.flutter.plugin.common.StandardMethodCodec",
-            "io.flutter.plugin.common.StandardMessageCodec",
-            // Android framework classes that might be needed
             "android.app.Activity",
-            "android.content.Context",
-            "android.media.MediaExtractor",
-            "android.media.MediaCodec",
-            "android.media.MediaFormat",
-            "android.media.MediaMetadataRetriever",
-            "android.media.AudioManager",
-            "android.media.AudioTrack",
-            "android.media.AudioAttributes",
-            "android.content.ContentResolver",
-            "android.net.Uri",
-            "android.database.Cursor",
-            "android.provider.MediaStore",
-            "android.os.Environment",
-            "android.os.Bundle",
-            // Plugin-specific classes
-            "com.dhanuk.lofiga.MainActivity",
-            "com.dhanuk.lofiga.LofigaApplication"
+            "android.content.Context"
         )
-        for (className in classes) {
+        
+        for (className in criticalClasses) {
             try {
-                Class.forName(className, false, classLoader)
-            } catch (_: ClassNotFoundException) {
-                // Not all classes may exist on all devices
-            } catch (_: LinkageError) {
-                // Class might not be available on all API levels
-            }
+                Class.forName(className, true, classLoader)
+            } catch (_: ClassNotFoundException) { } 
+            catch (_: LinkageError) { }
         }
     }
-    
-    // Add a method to ensure classloader is properly set
+
+    private fun ensureClassLoader() {
+        forceSetClassLoader()
+    }
+
+    // Public method for MainActivity to call
     fun ensureProperClassLoader() {
-        val cl = appClassLoader ?: javaClass.classLoader
-        Thread.currentThread().setContextClassLoader(cl)
+        forceSetClassLoader()
     }
 }
