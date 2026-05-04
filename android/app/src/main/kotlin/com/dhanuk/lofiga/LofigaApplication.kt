@@ -8,9 +8,8 @@ class LofigaApplication : FlutterApplication() {
     companion object {
         // Keep a static reference so native/JNI code can access the classloader
         // even when Thread.currentThread().getContextClassLoader() returns null.
-        @JvmField
+        @JvmStatic
         var appClassLoader: ClassLoader? = null
-            private set
     }
 
     override fun onCreate() {
@@ -45,22 +44,22 @@ class LofigaApplication : FlutterApplication() {
             "io.flutter.embedding.android.FlutterActivity",
             "io.flutter.plugin.common.MethodChannel",
             "io.flutter.plugin.common.BinaryMessenger",
-            // just_audio / ExoPlayer
+            // Android framework classes that might be needed
             "android.media.MediaExtractor",
             "android.media.MediaCodec",
-            "android.media.MediaFormat",
+            "android.media.MediaFormat", 
             "android.media.MediaMetadataRetriever",
-            // Audio-related
             "android.media.AudioManager",
             "android.media.AudioTrack",
             "android.media.AudioAttributes",
-            // File / IO
             "android.content.ContentResolver",
             "android.net.Uri",
-            "android.database.Cursor",
+            "android.database.Cursor", 
             "android.provider.MediaStore",
             "android.os.Environment",
-            // Plugin-specific
+            "android.content.Context",
+            "android.app.Activity",
+            // Plugin-specific classes
             "com.dhanuk.lofiga.MainActivity",
             "com.dhanuk.lofiga.LofigaApplication"
         )
@@ -69,6 +68,8 @@ class LofigaApplication : FlutterApplication() {
                 Class.forName(className, false, classLoader)
             } catch (_: ClassNotFoundException) {
                 // Not all classes may exist on all devices
+            } catch (_: LinkageError) {
+                // Class might not be available on all API levels
             }
         }
     }
