@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Lofi Generator - Home</title>
+<!-- Fonts -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Spline+Sans:wght@300;400;500;600;700&amp;family=Noto+Sans:wght@400;500;700&amp;display=swap" rel="stylesheet"/>
+<!-- Material Icons -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Tailwind Config -->
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#993df5",
+                        "background-light": "#f7f5f8",
+                        "background-dark": "#191022",
+                        "surface-dark": "#231b2e",
+                        "surface-highlight": "#2d243a",
+                    },
+                    fontFamily: {
+                        "display": ["Spline Sans", "sans-serif"],
+                        "body": ["Spline Sans", "sans-serif"],
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "2xl": "1rem", "full": "9999px"},
+                    boxShadow: {
+                        'neon': '0 0 20px -5px rgba(153, 61, 245, 0.5)',
+                        'glass': '0 4px 30px rgba(0, 0, 0, 0.1)',
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        /* Custom scrollbar for webkit */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #191022; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #4a3b55; 
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #993df5; 
+        }
+        
+        .glass-panel {
+            background: rgba(35, 27, 46, 0.6);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-white antialiased selection:bg-primary selection:text-white">
+<div class="relative flex min-h-screen w-full flex-col overflow-hidden pb-24">
+<!-- Background Ambient Glows -->
+<div class="fixed top-[-10%] left-[-10%] w-[50%] h-[50%] bg-primary/20 blur-[100px] rounded-full pointer-events-none z-0"></div>
+<div class="fixed bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-blue-600/10 blur-[100px] rounded-full pointer-events-none z-0"></div>
+<!-- Header -->
+<header class="relative z-10 flex items-center justify-between p-6 pt-8 pb-4">
+<div class="flex flex-col">
+<h1 class="text-white text-2xl font-bold leading-tight tracking-tight">Good Evening</h1>
+<p class="text-slate-400 text-sm font-medium">Ready to chill?</p>
+</div>
+<button class="flex h-10 w-10 items-center justify-center rounded-full bg-surface-highlight hover:bg-white/10 transition-colors text-white">
+<span class="material-symbols-outlined" style="font-size: 24px;">settings</span>
+</button>
+</header>
+<!-- Main Content Area -->
+<main class="relative z-10 flex-1 px-4 flex flex-col gap-8">
+<!-- Hero / Select Song Card -->
+<section class="mt-2">
+<div class="group relative w-full overflow-hidden rounded-2xl glass-panel shadow-neon hover:shadow-[0_0_30px_-5px_rgba(153,61,245,0.7)] transition-all duration-300 cursor-pointer border border-primary/30">
+<div class="absolute inset-0 bg-gradient-to-br from-primary/10 to-transparent opacity-50"></div>
+<div class="relative flex flex-col items-center justify-center py-10 px-6 text-center">
+<div class="mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-primary shadow-lg shadow-primary/40 group-hover:scale-110 transition-transform duration-300">
+<span class="material-symbols-outlined text-white" style="font-size: 40px;">add</span>
+</div>
+<h2 class="text-xl font-bold text-white mb-2">Select Song</h2>
+<p class="text-slate-300 text-sm max-w-[200px]">Tap to import audio file (MP3, WAV) and create lofi magic</p>
+</div>
+</div>
+</section>
+<!-- Recent Edits Section -->
+<section class="flex flex-col gap-4">
+<div class="flex items-center justify-between px-2">
+<h3 class="text-white text-lg font-bold tracking-tight">Recent Edits</h3>
+<button class="text-primary text-sm font-semibold hover:text-primary/80 transition-colors">See All</button>
+</div>
+<!-- Recent Edits List -->
+<div class="flex flex-col gap-3">
+<!-- Item 1 -->
+<div class="flex items-center gap-4 rounded-xl bg-surface-dark p-3 pr-4 border border-white/5 hover:bg-surface-highlight transition-colors cursor-pointer group">
+<div class="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-slate-800">
+<div class="absolute inset-0 bg-cover bg-center opacity-80 group-hover:opacity-100 transition-opacity" data-alt="Abstract neon purple and blue gradient representing lofi music album art" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuBlK6Cx4lvwf2kOi9bl73_-RECucjeUrq0kUQmgowcYNEubzuf2agsL_9ziWAqPZGCRo-M7sHK9h6QcuRYGKyKws0i9dwt84sELC29fjI7zacfL7fz-ExeeQXT_bhLjb90aD_1C1Om2UVcrNPXKLasNWXZnpqkhmCvubYZtPJ5KsiT8G_ztFQKJ4u9WsK-mV9dFlCxn6b9mTG5lg7iW8ol8HIwxpblogSzo16whDOhA10nIcIJzs0xc4DNkksZ6X6E8Ap3ZVtcsdIs');">
+</div>
+<div class="absolute inset-0 flex items-center justify-center bg-black/20">
+<span class="material-symbols-outlined text-white opacity-0 group-hover:opacity-100 transition-opacity text-sm">play_arrow</span>
+</div>
+</div>
+<div class="flex flex-1 flex-col justify-center">
+<h4 class="text-white text-base font-semibold leading-tight mb-1 truncate">Midnight Jazz.mp3</h4>
+<div class="flex items-center gap-2 text-xs text-slate-400">
+<span class="material-symbols-outlined text-[14px]">schedule</span>
+<span>2 min ago</span>
+<span class="h-1 w-1 rounded-full bg-slate-600"></span>
+<span>3:42</span>
+</div>
+</div>
+<button class="text-slate-500 hover:text-white">
+<span class="material-symbols-outlined">more_vert</span>
+</button>
+</div>
+<!-- Item 2 -->
+<div class="flex items-center gap-4 rounded-xl bg-surface-dark p-3 pr-4 border border-white/5 hover:bg-surface-highlight transition-colors cursor-pointer group">
+<div class="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-slate-800">
+<div class="absolute inset-0 bg-cover bg-center opacity-80 group-hover:opacity-100 transition-opacity" data-alt="Dark moody cityscape at night with rain representing lofi ambiance" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuBDRJYHPNGMZ22lE4lM4mohDfBZLbxwE6OFuUrfpKbZrxdplJStAETJf1yfzq8NB2xd0ThkK2s3hLEFnzG-gL5VPxQowkhMy94Cmv29hg37coS8rTz6e7wL7TW4gnj0-Y9rjXUkXZ4xEESQB8ME7w6b95UbM7iaz9RDuZXNFHRR5Ha5B3EK4QUE0oZteLOnT2DvkVNv6FLQe59vHrDNOIE1vy68VBBHCVtZI2zmUkd97tCdXnQMCFqaQyO-isBjtM_7iH8iVt37A10');">
+</div>
+</div>
+<div class="flex flex-1 flex-col justify-center">
+<h4 class="text-white text-base font-semibold leading-tight mb-1 truncate">Study Session_v2.wav</h4>
+<div class="flex items-center gap-2 text-xs text-slate-400">
+<span class="material-symbols-outlined text-[14px]">calendar_today</span>
+<span>Yesterday</span>
+<span class="h-1 w-1 rounded-full bg-slate-600"></span>
+<span>12:05</span>
+</div>
+</div>
+<button class="text-slate-500 hover:text-white">
+<span class="material-symbols-outlined">more_vert</span>
+</button>
+</div>
+<!-- Item 3 -->
+<div class="flex items-center gap-4 rounded-xl bg-surface-dark p-3 pr-4 border border-white/5 hover:bg-surface-highlight transition-colors cursor-pointer group">
+<div class="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-slate-800">
+<div class="absolute inset-0 bg-cover bg-center opacity-80 group-hover:opacity-100 transition-opacity" data-alt="Warm orange and pink sunset gradient representing chill vibes" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuCFWuM02kRyFdKGQcbw3n0gWXmn7PPi2xRihbwQEv0drUjzVzdn-uCMoLmiaGlr8o-TqU0shR1jRcfhzhdJ32Bu5r-_IKgIDODEnwN3xvz8IiUqS4wve5s_rqq2DNhmsayepATL1EvYTeOpIkT-5PYaLBlvuiq3H6BP3kD3YGuSKY74dzVeVa_5efateEhGTIdAuMT3gr2jtnxGlZNywAtp9qUN20h3scqgZgLGqBLO3bHkG9eQ1cj53co9MaB2AudkEIWi3qiEzRg');">
+</div>
+</div>
+<div class="flex flex-1 flex-col justify-center">
+<h4 class="text-white text-base font-semibold leading-tight mb-1 truncate">Rainy Day.mp3</h4>
+<div class="flex items-center gap-2 text-xs text-slate-400">
+<span class="material-symbols-outlined text-[14px]">calendar_today</span>
+<span>Last Week</span>
+<span class="h-1 w-1 rounded-full bg-slate-600"></span>
+<span>4:20</span>
+</div>
+</div>
+<button class="text-slate-500 hover:text-white">
+<span class="material-symbols-outlined">more_vert</span>
+</button>
+</div>
+<!-- Item 4 (Older) -->
+<div class="flex items-center gap-4 rounded-xl bg-surface-dark p-3 pr-4 border border-white/5 hover:bg-surface-highlight transition-colors cursor-pointer group opacity-75">
+<div class="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-slate-800">
+<div class="absolute inset-0 bg-cover bg-center opacity-80 group-hover:opacity-100 transition-opacity" data-alt="Minimalist geometric shapes in dark blue tones" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuC9NuKb43FHX8hvEWMJI_86xNz76oemLNKTtDfdotrtlcAhWtikejPxd3fXkdhQJ3JICgrLCDIufl4lYkAvtal4ZnsBbY98HF4VEb_MnI32gk5MzZvHqEVPnCSnL7TCTeC9fth9jbXKXHl2QMyNhDssLTgE9e91HFrI8MgE3rqbTnG82zcnQY7V3WIEzARusliHDqAFtSFkC2_pD4kJkpmBRfFb4a8Mwh2hQdJa2GgEBjM2PS_nQepVlnkNRn2lIuzBFyXSKVQF_Dg');">
+</div>
+</div>
+<div class="flex flex-1 flex-col justify-center">
+<h4 class="text-white text-base font-semibold leading-tight mb-1 truncate">Coffee Shop Ambience.mp3</h4>
+<div class="flex items-center gap-2 text-xs text-slate-400">
+<span class="material-symbols-outlined text-[14px]">calendar_today</span>
+<span>2 Weeks ago</span>
+<span class="h-1 w-1 rounded-full bg-slate-600"></span>
+<span>8:15</span>
+</div>
+</div>
+<button class="text-slate-500 hover:text-white">
+<span class="material-symbols-outlined">more_vert</span>
+</button>
+</div>
+</div>
+</section>
+</main>
+<!-- Floating Action Button -->
+<div class="fixed bottom-24 right-5 z-20">
+<button class="group flex h-14 w-14 items-center justify-center rounded-full bg-primary shadow-lg shadow-primary/40 transition-transform hover:scale-105 active:scale-95">
+<span class="material-symbols-outlined text-white" style="font-size: 28px;">add</span>
+</button>
+</div>
+<!-- Bottom Navigation Bar -->
+<nav class="fixed bottom-0 left-0 w-full z-30 bg-surface-dark/90 backdrop-blur-md border-t border-white/5 pb-safe">
+<div class="flex items-center justify-around h-20 pb-2">
+<button class="flex flex-col items-center justify-center gap-1 w-16 text-primary">
+<span class="material-symbols-outlined text-[26px] fill-1">home</span>
+<span class="text-[10px] font-medium">Home</span>
+</button>
+<button class="flex flex-col items-center justify-center gap-1 w-16 text-slate-400 hover:text-white transition-colors">
+<span class="material-symbols-outlined text-[26px]">tune</span>
+<span class="text-[10px] font-medium">Editor</span>
+</button>
+<button class="flex flex-col items-center justify-center gap-1 w-16 text-slate-400 hover:text-white transition-colors">
+<span class="material-symbols-outlined text-[26px]">library_music</span>
+<span class="text-[10px] font-medium">Library</span>
+</button>
+<button class="flex flex-col items-center justify-center gap-1 w-16 text-slate-400 hover:text-white transition-colors">
+<span class="material-symbols-outlined text-[26px]">settings</span>
+<span class="text-[10px] font-medium">Settings</span>
+</button>
+</div>
+</nav>
+</div>
+</body></html>

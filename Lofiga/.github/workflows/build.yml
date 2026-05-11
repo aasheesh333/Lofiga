@@ -1,0 +1,51 @@
+name: Build Android APK
+
+on:
+  push:
+    branches:
+      - "**"
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: "zulu"
+          java-version: "17"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Setup Keystore (Android)
+        run: |
+          keytool -genkeypair -v -keystore release.keystore \
+            -alias lofiga -keyalg RSA -keysize 2048 -validity 10000 \
+            -storepass lofiga2024 -keypass lofiga2024 \
+            -dname "CN=Lofiga,O=Lofiga,C=US"
+
+      - name: Make Gradlew Executable
+        run: chmod +x native-android/gradlew
+
+      - name: Build APK (Demo Signed)
+        run: |
+          cd native-android
+          ./gradlew assembleDebug
+
+      - name: Upload Android APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug.apk
+          path: native-android/app/build/outputs/apk/debug/app-debug.apk

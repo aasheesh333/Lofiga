@@ -1,0 +1,39 @@
+name: lofiga
+description: Turn Any Song Into Lofi
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  google_fonts: ^6.1.0
+  flutter_svg: ^2.0.0
+  just_audio: ^0.9.36
+  file_picker: ^8.0.0
+  provider: ^6.1.1
+  cupertino_icons: ^1.0.2
+  flutter_soloud: ^3.4.10
+  ffmpeg_kit_flutter_new_min_gpl: ^2.1.1
+  path_provider: ^2.1.5
+  permission_handler: ^12.0.1
+  shared_preferences: ^2.2.2
+  logging: ^1.2.0
+  console: ^4.1.0
+  intl: ^0.19.0
+  share_plus: ^10.1.2
+  url_launcher: ^6.3.1
+  wakelock_plus: ^1.2.8
+  device_info_plus: ^12.4.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/audio/atmosphere/

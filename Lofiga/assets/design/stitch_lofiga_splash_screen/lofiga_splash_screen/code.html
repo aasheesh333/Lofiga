@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Lofiga Splash Screen</title>
+<!-- Fonts -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Spline+Sans:wght@300;400;500;600;700&amp;family=Noto+Sans:wght@400;500;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#993df5",
+                        "background-light": "#f7f5f8",
+                        "background-dark": "#191022",
+                    },
+                    fontFamily: {
+                        "display": ["Spline Sans", "sans-serif"],
+                        "body": ["Noto Sans", "sans-serif"]
+                    },
+                    borderRadius: { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" },
+                },
+            },
+        }
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display overflow-hidden selection:bg-primary/30 text-white">
+<div class="relative flex h-screen w-full flex-col items-center justify-center overflow-hidden">
+<!-- Ambient Background Gradient & Glow -->
+<!-- Deep Navy to Dark Purple Gradient Base -->
+<div class="absolute inset-0 bg-gradient-to-br from-[#0f172a] via-[#191022] to-[#2e1065] z-0"></div>
+<!-- Central Primary Glow Blob (Subtle Neon Effect) -->
+<div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-primary/20 rounded-full blur-[120px] pointer-events-none z-0"></div>
+<!-- Glassmorphism Container / Main Content Wrapper -->
+<div class="relative z-10 flex flex-col items-center justify-center w-full max-w-md px-6">
+<!-- Hero Graphic: Stylized Vinyl Record -->
+<!-- Using a CSS composition for the Vinyl to match the request without external image dependencies if possible, or enhancing a placeholder -->
+<div class="relative mb-12 group">
+<!-- Outer Neon Glow Ring -->
+<div class="absolute -inset-1 rounded-full bg-gradient-to-tr from-primary to-blue-600 opacity-40 blur-lg group-hover:opacity-60 transition-opacity duration-700"></div>
+<!-- The Vinyl Disk -->
+<div class="relative w-64 h-64 md:w-72 md:h-72 rounded-full bg-[#121212] shadow-2xl flex items-center justify-center overflow-hidden border border-white/5 ring-1 ring-white/10">
+<!-- Vinyl Grooves Texture (CSS Radial/Conic Gradients) -->
+<!-- Conic gradient simulates the light hitting the grooves -->
+<div class="absolute inset-0 opacity-20 bg-[conic-gradient(from_45deg,transparent_0deg,white_50deg,transparent_100deg,transparent_180deg,white_230deg,transparent_280deg)]"></div>
+<!-- Radial repeating gradient for the tracks/grooves -->
+<div class="absolute inset-0 opacity-10" style="background-image: repeating-radial-gradient(#fff 0, #fff 1px, transparent 2px, transparent 4px);"></div>
+<!-- Inner Label -->
+<div class="relative w-24 h-24 rounded-full bg-gradient-to-br from-primary to-purple-900 shadow-inner flex items-center justify-center border border-white/10">
+<!-- Center Hole -->
+<div class="w-3 h-3 rounded-full bg-[#121212] shadow-[inset_0_1px_2px_rgba(0,0,0,0.5)]"></div>
+</div>
+<!-- Glass Reflection Overlay (Top half shine) -->
+<div class="absolute inset-0 rounded-full bg-gradient-to-b from-white/5 to-transparent pointer-events-none"></div>
+</div>
+</div>
+<!-- Logo Text -->
+<div class="flex flex-col items-center gap-2 text-center">
+<h1 class="text-white text-5xl md:text-6xl font-bold tracking-tight drop-shadow-lg">
+                    Lofiga
+                </h1>
+<!-- Tagline -->
+<h2 class="text-white/60 text-lg md:text-xl font-normal tracking-wide mt-2">
+                    Turn Any Song Into Lofi
+                </h2>
+</div>
+</div>
+<!-- Footer / Loader Area -->
+<div class="absolute bottom-12 z-10 flex flex-col items-center gap-4">
+<!-- Spinner -->
+<span class="material-symbols-outlined text-primary/80 animate-[spin_3s_linear_infinite] text-3xl">
+                music_note
+            </span>
+<span class="text-white/30 text-xs tracking-widest uppercase">Version 1.0</span>
+</div>
+</div>
+</body></html>
