@@ -1,6 +1,7 @@
 package com.dhanuk.lofiga.ui.screens
 
 import androidx.compose.animation.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -28,6 +29,13 @@ import com.dhanuk.lofiga.model.LofiPreset
 import com.dhanuk.lofiga.ui.MainViewModel
 import com.dhanuk.lofiga.ui.components.*
 import com.dhanuk.lofiga.ui.theme.*
+
+private fun formatDuration(millis: Long): String {
+    val totalSec = millis / 1000
+    val min = totalSec / 60
+    val sec = totalSec % 60
+    return "%d:%02d".format(min, sec)
+}
 
 @Composable
 fun PlayerScreen(
@@ -241,41 +249,40 @@ fun PlayerScreen(
                     )
                 }
 
-var sliderPosition by remember { mutableStateOf(position.toFloat()) }
-var isDragging by remember { mutableStateOf(false) }
-Column(modifier = Modifier.padding(horizontal = 24.dp)) {
-    Slider(
-        value = sliderPosition,
-        onValueChange = { 
-            sliderPosition = it 
-            isDragging = true
-        },
-        onValueChangeFinished = {
-            viewModel.audioEngine.seekTo(sliderPosition.toLong())
-            isDragging = false
-        },
-        valueRange = 0f..if (duration > 0) duration.toFloat() else 1f,
-        modifier = Modifier.fillMaxWidth(),
-        colors = SliderDefaults.colors(
-            thumbColor = Color.White,
-            activeTrackColor = Purple500,
-            inactiveTrackColor = White12
-        )
-    )
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Text(formatDuration(if (isDragging) sliderPosition.toLong() else position), style = MaterialTheme.typography.bodySmall, color = White38)
-        Text(formatDuration(duration), style = MaterialTheme.typography.bodySmall, color = White38)
-    }
-}
-
-LaunchedEffect(position, isDragging) {
-    if (!isDragging) {
-        sliderPosition = position.toFloat()
-    }
-}
+                Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+                    var sliderPosition by remember { mutableStateOf(position.toFloat()) }
+                    var isDragging by remember { mutableStateOf(false) }
+                    Slider(
+                        value = sliderPosition,
+                        onValueChange = {
+                            sliderPosition = it
+                            isDragging = true
+                        },
+                        onValueChangeFinished = {
+                            viewModel.audioEngine.seekTo(sliderPosition.toLong())
+                            isDragging = false
+                        },
+                        valueRange = 0f..if (duration > 0) duration.toFloat() else 1f,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = SliderDefaults.colors(
+                            thumbColor = Color.White,
+                            activeTrackColor = Purple500,
+                            inactiveTrackColor = White12
+                        )
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(formatDuration(if (isDragging) sliderPosition.toLong() else position), style = MaterialTheme.typography.bodySmall, color = White38)
+                        Text(formatDuration(duration), style = MaterialTheme.typography.bodySmall, color = White38)
+                    }
+                    LaunchedEffect(position, isDragging) {
+                        if (!isDragging) {
+                            sliderPosition = position.toFloat()
+                        }
+                    }
+                }
 
                 // Playback Controls
                 Row(
@@ -358,9 +365,7 @@ LaunchedEffect(position, isDragging) {
                                         labelColor = Cyan400,
                                         leadingIconContentColor = Cyan400
                                     ),
-                                    border = AssistChipDefaults.assistChipBorder(
-                                        borderColor = Cyan400.copy(alpha = 0.3f)
-                                    )
+                                    border = BorderStroke(1.dp, Cyan400.copy(alpha = 0.3f))
                                 )
                             }
                         }
@@ -714,7 +719,7 @@ LaunchedEffect(position, isDragging) {
     // SnackbarHost at root level
     SnackbarHost(
         hostState = snackbarHostState,
-        modifier = Modifier.align(Alignment.BottomCenter)
+        modifier = Modifier.fillMaxWidth().padding(16.dp)
     )
 }
 
@@ -767,10 +772,4 @@ private fun AtmosphereControl(
             )
         }
     }
-
-private fun formatDuration(millis: Long): String {
-    val totalSec = millis / 1000
-    val min = totalSec / 60
-    val sec = totalSec % 60
-    return "%d:%02d".format(min, sec)
 }
