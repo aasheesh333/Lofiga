@@ -114,7 +114,12 @@ fun PlayerScreen(
         } else {
             Column(modifier = Modifier.fillMaxSize()) {
                 // STATIC SECTION - Player controls (don't scroll)
-                Column(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier
+                        .weight(0.45f)
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                ) {
                     // Track Info
                     Row(
                     modifier = Modifier
@@ -227,27 +232,16 @@ fun PlayerScreen(
                     }
                 }
 
-                // Static Album Art (no waveform)
-                Box(
+                // Waveform Visualizer (replaces static album art)
+                WaveformVisualizer(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                        .height(120.dp)
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(
-                            Brush.linearGradient(
-                                listOf(Purple500.copy(alpha = 0.4f), Purple500.copy(alpha = 0.1f), Cyan400.copy(alpha = 0.2f))
-                            )
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        Icons.Filled.MusicNote,
-                        contentDescription = null,
-                        tint = Purple400,
-                        modifier = Modifier.size(48.dp)
-                    )
-                }
+                        .height(120.dp),
+                    barCount = 32,
+                    color = Purple500,
+                    isPlaying = isPlaying,
+                    waveformData = waveformData
+                )
 
                 Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
                     var sliderPosition by remember { mutableStateOf(position.toFloat()) }
@@ -338,8 +332,10 @@ fun PlayerScreen(
                 // SCROLLABLE SECTION - Effects and presets
                 Column(
                     modifier = Modifier
-                        .fillMaxSize()
+                        .weight(1f)
+                        .fillMaxWidth()
                         .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 16.dp)
                 ) {
 
                 // Presets
@@ -651,6 +647,7 @@ fun PlayerScreen(
 
             // Export overlay
             if (isExporting) {
+                val exportProgress by viewModel.exportProgress.collectAsState()
                 Box(
                     modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.7f)),
                     contentAlignment = Alignment.Center
@@ -659,8 +656,20 @@ fun PlayerScreen(
                         CircularProgressIndicator(color = Purple500)
                         Spacer(Modifier.height(16.dp))
                         Text("Rendering Lofi Mix...", color = Color.White, fontWeight = FontWeight.Bold)
-                        Spacer(Modifier.height(4.dp))
-                        Text("This happens offline on your device.", color = White38, style = MaterialTheme.typography.bodySmall)
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            "${(exportProgress * 100).toInt()}% Complete",
+                            color = Purple400,
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(Modifier.height(16.dp))
+                        LinearProgressIndicator(
+                            progress = { exportProgress },
+                            modifier = Modifier.fillMaxWidth(0.6f),
+                            color = Purple500,
+                            trackColor = White12
+                        )
                         Spacer(Modifier.height(24.dp))
                         OutlinedButton(onClick = { viewModel.cancelExport() }) {
                             Text("Cancel", color = White60)
