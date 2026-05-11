@@ -104,11 +104,11 @@ fun PlayerScreen(
                 }
             }
         } else {
-            Column(
-                modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
-            ) {
-                // Track Info
-                Row(
+            Column(modifier = Modifier.fillMaxSize()) {
+                // STATIC SECTION - Player controls (don't scroll)
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    // Track Info
+                    Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(16.dp),
@@ -326,6 +326,14 @@ LaunchedEffect(position, isDragging) {
                         )
                     }
                 }
+                } // End static section
+
+                // SCROLLABLE SECTION - Effects and presets
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                ) {
 
                 // Presets
                 Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
@@ -441,7 +449,10 @@ LaunchedEffect(position, isDragging) {
                         if (selectedEffectType == "all" || selectedEffectType == "tempo") {
                             EffectSlider(
                                 value = currentValues.tempo,
-                                onValueChange = { viewModel.updateTempo(it) },
+                                onValueChange = {
+                                    hasUnsavedChanges = true
+                                    viewModel.updateTempo(it)
+                                },
                                 label = "Tempo",
                                 displayValue = "${(currentValues.tempo * 100).toInt()}%",
                                 description = "Playback speed",
@@ -453,7 +464,10 @@ LaunchedEffect(position, isDragging) {
                             val pitchLabel = if (semitones >= 0) "+${"%.1f".format(semitones)} st" else "${"%.1f".format(semitones)} st"
                             EffectSlider(
                                 value = (currentValues.pitch + 5f) / 10f,
-                                onValueChange = { viewModel.updatePitch(it * 10f - 5f) },
+                                onValueChange = {
+                                    hasUnsavedChanges = true
+                                    viewModel.updatePitch(it * 10f - 5f)
+                                },
                                 label = "Pitch",
                                 displayValue = pitchLabel,
                                 description = "Shift pitch (semitones)",
@@ -461,7 +475,10 @@ LaunchedEffect(position, isDragging) {
                             )
                             EffectSlider(
                                 value = currentValues.reverb,
-                                onValueChange = { viewModel.updateReverb(it) },
+                                onValueChange = {
+                                    hasUnsavedChanges = true
+                                    viewModel.updateReverb(it)
+                                },
                                 label = "Reverb",
                                 displayValue = "${(currentValues.reverb * 100).toInt()}%",
                                 description = "Room echo effect",
@@ -469,7 +486,10 @@ LaunchedEffect(position, isDragging) {
                             )
                             EffectSlider(
                                 value = currentValues.delay,
-                                onValueChange = { viewModel.updateDelay(it) },
+                                onValueChange = {
+                                    hasUnsavedChanges = true
+                                    viewModel.updateDelay(it)
+                                },
                                 label = "Delay",
                                 displayValue = "${(currentValues.delay * 100).toInt()}%",
                                 description = "Echo repetition",
@@ -479,7 +499,10 @@ LaunchedEffect(position, isDragging) {
                         if (selectedEffectType == "all" || selectedEffectType == "bass") {
                             EffectSlider(
                                 value = currentValues.bass,
-                                onValueChange = { viewModel.updateBass(it) },
+                                onValueChange = {
+                                    hasUnsavedChanges = true
+                                    viewModel.updateBass(it)
+                                },
                                 label = "Bass Boost",
                                 displayValue = "${(currentValues.bass * 100).toInt()}%",
                                 description = "Low frequency boost",
@@ -489,7 +512,10 @@ LaunchedEffect(position, isDragging) {
                         if (selectedEffectType == "all" || selectedEffectType == "treble") {
                             EffectSlider(
                                 value = currentValues.trebleCut,
-                                onValueChange = { viewModel.updateTrebleCut(it) },
+                                onValueChange = {
+                                    hasUnsavedChanges = true
+                                    viewModel.updateTrebleCut(it)
+                                },
                                 label = "Treble Cut",
                                 displayValue = "${(currentValues.trebleCut * 100).toInt()}%",
                                 description = "High frequency filter",
@@ -546,7 +572,10 @@ LaunchedEffect(position, isDragging) {
                                     label = key.replaceFirstChar { it.uppercase() },
                                     icon = icon,
                                     volume = volume,
-                                    onVolumeChange = { viewModel.updateAtmosphere(key, it) },
+                                    onVolumeChange = {
+                                        hasUnsavedChanges = true
+                                        viewModel.updateAtmosphere(key, it)
+                                    },
                                     modifier = Modifier.weight(1f)
                                 )
                             }
@@ -612,6 +641,7 @@ LaunchedEffect(position, isDragging) {
                 }
 
                 Spacer(Modifier.height(16.dp))
+                } // End scrollable section
             }
 
             // Export overlay

@@ -305,14 +305,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun exportTrack(context: android.content.Context) {
         val track = _currentTrack.value ?: run {
-            _snackbarMessage.tryEmit("No track selected")
+            _snackbarMessage.tryEmit("No track selected - select a song first")
             return
         }
 
         // Check if we have either URI or file path
         val hasValidSource = track.uri != null || (track.dataPath.isNotBlank())
         if (!hasValidSource) {
-            _snackbarMessage.tryEmit("Export failed: Track source not found")
+            _snackbarMessage.tryEmit("Export failed: Track source not found - reload the song")
+            return
+        }
+
+        // Additional check: verify the source actually exists
+        if (track.dataPath.isNotBlank() && !java.io.File(track.dataPath).exists()) {
+            _snackbarMessage.tryEmit("Export failed: Audio file not found at path")
             return
         }
 
