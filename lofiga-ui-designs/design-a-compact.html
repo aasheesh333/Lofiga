@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Design A: Compact Vertical</title>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            --purple: #993DF5;
+            --purple-dim: rgba(157, 61, 245, 0.25);
+            --cyan: #3DF5E6;
+            --bg: #191022;
+            --surface: #231B2E;
+            --surface-high: #2D243A;
+            --text: #FFFFFF;
+            --text-dim: #888888;
+            --text-subtle: rgba(255,255,255,0.5);
+        }
+
+        body {
+            font-family: 'Space Grotesk', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            padding: 16px;
+        }
+
+        /* Top Bar */
+        .topbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 0;
+            margin-bottom: 16px;
+        }
+
+        .logo {
+            font-size: 1.3rem;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+        }
+        .logo span { color: var(--purple); }
+
+        .top-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .icon-btn {
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            background: var(--surface);
+            border: none;
+            color: var(--text-dim);
+            cursor: pointer;
+            font-size: 1rem;
+        }
+
+        /* Track Card - Inline */
+        .track-row {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 14px;
+            background: var(--surface);
+            border-radius: 14px;
+            margin-bottom: 14px;
+        }
+
+        .track-art {
+            width: 52px;
+            height: 52px;
+            border-radius: 10px;
+            background: linear-gradient(135deg, var(--purple-dim), transparent);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.4rem;
+        }
+
+        .track-info { flex: 1; }
+        .track-title { font-size: 1rem; font-weight: 600; margin-bottom: 2px; }
+        .track-meta { font-size: 0.75rem; color: var(--text-dim); }
+
+        .play-btn-small {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: var(--purple);
+            border: none;
+            color: white;
+            cursor: pointer;
+            font-size: 1rem;
+        }
+
+        /* Mini Waveform */
+        .mini-wave {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 2px;
+            height: 36px;
+            margin-bottom: 14px;
+        }
+
+        .wave-mini {
+            width: 3px;
+            background: linear-gradient(to top, var(--purple), var(--cyan));
+            border-radius: 2px;
+        }
+
+        /* Seek Bar */
+        .seek-bar {
+            margin-bottom: 16px;
+        }
+
+        .seek-track {
+            height: 6px;
+            background: var(--surface);
+            border-radius: 3px;
+            position: relative;
+            cursor: pointer;
+        }
+
+        .seek-fill {
+            width: 35%;
+            height: 100%;
+            background: linear-gradient(90deg, var(--purple), var(--cyan));
+            border-radius: 3px;
+        }
+
+        .seek-knob {
+            position: absolute;
+            right: -8px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 16px;
+            height: 16px;
+            background: white;
+            border-radius: 50%;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        }
+
+        .seek-time {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.7rem;
+            color: var(--text-subtle);
+            margin-top: 6px;
+        }
+
+        /* Control Bar */
+        .controls {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            background: var(--surface);
+            border-radius: 50px;
+            margin-bottom: 16px;
+        }
+
+        .ctrl-btn {
+            background: none;
+            border: none;
+            color: var(--text-dim);
+            cursor: pointer;
+            font-size: 1.2rem;
+            padding: 8px;
+            border-radius: 50%;
+            transition: all 0.2s;
+        }
+        .ctrl-btn:hover { color: white; }
+
+        .play-main {
+            width: 52px;
+            height: 52px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--purple), #7C2FD4);
+            border: none;
+            color: white;
+            font-size: 1.4rem;
+            cursor: pointer;
+            box-shadow: 0 4px 20px var(--purple-dim);
+        }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 14px;
+            overflow-x: auto;
+            padding-bottom: 4px;
+        }
+
+        .tab {
+            padding: 8px 16px;
+            border-radius: 20px;
+            background: var(--surface);
+            border: 1px solid transparent;
+            color: var(--text-dim);
+            font-size: 0.8rem;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.2s;
+        }
+        .tab.active {
+            background: var(--purple-dim);
+            border-color: var(--purple);
+            color: white;
+        }
+
+        /* Sliders Stack */
+        .sliders-stack {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+
+        .slider-row-compact {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 12px;
+            background: var(--surface);
+            border-radius: 12px;
+        }
+
+        .slider-icon {
+            width: 28px;
+            height: 28px;
+            border-radius: 8px;
+            background: var(--purple-dim);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8rem;
+        }
+
+        .slider-label {
+            font-size: 0.75rem;
+            color: var(--text-dim);
+            width: 50px;
+        }
+
+        .slider-track {
+            flex: 1;
+            height: 4px;
+            background: var(--surface-high);
+            border-radius: 2px;
+            position: relative;
+        }
+
+        .slider-fill {
+            height: 100%;
+            background: var(--purple);
+            border-radius: 2px;
+        }
+
+        .slider-val {
+            font-size: 0.7rem;
+            font-weight: 600;
+            color: var(--cyan);
+            width: 40px;
+            text-align: right;
+        }
+
+        /* Atmosphere Pills */
+        .atmos-row {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+
+        .atmos-pill {
+            flex: 1;
+            padding: 12px 8px;
+            background: var(--surface);
+            border-radius: 12px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 1px solid transparent;
+        }
+        .atmos-pill.active {
+            background: var(--purple-dim);
+            border-color: var(--purple);
+        }
+        .atmos-pill .icon { font-size: 1.2rem; display: block; margin-bottom: 4px; }
+        .atmos-pill .label { font-size: 0.65rem; color: var(--text-dim); }
+        .atmos-pill.active .label { color: white; }
+
+        /* Export */
+        .export-btn {
+            width: 100%;
+            padding: 16px;
+            background: linear-gradient(135deg, var(--purple), #7C2FD4);
+            border: none;
+            border-radius: 14px;
+            color: white;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Top Bar -->
+    <div class="topbar">
+        <div class="logo">Lofiga<span>.</span></div>
+        <div class="top-actions">
+            <button class="icon-btn">⚙</button>
+            <button class="icon-btn">☰</button>
+        </div>
+    </div>
+
+    <!-- Track Row -->
+    <div class="track-row">
+        <div class="track-art">🎵</div>
+        <div class="track-info">
+            <div class="track-title">Midnight Drive</div>
+            <div class="track-meta">LoFi Collective • 3:42</div>
+        </div>
+        <button class="play-btn-small">▶</button>
+    </div>
+
+    <!-- Wave -->
+    <div class="mini-wave" id="wave"></div>
+
+    <!-- Seek -->
+    <div class="seek-bar">
+        <div class="seek-track">
+            <div class="seek-fill"></div>
+            <div class="seek-knob"></div>
+        </div>
+        <div class="seek-time">
+            <span>1:18</span>
+            <span>3:42</span>
+        </div>
+    </div>
+
+    <!-- Controls -->
+    <div class="controls">
+        <button class="ctrl-btn">↺</button>
+        <button class="ctrl-btn">⏮</button>
+        <button class="play-main">▶</button>
+        <button class="ctrl-btn">⏭</button>
+        <button class="ctrl-btn">∞</button>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs">
+        <div class="tab active">Presets</div>
+        <div class="tab">Effects</div>
+        <div class="tab">Atmosphere</div>
+        <div class="tab">Export</div>
+    </div>
+
+    <!-- Sliders -->
+    <div class="sliders-stack">
+        <div class="slider-row-compact">
+            <div class="slider-icon">⚡</div>
+            <span class="slider-label">Tempo</span>
+            <div class="slider-track"><div class="slider-fill" style="width:75%"></div></div>
+            <span class="slider-val">85%</span>
+        </div>
+        <div class="slider-row-compact">
+            <div class="slider-icon">🎚</div>
+            <span class="slider-label">Pitch</span>
+            <div class="slider-track"><div class="slider-fill" style="width:40%"></div></div>
+            <span class="slider-val">-2.0</span>
+        </div>
+        <div class="slider-row-compact">
+            <div class="slider-icon">🌊</div>
+            <span class="slider-label">Reverb</span>
+            <div class="slider-track"><div class="slider-fill" style="width:50%"></div></div>
+            <span class="slider-val">50%</span>
+        </div>
+        <div class="slider-row-compact">
+            <div class="slider-icon">📢</div>
+            <span class="slider-label">Delay</span>
+            <div class="slider-track"><div class="slider-fill" style="width:30%"></div></div>
+            <span class="slider-val">30%</span>
+        </div>
+        <div class="slider-row-compact">
+            <div class="slider-icon">🔊</div>
+            <span class="slider-label">Bass</span>
+            <div class="slider-track"><div class="slider-fill" style="width:45%"></div></div>
+            <span class="slider-val">45%</span>
+        </div>
+    </div>
+
+    <!-- Atmosphere -->
+    <div class="atmos-row">
+        <div class="atmos-pill active"><span class="icon">🌧</span><span class="label">Rain</span></div>
+        <div class="atmos-pill"><span class="icon">💿</span><span class="label">Vinyl</span></div>
+        <div class="atmos-pill"><span class="icon">💨</span><span class="label">Wind</span></div>
+        <div class="atmos-pill"><span class="icon">📼</span><span class="label">Tape</span></div>
+    </div>
+
+    <!-- Export -->
+    <button class="export-btn">📥 Export Lofi Mix</button>
+
+    <script>
+        // Generate mini waveform
+        const wave = document.getElementById('wave');
+        for(let i=0; i<35; i++) {
+            const bar = document.createElement('div');
+            bar.className = 'wave-mini';
+            bar.style.height = (Math.random() * 24 + 8) + 'px';
+            wave.appendChild(bar);
+        }
+
+        // Tabs
+        document.querySelectorAll('.tab').forEach(t => {
+            t.addEventListener('click', () => {
+                document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+                t.classList.add('active');
+            });
+        });
+
+        // Atmosphere
+        document.querySelectorAll('.atmos-pill').forEach(p => {
+            p.addEventListener('click', () => p.classList.toggle('active'));
+        });
+    </script>
+</body>
+</html>

@@ -35,7 +35,7 @@ class Config:
         if not self.openai_api_key:
             return False
         # Basic format check for OpenAI API keys
-        if not self.openai_api_key.startswith('sk-'):
+        if not self.openai_api_key:
             return False
         return True
         

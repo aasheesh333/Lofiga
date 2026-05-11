@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Design D: Bottom Sheet</title>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            --purple: #993DF5;
+            --purple-light: #B060F7;
+            --cyan: #3DF5E6;
+            --bg: #191022;
+            --bg-grad: linear-gradient(180deg, #191022 0%, #0a0a0f 100%);
+            --sheet: #1E1828;
+            --sheet-hover: #252030;
+            --text: #FFFFFF;
+            --text-dim: #777;
+            --text-subtle: rgba(255,255,255,0.5);
+        }
+
+        body {
+            font-family: 'Manrope', sans-serif;
+            background: var(--bg-grad);
+            color: var(--text);
+            min-height: 100vh;
+            padding-bottom: 200px;
+        }
+
+        /* Top Area - Content */
+        .content-area {
+            padding: 20px;
+            padding-bottom: 40px;
+        }
+
+        /* Header */
+        .top-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+        }
+
+        .brand {
+            font-size: 1.4rem;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+        }
+        .brand span { color: var(--purple); }
+
+        .top-btns { display: flex; gap: 10px; }
+        .top-btn {
+            width: 38px;
+            height: 38px;
+            border-radius: 12px;
+            background: var(--sheet);
+            border: none;
+            color: var(--text-dim);
+            cursor: pointer;
+        }
+
+        /* Hero Art */
+        .hero-art {
+            width: 100%;
+            aspect-ratio: 1;
+            max-width: 280px;
+            margin: 0 auto 24px;
+            border-radius: 24px;
+            background: linear-gradient(145deg, var(--purple), #5b21b6);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 4rem;
+            box-shadow:
+                0 20px 60px rgba(157, 61, 245, 0.3),
+                inset 0 -20px 40px rgba(0,0,0,0.2);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .hero-art::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(255,255,255,0.1), transparent 50%);
+            animation: shimmer 3s infinite;
+        }
+
+        @keyframes shimmer {
+            0% { transform: translate(-30%, -30%); }
+            100% { transform: 30%, 30%); }
+        }
+
+        /* Track Details */
+        .track-details {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .track-title-hero {
+            font-size: 1.4rem;
+            font-weight: 700;
+            margin-bottom: 6px;
+        }
+
+        .track-artist-hero {
+            color: var(--text-dim);
+            font-size: 0.9rem;
+        }
+
+        /* Mini Waveform */
+        .wave-mini {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 2px;
+            height: 32px;
+            margin-bottom: 16px;
+        }
+
+        .wave-m {
+            width: 3px;
+            background: var(--purple);
+            border-radius: 2px;
+        }
+
+        /* Tabs Scroll */
+        .tabs-scroll {
+            display: flex;
+            gap: 8px;
+            overflow-x: auto;
+            padding: 4px 0;
+            margin-bottom: 16px;
+            scrollbar-width: none;
+        }
+        .tabs-scroll::-webkit-scrollbar { display: none; }
+
+        .tab-pill {
+            padding: 8px 18px;
+            border-radius: 20px;
+            background: var(--sheet);
+            border: none;
+            color: var(--text-dim);
+            font-size: 0.85rem;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .tab-pill.active {
+            background: var(--purple);
+            color: white;
+        }
+
+        /* Effect Sliders Mini */
+        .effect-mini {
+            margin-bottom: 12px;
+        }
+
+        .effect-row-mini {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 14px;
+            background: var(--sheet);
+            border-radius: 12px;
+        }
+
+        .effect-icon-mini {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            background: linear-gradient(135deg, var(--purple-light), var(--purple));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.9rem;
+        }
+
+        .effect-name-mini {
+            flex: 1;
+            font-size: 0.85rem;
+        }
+
+        .effect-value-mini {
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: var(--cyan);
+            min-width: 45px;
+            text-align: right;
+        }
+
+        /* Bottom Sheet Fixed */
+        .bottom-sheet {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: var(--sheet);
+            border-radius: 28px 28px 0 0;
+            padding: 20px 24px 32px;
+            box-shadow: 0 -10px 50px rgba(0,0,0,0.5);
+        }
+
+        .sheet-handle {
+            width: 40px;
+            height: 4px;
+            background: var(--text-subtle);
+            border-radius: 2px;
+            margin: 0 auto 16px;
+        }
+
+        /* Sheet: Seek */
+        .sheet-seek {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+
+        .sheet-time {
+            font-size: 0.7rem;
+            color: var(--text-subtle);
+            min-width: 35px;
+        }
+
+        .sheet-bar {
+            flex: 1;
+            height: 6px;
+            background: #333;
+            border-radius: 3px;
+            position: relative;
+        }
+
+        .sheet-fill {
+            width: 38%;
+            height: 100%;
+            background: linear-gradient(90deg, var(--purple), var(--cyan));
+            border-radius: 3px;
+        }
+
+        .sheet-knob {
+            position: absolute;
+            right: -8px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 16px;
+            height: 16px;
+            background: white;
+            border-radius: 50%;
+        }
+
+        /* Sheet: Controls */
+        .sheet-controls {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+
+        .sheet-btn {
+            background: none;
+            border: none;
+            color: var(--text-dim);
+            cursor: pointer;
+            font-size: 1.3rem;
+            padding: 10px;
+            transition: all 0.2s;
+        }
+        .sheet-btn:hover { color: white; }
+        .sheet-btn-lg {
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            background: var(--purple);
+            color: white;
+            font-size: 1.6rem;
+            box-shadow: 0 4px 20px rgba(157,61,245,0.4);
+        }
+        .sheet-btn-lg:hover { transform: scale(1.05); }
+
+        /* Sheet: Atmosphere */
+        .sheet-atmos {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+
+        .atmos-btn-fixed {
+            flex: 1;
+            padding: 12px;
+            background: var(--bg);
+            border: 2px solid transparent;
+            border-radius: 14px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .atmos-btn-fixed.active {
+            border-color: var(--purple);
+            background: rgba(157,61,245,0.15);
+        }
+        .atmos-btn-fixed span { font-size: 1.4rem; display: block; margin-bottom: 4px; }
+        .atmos-btn-fixed small { font-size: 0.65rem; color: var(--text-dim); }
+        .atmos-btn-fixed.active small { color: var(--cyan); }
+
+        /* Sheet: Export */
+        .sheet-export {
+            width: 100%;
+            padding: 16px;
+            background: linear-gradient(135deg, var(--purple), var(--cyan));
+            border: none;
+            border-radius: 16px;
+            color: white;
+            font-size: 1rem;
+            font-weight: 700;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Content Area -->
+    <div class="content-area">
+        <header class="top-header">
+            <div class="brand">Lofiga<span>.</span></div>
+            <div class="top-btns">
+                <button class="top-btn">⚙</button>
+                <button class="top-btn">📁</button>
+            </div>
+        </header>
+
+        <!-- Hero Art -->
+        <div class="hero-art">🎵</div>
+
+        <!-- Track -->
+        <div class="track-details">
+            <div class="track-title-hero">Cosmic Dreams</div>
+            <div class="track-artist-hero">Ambient Waves</div>
+        </div>
+
+        <!-- Wave -->
+        <div class="wave-mini" id="wave"></div>
+
+        <!-- Tabs -->
+        <div class="tabs-scroll">
+            <button class="tab-pill active">Effects</button>
+            <button class="tab-pill">Presets</button>
+            <button class="tab-pill">Atmosphere</button>
+            <button class="tab-pill">EQ</button>
+        </div>
+
+        <!-- Effect Sliders -->
+        <div class="effect-mini">
+            <div class="effect-row-mini">
+                <div class="effect-icon-mini">⚡</div>
+                <span class="effect-name-mini">Tempo</span>
+                <span class="effect-value-mini">85%</span>
+            </div>
+        </div>
+        <div class="effect-mini">
+            <div class="effect-row-mini">
+                <div class="effect-icon-mini">🎚</div>
+                <span class="effect-name-mini">Pitch</span>
+                <span class="effect-value-mini">-2.0</span>
+            </div>
+        </div>
+        <div class="effect-mini">
+            <div class="effect-row-mini">
+                <div class="effect-icon-mini">🌊</div>
+                <span class="effect-name-mini">Reverb</span>
+                <span class="effect-value-mini">45%</span>
+            </div>
+        </div>
+        <div class="effect-mini">
+            <div class="effect-row-mini">
+                <div class="effect-icon-mini">📢</div>
+                <span class="effect-name-mini">Delay</span>
+                <span class="effect-value-mini">25%</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bottom Sheet -->
+    <div class="bottom-sheet">
+        <div class="sheet-handle"></div>
+
+        <!-- Seek -->
+        <div class="sheet-seek">
+            <span class="sheet-time">1:32</span>
+            <div class="sheet-bar">
+                <div class="sheet-fill"></div>
+                <div class="sheet-knob"></div>
+            </div>
+            <span class="sheet-time">4:05</span>
+        </div>
+
+        <!-- Controls -->
+        <div class="sheet-controls">
+            <button class="sheet-btn">↺</button>
+            <button class="sheet-btn">⏮</button>
+            <button class="sheet-btn sheet-btn-lg" id="playBtn">▶</button>
+            <button class="sheet-btn">⏭</button>
+            <button class="sheet-btn">∞</button>
+        </div>
+
+        <!-- Atmosphere -->
+        <div class="sheet-atmos">
+            <div class="atmos-btn-fixed active"><span>🌧</span><small>Rain</small></div>
+            <div class="atmos-btn-fixed"><span>💿</span><small>Vinyl</small></div>
+            <div class="atmos-btn-fixed"><span>💨</span><small>Wind</small></div>
+            <div class="atmos-btn-fixed"><span>📼</span><small>Tape</small></div>
+        </div>
+
+        <!-- Export -->
+        <button class="sheet-export">📥 Export Mix</button>
+    </div>
+
+    <script>
+        // Wave
+        const wave = document.getElementById('wave');
+        for(let i=0; i<50; i++) {
+            const bar = document.createElement('div');
+            bar.className = 'wave-m';
+            bar.style.height = (Math.random() * 20 + 8) + 'px';
+            wave.appendChild(bar);
+        }
+
+        // Play
+        document.getElementById('playBtn').addEventListener('click', function() {
+            this.textContent = this.textContent === '▶' ? '⏸' : '▶';
+        });
+
+        // Tabs
+        document.querySelectorAll('.tab-pill').forEach(t => {
+            t.addEventListener('click', () => {
+                document.querySelectorAll('.tab-pill').forEach(x => x.classList.remove('active'));
+                t.classList.add('active');
+            });
+        });
+
+        // Atmosphere
+        document.querySelectorAll('.atmos-btn-fixed').forEach(a => {
+            a.addEventListener('click', () => a.classList.toggle('active'));
+        });
+    </script>
+</body>
+</html>

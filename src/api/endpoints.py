@@ -14,6 +14,7 @@ from src.conversion.response_converter import (
     convert_openai_streaming_to_claude_with_cancellation,
 )
 from src.core.model_manager import model_manager
+from src.core.session import save_session
 
 router = APIRouter()
 
@@ -110,6 +111,19 @@ async def create_message(request: ClaudeMessagesRequest, http_request: Request, 
             claude_response = convert_openai_to_claude_response(
                 openai_response, request
             )
+            # Session save
+            try:
+                sid = http_request.headers.get("x-session-id","default")
+                model_used = openai_request.get("model","")
+                for msg in request.messages:
+                    txt = msg.content if isinstance(msg.content,str) else str(msg.content)
+                    save_session(sid, msg.role, txt, model_used)
+                if hasattr(claude_response,"content"):
+                    for blk in claude_response.content:
+                        if hasattr(blk,"text"):
+                            save_session(sid,"assistant",blk.text,model_used)
+            except Exception:
+                pass
             return claude_response
     except HTTPException:
         raise
