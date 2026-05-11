@@ -121,7 +121,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         )
         audioEngine.loadTrackFromFile(filePath)
         applyPreset(LofiPreset.LofiSlow)
-        audioEngine.play()
+
+        // Try to play, show error if fails
+        try {
+            audioEngine.play()
+        } catch (e: Exception) {
+            _snackbarMessage.tryEmit("Playback error: ${e.message}")
+        }
     }
 
     fun nextTrack() {
@@ -299,11 +305,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun exportTrack(context: android.content.Context) {
         val track = _currentTrack.value ?: run {
-            _snackbarMessage.tryEmit("No track not selected")
+            _snackbarMessage.tryEmit("No track selected")
             return
         }
 
-        if (track.uri == null && track.dataPath.isNullOrBlank()) {
+        // Check if we have either URI or file path
+        val hasValidSource = track.uri != null || (track.dataPath.isNotBlank())
+        if (!hasValidSource) {
             _snackbarMessage.tryEmit("Export failed: Track source not found")
             return
         }
@@ -313,10 +321,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _exportProgress.value = 0f
             try {
                 val settings = settingsManager.settingsFlow.first()
+                val inputPath = if (track.dataPath.isNotBlank()) track.dataPath else null
                 val result = com.dhanuk.lofiga.export.ExportService.exportTrack(
                     context = context,
                     inputUri = track.uri ?: Uri.EMPTY,
-                    inputPath = track.dataPath.ifEmpty { null },
+                    inputPath = inputPath,
                     fileName = track.title,
                     preset = _currentValues.value,
                     format = settings.audioFormat,

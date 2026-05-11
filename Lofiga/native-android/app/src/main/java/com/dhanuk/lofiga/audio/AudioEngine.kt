@@ -207,27 +207,48 @@ class AudioEngine(private val context: Context) {
 
     fun play() {
         mainPlayer?.let { player ->
-            if (!player.isPlaying) {
-                player.start()
-                _isPlaying.value = true
-                startPositionPolling()
-                syncAtmospheres()
+            try {
+                if (!player.isPlaying) {
+                    // Check if player is prepared
+                    if (player.duration <= 0) {
+                        _error.value = "Track not ready - please wait"
+                        return
+                    }
+                    player.start()
+                    _isPlaying.value = true
+                    startPositionPolling()
+                    syncAtmospheres()
+                }
+            } catch (e: IllegalStateException) {
+                _error.value = "Playback error: ${e.message}"
+                e.printStackTrace()
             }
+        } ?: run {
+            _error.value = "No track loaded"
         }
     }
 
     fun pause() {
         mainPlayer?.let {
-            if (it.isPlaying) {
-                it.pause()
-                _isPlaying.value = false
-                pauseAtmospheres()
+            try {
+                if (it.isPlaying) {
+                    it.pause()
+                    _isPlaying.value = false
+                    pauseAtmospheres()
+                }
+            } catch (e: IllegalStateException) {
+                _error.value = "Pause error: ${e.message}"
+                e.printStackTrace()
             }
         }
     }
 
     fun togglePlayPause() {
-        if (_isPlaying.value) pause() else play()
+        if (_isPlaying.value) {
+            pause()
+        } else {
+            play()
+        }
     }
 
     fun seekTo(millis: Long) {

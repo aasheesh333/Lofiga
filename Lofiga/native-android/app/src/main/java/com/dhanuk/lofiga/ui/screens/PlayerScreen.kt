@@ -4,8 +4,6 @@ import androidx.compose.animation.*
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -23,7 +21,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import com.dhanuk.lofiga.model.CustomPreset
@@ -47,6 +44,7 @@ fun PlayerScreen(
     val isExporting by viewModel.isExporting.collectAsState()
     val customPresets by viewModel.customPresets.collectAsState()
     val waveformData by viewModel.audioEngine.waveformData.collectAsState()
+    val audioError by viewModel.audioEngine.error.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
 
     var showSavePresetDialog by remember { mutableStateOf(false) }
@@ -54,9 +52,31 @@ fun PlayerScreen(
     var showEffects by remember { mutableStateOf(true) }
     var showAtmosphere by remember { mutableStateOf(false) }
     var showExportInfo by remember { mutableStateOf(false) }
+    var showSavePresetPrompt by remember { mutableStateOf(false) }
+
+    // Selected effect type for menu: "all", "bass", "treble"
+    var selectedEffectType by remember { mutableStateOf("all") }
+
+    // Track if user has made changes from preset
+    var hasUnsavedChanges by remember { mutableStateOf(false) }
+
+    // Show prompt when preset changes to Custom (user modified values)
+    LaunchedEffect(currentPreset) {
+        if (currentPreset == LofiPreset.Custom && hasUnsavedChanges) {
+            showSavePresetPrompt = true
+        }
+    }
 
     LaunchedEffect(viewModel) {
         viewModel.snackbarMessage.collect { snackbarHostState.showSnackbar(it) }
+    }
+
+    // Show audio errors in snackbar
+    LaunchedEffect(audioError) {
+        audioError?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.audioEngine.clearError()
+        }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -176,13 +196,18 @@ fun PlayerScreen(
                             containerColor = DarkSurface
                         ) {
                             DropdownMenuItem(
+                                text = { Text("All Effects", color = Color.White) },
+                                onClick = { showEffects = true; selectedEffectType = "all"; showEffectsMenu = false },
+                                leadingIcon = { Icon(Icons.Outlined.Tune, contentDescription = null, tint = White60) }
+                            )
+                            DropdownMenuItem(
                                 text = { Text("Bass Boost", color = Color.White) },
-                                onClick = { showEffects = true; showEffectsMenu = false },
+                                onClick = { showEffects = true; selectedEffectType = "bass"; showEffectsMenu = false },
                                 leadingIcon = { Icon(Icons.Outlined.Equalizer, contentDescription = null, tint = White60) }
                             )
                             DropdownMenuItem(
                                 text = { Text("Treble Cut", color = Color.White) },
-                                onClick = { showEffects = true; showEffectsMenu = false },
+                                onClick = { showEffects = true; selectedEffectType = "treble"; showEffectsMenu = false },
                                 leadingIcon = { Icon(Icons.Outlined.GraphicEq, contentDescription = null, tint = White60) }
                             )
                             DropdownMenuItem(
@@ -313,6 +338,23 @@ LaunchedEffect(position, isDragging) {
                             Icon(Icons.Outlined.AutoAwesome, contentDescription = null, tint = Purple400, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(6.dp))
                             SectionHeader("PRESETS")
+                            // Show save prompt when custom values are set
+                            if (currentPreset == LofiPreset.Custom && customPresets.isEmpty()) {
+                                Spacer(Modifier.width(8.dp))
+                                AssistChip(
+                                    onClick = { showSavePresetDialog = true },
+                                    label = { Text("Save", style = MaterialTheme.typography.labelSmall) },
+                                    leadingIcon = { Icon(Icons.Outlined.BookmarkAdd, contentDescription = null, modifier = Modifier.size(14.dp)) },
+                                    colors = AssistChipDefaults.assistChipColors(
+                                        containerColor = Cyan400.copy(alpha = 0.15f),
+                                        labelColor = Cyan400,
+                                        leadingIconContentColor = Cyan400
+                                    ),
+                                    border = AssistChipDefaults.assistChipBorder(
+                                        borderColor = Cyan400.copy(alpha = 0.3f)
+                                    )
+                                )
+                            }
                         }
                         TextButton(onClick = { showAllPresets = !showAllPresets }) {
                             Text(
@@ -322,32 +364,34 @@ LaunchedEffect(position, isDragging) {
                             )
                         }
                     }
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        val presetsToShow = if (showAllPresets) LofiPreset.entries.toList()
-                        else LofiPreset.entries.take(4)
+                    // Static Row (no scrolling) - show all presets
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        val presetsToShow = if (showAllPresets) LofiPreset.entries.filter { it != LofiPreset.Custom }
+                        else LofiPreset.entries.filter { it != LofiPreset.Custom }.take(4)
 
-                        items(presetsToShow) { preset ->
-                            if (preset != LofiPreset.Custom) {
-                                FilterChip(
-                                    selected = currentPreset == preset,
-                                    onClick = { viewModel.applyPreset(preset) },
-                                    label = { Text(preset.displayName, fontSize = MaterialTheme.typography.labelSmall.fontSize) },
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = Purple500.copy(alpha = 0.2f),
-                                        containerColor = DarkSurfaceHighlight,
-                                        selectedLabelColor = Purple400,
-                                        labelColor = White60
-                                    ),
-                                    border = FilterChipDefaults.filterChipBorder(
-                                        borderColor = White12,
-                                        selectedBorderColor = Purple500.copy(alpha = 0.5f),
-                                        enabled = true,
-                                        selected = currentPreset == preset
-                                    )
+                        presetsToShow.forEach { preset ->
+                            FilterChip(
+                                selected = currentPreset == preset,
+                                onClick = { viewModel.applyPreset(preset) },
+                                label = { Text(preset.displayName, fontSize = MaterialTheme.typography.labelSmall.fontSize) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = Purple500.copy(alpha = 0.2f),
+                                    containerColor = DarkSurfaceHighlight,
+                                    selectedLabelColor = Purple400,
+                                    labelColor = White60
+                                ),
+                                border = FilterChipDefaults.filterChipBorder(
+                                    borderColor = White12,
+                                    selectedBorderColor = Purple500.copy(alpha = 0.5f),
+                                    enabled = true,
+                                    selected = currentPreset == preset
                                 )
-                            }
+                            )
                         }
-                        items(customPresets) { preset ->
+                        customPresets.forEach { preset ->
                             FilterChip(
                                 selected = currentPreset == LofiPreset.Custom,
                                 onClick = { viewModel.applyCustomPreset(preset) },
@@ -377,7 +421,12 @@ LaunchedEffect(position, isDragging) {
                     ) {
                         Icon(Icons.Outlined.Tune, contentDescription = null, tint = Purple400, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
-                        SectionHeader("EFFECTS", modifier = Modifier.weight(1f))
+                        val effectTitle = when (selectedEffectType) {
+                            "bass" -> "BASS BOOST"
+                            "treble" -> "TREBLE CUT"
+                            else -> "EFFECTS"
+                        }
+                        SectionHeader(effectTitle, modifier = Modifier.weight(1f))
                         Icon(
                             if (showEffects) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
                             contentDescription = null,
@@ -388,56 +437,65 @@ LaunchedEffect(position, isDragging) {
                 }
                 if (showEffects) {
                     Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                        EffectSlider(
-                            value = currentValues.tempo,
-                            onValueChange = { viewModel.updateTempo(it) },
-                            label = "Tempo",
-                            displayValue = "${(currentValues.tempo * 100).toInt()}%",
-                            description = "Playback speed",
-                            icon = { Icon(Icons.Outlined.Speed, contentDescription = null, tint = Purple400, modifier = Modifier.size(20.dp)) }
-                        )
-                        val semitones = currentValues.pitch
-                        val pitchLabel = if (semitones >= 0) "+${"%.1f".format(semitones)} st" else "${"%.1f".format(semitones)} st"
-                        EffectSlider(
-                            value = (currentValues.pitch + 5f) / 10f,
-                            onValueChange = { viewModel.updatePitch(it * 10f - 5f) },
-                            label = "Pitch",
-                            displayValue = pitchLabel,
-                            description = "Shift pitch (semitones)",
-                            icon = { Icon(Icons.Outlined.Tune, contentDescription = null, tint = Purple400, modifier = Modifier.size(20.dp)) }
-                        )
-                        EffectSlider(
-                            value = currentValues.reverb,
-                            onValueChange = { viewModel.updateReverb(it) },
-                            label = "Reverb",
-                            displayValue = "${(currentValues.reverb * 100).toInt()}%",
-                            description = "Room echo effect",
-                            icon = { Icon(Icons.Outlined.Forward30, contentDescription = null, tint = Purple400, modifier = Modifier.size(20.dp)) }
-                        )
-                        EffectSlider(
-                            value = currentValues.delay,
-                            onValueChange = { viewModel.updateDelay(it) },
-                            label = "Delay",
-                            displayValue = "${(currentValues.delay * 100).toInt()}%",
-                            description = "Echo repetition",
-                            icon = { Icon(Icons.Outlined.Timeline, contentDescription = null, tint = Purple400, modifier = Modifier.size(20.dp)) }
-                        )
-                        EffectSlider(
-                            value = currentValues.bass,
-                            onValueChange = { viewModel.updateBass(it) },
-                            label = "Bass Boost",
-                            displayValue = "${(currentValues.bass * 100).toInt()}%",
-                            description = "Low frequency boost",
-                            icon = { Icon(Icons.Outlined.Equalizer, contentDescription = null, tint = Purple400, modifier = Modifier.size(20.dp)) }
-                        )
-                        EffectSlider(
-                            value = currentValues.trebleCut,
-                            onValueChange = { viewModel.updateTrebleCut(it) },
-                            label = "Treble Cut",
-                            displayValue = "${(currentValues.trebleCut * 100).toInt()}%",
-                            description = "High frequency filter",
-                            icon = { Icon(Icons.Outlined.GraphicEq, contentDescription = null, tint = Purple400, modifier = Modifier.size(20.dp)) }
-                        )
+                        // Show all effects or specific effect based on selection
+                        if (selectedEffectType == "all" || selectedEffectType == "tempo") {
+                            EffectSlider(
+                                value = currentValues.tempo,
+                                onValueChange = { viewModel.updateTempo(it) },
+                                label = "Tempo",
+                                displayValue = "${(currentValues.tempo * 100).toInt()}%",
+                                description = "Playback speed",
+                                icon = { Icon(Icons.Outlined.Speed, contentDescription = null, tint = Purple400, modifier = Modifier.size(20.dp)) }
+                            )
+                        }
+                        if (selectedEffectType == "all") {
+                            val semitones = currentValues.pitch
+                            val pitchLabel = if (semitones >= 0) "+${"%.1f".format(semitones)} st" else "${"%.1f".format(semitones)} st"
+                            EffectSlider(
+                                value = (currentValues.pitch + 5f) / 10f,
+                                onValueChange = { viewModel.updatePitch(it * 10f - 5f) },
+                                label = "Pitch",
+                                displayValue = pitchLabel,
+                                description = "Shift pitch (semitones)",
+                                icon = { Icon(Icons.Outlined.Tune, contentDescription = null, tint = Purple400, modifier = Modifier.size(20.dp)) }
+                            )
+                            EffectSlider(
+                                value = currentValues.reverb,
+                                onValueChange = { viewModel.updateReverb(it) },
+                                label = "Reverb",
+                                displayValue = "${(currentValues.reverb * 100).toInt()}%",
+                                description = "Room echo effect",
+                                icon = { Icon(Icons.Outlined.Forward30, contentDescription = null, tint = Purple400, modifier = Modifier.size(20.dp)) }
+                            )
+                            EffectSlider(
+                                value = currentValues.delay,
+                                onValueChange = { viewModel.updateDelay(it) },
+                                label = "Delay",
+                                displayValue = "${(currentValues.delay * 100).toInt()}%",
+                                description = "Echo repetition",
+                                icon = { Icon(Icons.Outlined.Timeline, contentDescription = null, tint = Purple400, modifier = Modifier.size(20.dp)) }
+                            )
+                        }
+                        if (selectedEffectType == "all" || selectedEffectType == "bass") {
+                            EffectSlider(
+                                value = currentValues.bass,
+                                onValueChange = { viewModel.updateBass(it) },
+                                label = "Bass Boost",
+                                displayValue = "${(currentValues.bass * 100).toInt()}%",
+                                description = "Low frequency boost",
+                                icon = { Icon(Icons.Outlined.Equalizer, contentDescription = null, tint = Purple400, modifier = Modifier.size(20.dp)) }
+                            )
+                        }
+                        if (selectedEffectType == "all" || selectedEffectType == "treble") {
+                            EffectSlider(
+                                value = currentValues.trebleCut,
+                                onValueChange = { viewModel.updateTrebleCut(it) },
+                                label = "Treble Cut",
+                                displayValue = "${(currentValues.trebleCut * 100).toInt()}%",
+                                description = "High frequency filter",
+                                icon = { Icon(Icons.Outlined.GraphicEq, contentDescription = null, tint = Purple400, modifier = Modifier.size(20.dp)) }
+                            )
+                        }
                     }
                 }
 
@@ -622,6 +680,12 @@ LaunchedEffect(position, isDragging) {
             )
         }
     }
+
+    // SnackbarHost at root level
+    SnackbarHost(
+        hostState = snackbarHostState,
+        modifier = Modifier.align(Alignment.BottomCenter)
+    )
 }
 
 @Composable
@@ -673,8 +737,6 @@ private fun AtmosphereControl(
             )
         }
     }
-
-    SnackbarHost(hostState = snackbarHostState)
 
 private fun formatDuration(millis: Long): String {
     val totalSec = millis / 1000
