@@ -228,13 +228,10 @@ class AudioEngine(private val context: Context) {
                 }
                 player.start()
                 _isPlaying.value = true
-                // Re-init visualizer on play start to ensure it captures data
-                // Some devices drop the visualizer when player stops
-                if (visualizer == null || !visualizer!!.enabled) {
-                    try {
-                        initVisualizer(player.audioSessionId)
-                    } catch (_: Exception) {}
-                }
+                // Always re-init visualizer on play to ensure real-time waveform capture
+                try {
+                    initVisualizer(player.audioSessionId)
+                } catch (_: Exception) {}
                 startPositionPolling()
                 syncAtmospheres()
             }
@@ -279,12 +276,10 @@ class AudioEngine(private val context: Context) {
                 }
                 player.start()
                 _isPlaying.value = true
-                // Re-init visualizer on play start
-                if (visualizer == null || !visualizer!!.enabled) {
-                    try {
-                        initVisualizer(player.audioSessionId)
-                    } catch (_: Exception) {}
-                }
+                // Always re-init visualizer on play toggle for real-time waveform capture
+                try {
+                    initVisualizer(player.audioSessionId)
+                } catch (_: Exception) {}
                 startPositionPolling()
                 syncAtmospheres()
             }
@@ -414,7 +409,8 @@ class AudioEngine(private val context: Context) {
                     val bands = eq.numberOfBands
                     for (i in 0 until bands) {
                         val freq = eq.getCenterFreq(i.toShort())
-                        if (freq > 2000) {
+                        // getCenterFreq() returns millihertz (mHz), so 2000 Hz = 2000000 mHz
+                    if (freq > 2_000_000) {
                             val gain = (-(cutoffFactor * 15f)).toInt().coerceIn(-1500, 0).toShort()
                             eq.setBandLevel(i.toShort(), gain)
                         } else {
@@ -445,14 +441,16 @@ class AudioEngine(private val context: Context) {
     fun setReverbAndDelay(reverbWet: Float, delayWet: Float) {
         reverb?.let { r ->
             try {
-                val combined = (reverbWet + delayWet * 0.4f).coerceIn(0f, 1f)
+                // Delay contributes more significantly for a noticeable echo-like effect.
+                // Combined value drives the PresetReverb preset selection.
+                val combined = (reverbWet + delayWet * 0.7f).coerceIn(0f, 1f)
                 r.enabled = combined > 0.01f
                 if (combined > 0.01f) {
                     r.preset = when {
-                        combined < 0.15f -> PresetReverb.PRESET_NONE
-                        combined < 0.3f -> PresetReverb.PRESET_SMALLROOM
-                        combined < 0.5f -> PresetReverb.PRESET_MEDIUMROOM
-                        combined < 0.75f -> PresetReverb.PRESET_LARGEHALL
+                        combined < 0.08f -> PresetReverb.PRESET_NONE
+                        combined < 0.20f -> PresetReverb.PRESET_SMALLROOM
+                        combined < 0.40f -> PresetReverb.PRESET_MEDIUMROOM
+                        combined < 0.65f -> PresetReverb.PRESET_LARGEHALL
                         else -> PresetReverb.PRESET_PLATE
                     }
                 }
@@ -466,9 +464,11 @@ class AudioEngine(private val context: Context) {
         try {
             releaseVisualizer()
             val maxCapture = android.media.audiofx.Visualizer.getCaptureSizeRange()
-            val captureSize = maxCapture[1].coerceAtMost(512) // Use 512 for better performance
+            val captureSize = maxCapture[1].coerceAtMost(1024) // Higher resolution for detailed waveform
             val v = android.media.audiofx.Visualizer(audioSessionId)
             v.captureSize = captureSize
+            // Use max capture rate for responsive real-time visualization
+            val captureRate = android.media.audiofx.Visualizer.getMaxCaptureRate()
             v.setDataCaptureListener(
                 object : android.media.audiofx.Visualizer.OnDataCaptureListener {
                     override fun onWaveFormDataCapture(
@@ -502,7 +502,7 @@ class AudioEngine(private val context: Context) {
                         samplingRate: Int
                     ) {}
                 },
-                android.media.audiofx.Visualizer.getMaxCaptureRate() / 4, // Moderate rate
+                captureRate,
                 true,
                 false
             )

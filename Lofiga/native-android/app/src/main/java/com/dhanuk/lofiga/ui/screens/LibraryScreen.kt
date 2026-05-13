@@ -36,13 +36,19 @@ fun LibraryScreen(
     var isLoading by remember { mutableStateOf(true) }
 
     LaunchedEffect(Unit) {
-        // Look for exported files in Music/Lofiga or Downloads/Lofiga
+        // Look for exported files in app-specific Music/Lofiga directory
         val files = mutableListOf<File>()
-        val dirs = listOf(
-            File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC), "Lofiga"),
-            File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "Lofiga"),
-            appContext.cacheDir
-        )
+        // Primary: app-specific directory (used by ExportService on Android 11+)
+        // Fallback: old shared storage paths for previously exported files
+        val musDir = appContext.getExternalFilesDir(Environment.DIRECTORY_MUSIC)
+        val dirs = mutableListOf(File(musDir, "Lofiga"))
+        // Also check old shared storage paths for backward compatibility
+        try {
+            dirs.add(File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC), "Lofiga"))
+            dirs.add(File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "Lofiga"))
+        } catch (_: Exception) {
+            // On Android 11+, shared storage paths may not be accessible
+        }
         dirs.forEach { dir ->
             if (dir.exists()) {
                 files.addAll(

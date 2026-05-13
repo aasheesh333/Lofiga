@@ -126,25 +126,95 @@ fun PlayerScreen(
         AmbientBackground()
 
         if (currentTrack == null) {
-            // EMPTY STATE
+            // EMPTY STATE - Centered and visually appealing
+            // Scaffold already provides bottom padding for the nav bar
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    VinylRecord(size = 160, isPlaying = false)
-                    Spacer(Modifier.height(24.dp))
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                    modifier = Modifier.padding(horizontal = 32.dp)
+                ) {
+                    // Gradient circle background with vinyl icon
+                    Surface(
+                        modifier = Modifier.size(140.dp),
+                        shape = CircleShape,
+                        color = Purple500.copy(alpha = 0.1f),
+                        border = BorderStroke(2.dp, Purple500.copy(alpha = 0.2f))
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                Icons.Outlined.Equalizer,
+                                contentDescription = null,
+                                tint = Purple500.copy(alpha = 0.6f),
+                                modifier = Modifier.size(64.dp)
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(28.dp))
                     Text(
                         "Select a song to begin",
-                        color = White60,
-                        style = MaterialTheme.typography.titleLarge
+                        color = Color.White,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        "Pick a song from the Songs tab",
+                        "Pick a song from the Browse tab or\nload one from your files",
                         color = White38,
-                        style = MaterialTheme.typography.bodyMedium
+                        style = MaterialTheme.typography.bodyMedium,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        lineHeight = 22.sp
                     )
+                    Spacer(Modifier.height(32.dp))
+                    // Small hint chips
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Surface(
+                            shape = RoundedCornerShape(20.dp),
+                            color = DarkSurfaceHighlight,
+                            border = BorderStroke(1.dp, White12)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Outlined.Speed, contentDescription = null, tint = Purple400, modifier = Modifier.size(14.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("Tempo", color = White60, style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(20.dp),
+                            color = DarkSurfaceHighlight,
+                            border = BorderStroke(1.dp, White12)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Outlined.Forward30, contentDescription = null, tint = Purple400, modifier = Modifier.size(14.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("Reverb", color = White60, style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(20.dp),
+                            color = DarkSurfaceHighlight,
+                            border = BorderStroke(1.dp, White12)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Outlined.Cloud, contentDescription = null, tint = Purple400, modifier = Modifier.size(14.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("Atmosphere", color = White60, style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
+                    }
                 }
             }
         } else {

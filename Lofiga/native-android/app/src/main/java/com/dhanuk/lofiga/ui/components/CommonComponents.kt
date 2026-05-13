@@ -17,7 +17,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.*
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -135,74 +134,7 @@ fun WaveformVisualizer(
 }
 
 @Composable
-fun VinylRecord(
-    modifier: Modifier = Modifier,
-    size: Int = 200,
-    isPlaying: Boolean = true
-) {
-    val infiniteTransition = rememberInfiniteTransition(label = "vinyl")
-    val rotation by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = if (isPlaying)
-                tween(4000, easing = LinearEasing)
-            else
-                tween(40000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "rotation"
-    )
-
-    Canvas(modifier = modifier.size(size.dp)) {
-        val radius = size.toFloat() / 2
-        val center = Offset(radius, radius)
-
-        drawCircle(
-            color = Color(0xFF121212),
-            radius = radius,
-            center = center
-        )
-
-        for (i in 1..4) {
-            drawCircle(
-                color = Color(0xFF1A1A1A),
-                radius = radius - (i * radius * 0.1f),
-                center = center,
-                style = Stroke(width = 1f)
-            )
-        }
-
-        drawCircle(
-            color = Purple500,
-            radius = radius * 0.35f,
-            center = center
-        )
-        drawCircle(
-            color = Purple700,
-            radius = radius * 0.33f,
-            center = center
-        )
-
-        drawCircle(
-            color = Color(0xFF121212),
-            radius = radius * 0.05f,
-            center = center
-        )
-
-        drawCircle(
-            color = Color.White.copy(alpha = 0.03f),
-            radius = radius * 0.9f,
-            center = center.copy(
-                x = center.x + radius * 0.3f,
-                y = center.y - radius * 0.3f
-            )
-        )
-    }
-}
-
-@Composable
-fun LofigaNavigationBar(
+fun LofigaNavigationBar
     selectedIndex: Int,
     onItemSelected: (Int) -> Unit,
     modifier: Modifier = Modifier

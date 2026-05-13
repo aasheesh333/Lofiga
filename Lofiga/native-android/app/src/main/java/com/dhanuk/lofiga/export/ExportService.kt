@@ -40,11 +40,12 @@ object ExportService {
         isCancelled.set(false)
 
         val cleanName = fileName.substringBeforeLast(".").replace(Regex("[\\\\/:*?\"<>|]"), "_")
+        // Use app-specific external directory to avoid permission issues on Android 11+
         val outputDirPath = outputDir
-            ?: File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC), "Lofiga").absolutePath
+            ?: File(context.getExternalFilesDir(Environment.DIRECTORY_MUSIC), "Lofiga").absolutePath
         File(outputDirPath).mkdirs()
 
-val outputFile = File(outputDirPath, "${cleanName}_lofi.$format")
+        val outputFile = File(outputDirPath, "${cleanName}_lofi.$format")
 
         try {
             val sourceUri = if (inputPath != null && File(inputPath).exists()) {
