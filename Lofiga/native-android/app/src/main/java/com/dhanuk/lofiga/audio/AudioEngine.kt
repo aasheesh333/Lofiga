@@ -90,6 +90,8 @@ class AudioEngine(private val context: Context) {
             "wind" to "Wind",
             "tape" to "Tape"
         )
+        // Higher priority for audio effects to ensure they aren't dropped
+        private const val EFFECT_PRIORITY = 1
     }
 
     suspend fun init() {
@@ -219,7 +221,6 @@ class AudioEngine(private val context: Context) {
         }
         try {
             if (!player.isPlaying) {
-                // After stop(), MediaPlayer enters Stopped state and needs prepare() before start()
                 try {
                     player.prepare()
                 } catch (_: Exception) {
@@ -227,6 +228,13 @@ class AudioEngine(private val context: Context) {
                 }
                 player.start()
                 _isPlaying.value = true
+                // Re-init visualizer on play start to ensure it captures data
+                // Some devices drop the visualizer when player stops
+                if (visualizer == null || !visualizer!!.enabled) {
+                    try {
+                        initVisualizer(player.audioSessionId)
+                    } catch (_: Exception) {}
+                }
                 startPositionPolling()
                 syncAtmospheres()
             }
@@ -264,7 +272,6 @@ class AudioEngine(private val context: Context) {
                 _isPlaying.value = false
                 pauseAtmospheres()
             } else {
-                // After stop(), MediaPlayer enters Stopped state and needs prepare() before start()
                 try {
                     player.prepare()
                 } catch (_: Exception) {
@@ -272,6 +279,12 @@ class AudioEngine(private val context: Context) {
                 }
                 player.start()
                 _isPlaying.value = true
+                // Re-init visualizer on play start
+                if (visualizer == null || !visualizer!!.enabled) {
+                    try {
+                        initVisualizer(player.audioSessionId)
+                    } catch (_: Exception) {}
+                }
                 startPositionPolling()
                 syncAtmospheres()
             }
@@ -344,25 +357,27 @@ class AudioEngine(private val context: Context) {
 
     private fun initEffects(audioSessionId: Int) {
         try {
-            reverb = PresetReverb(0, audioSessionId).apply {
+            reverb = PresetReverb(EFFECT_PRIORITY, audioSessionId).apply {
                 enabled = true
-                preset = PresetReverb.PRESET_LARGEHALL
+                preset = PresetReverb.PRESET_SMALLROOM
             }
 
-            bassBoost = BassBoost(0, audioSessionId).apply {
+            bassBoost = BassBoost(EFFECT_PRIORITY, audioSessionId).apply {
                 enabled = true
                 setStrength(0.toShort())
             }
 
-            equalizer = Equalizer(0, audioSessionId).apply {
+            equalizer = Equalizer(EFFECT_PRIORITY, audioSessionId).apply {
                 enabled = true
                 val bands = numberOfBands
                 for (i in 0 until bands) {
                     setBandLevel(i.toShort(), 0.toShort())
                 }
             }
+
+            android.util.Log.i("AudioEngine", "Effects initialized on session $audioSessionId")
         } catch (e: Exception) {
-            e.printStackTrace()
+            android.util.Log.w("AudioEngine", "Failed to init effects: ${e.message}")
         }
     }
 
@@ -434,7 +449,8 @@ class AudioEngine(private val context: Context) {
                 r.enabled = combined > 0.01f
                 if (combined > 0.01f) {
                     r.preset = when {
-                        combined < 0.25f -> PresetReverb.PRESET_SMALLROOM
+                        combined < 0.15f -> PresetReverb.PRESET_NONE
+                        combined < 0.3f -> PresetReverb.PRESET_SMALLROOM
                         combined < 0.5f -> PresetReverb.PRESET_MEDIUMROOM
                         combined < 0.75f -> PresetReverb.PRESET_LARGEHALL
                         else -> PresetReverb.PRESET_PLATE
@@ -449,9 +465,10 @@ class AudioEngine(private val context: Context) {
     private fun initVisualizer(audioSessionId: Int) {
         try {
             releaseVisualizer()
+            val maxCapture = android.media.audiofx.Visualizer.getCaptureSizeRange()
+            val captureSize = maxCapture[1].coerceAtMost(512) // Use 512 for better performance
             val v = android.media.audiofx.Visualizer(audioSessionId)
-            v.captureSize = android.media.audiofx.Visualizer.getCaptureSizeRange()[1]
-                .coerceAtMost(1024)
+            v.captureSize = captureSize
             v.setDataCaptureListener(
                 object : android.media.audiofx.Visualizer.OnDataCaptureListener {
                     override fun onWaveFormDataCapture(
@@ -460,19 +477,21 @@ class AudioEngine(private val context: Context) {
                         samplingRate: Int
                     ) {
                         waveform?.let { data ->
-                            val barCount = 32
-                            val step = data.size / barCount
-                            if (step > 0) {
-                                val floats = FloatArray(barCount) { i ->
-                                    var sum = 0f
-                                    val start = i * step
-                                    val end = minOf(start + step, data.size)
-                                    for (j in start until end) {
-                                        sum += kotlin.math.abs(data[j].toFloat() / 128f)
+                            if (data.isNotEmpty()) {
+                                val barCount = 32
+                                val step = data.size / barCount
+                                if (step > 0) {
+                                    val floats = FloatArray(barCount) { i ->
+                                        var sum = 0f
+                                        val start = i * step
+                                        val end = minOf(start + step, data.size)
+                                        for (j in start until end) {
+                                            sum += kotlin.math.abs(data[j].toFloat() / 128f)
+                                        }
+                                        (sum / (end - start)).coerceIn(0f, 1f)
                                     }
-                                    (sum / (end - start)).coerceIn(0f, 1f)
+                                    _waveformData.value = floats
                                 }
-                                _waveformData.value = floats
                             }
                         }
                     }
@@ -483,12 +502,13 @@ class AudioEngine(private val context: Context) {
                         samplingRate: Int
                     ) {}
                 },
-                android.media.audiofx.Visualizer.getMaxCaptureRate() / 2,
+                android.media.audiofx.Visualizer.getMaxCaptureRate() / 4, // Moderate rate
                 true,
                 false
             )
             v.enabled = true
             visualizer = v
+            android.util.Log.i("AudioEngine", "Visualizer initialized on session $audioSessionId")
         } catch (e: Exception) {
             android.util.Log.w("AudioEngine", "Visualizer unavailable: ${e.message}")
         }

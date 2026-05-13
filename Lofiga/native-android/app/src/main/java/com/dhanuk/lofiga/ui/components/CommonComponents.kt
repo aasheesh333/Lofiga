@@ -70,18 +70,31 @@ fun WaveformVisualizer(
 
     Canvas(modifier = modifier.fillMaxWidth().height(80.dp)) {
         if (!isPlaying) {
-            val y = size.height / 2
-            drawLine(
-                color = color.copy(alpha = 0.3f),
-                start = Offset(0f, y),
-                end = Offset(size.width, y),
-                strokeWidth = 2f
-            )
+            // Draw subtle animated bars even when paused for visual interest
+            val barWidth = size.width / barCount
+            val centerY = size.height / 2
+            val maxHeight = size.height * 0.3f
+
+            for (i in 0 until barCount) {
+                val x = i * barWidth + barWidth * 0.15f
+                val rectWidth = barWidth * 0.7f
+
+                val t = i.toFloat() / barCount * 2f * kotlin.math.PI.toFloat()
+                val value = 0.15f * kotlin.math.sin((3f * t + phase * 0.5f).toDouble()).toFloat()
+                val barHeight = ((value + 1f) / 2f).coerceIn(0.05f, 0.5f) * maxHeight
+
+                drawRoundRect(
+                    color = color.copy(alpha = 0.15f),
+                    topLeft = Offset(x, centerY - barHeight / 2f),
+                    size = androidx.compose.ui.geometry.Size(rectWidth, barHeight),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(2f, 2f)
+                )
+            }
             return@Canvas
         }
 
         val barWidth = size.width / barCount
-        val maxHeight = size.height * 0.8f
+        val maxHeight = size.height * 0.9f
         val centerY = size.height / 2
 
         for (i in 0 until barCount) {
@@ -89,21 +102,29 @@ fun WaveformVisualizer(
             val rectWidth = barWidth * 0.7f
 
             val value: Float = if (hasRealData && i < waveformData!!.size) {
-                waveformData[i].coerceIn(-1f, 1f)
+                // AudioEngine returns 0..1 positive values - map to centered bar
+                val rawValue = waveformData[i].coerceIn(0f, 1f)
+                rawValue
             } else {
+                // Generate synthetic waveform for visual appeal when no real data
                 val t = i.toFloat() / barCount * 2f * kotlin.math.PI.toFloat()
                 val sin1 = kotlin.math.sin((2f * t + phase).toDouble()).toFloat()
                 val sin2 = kotlin.math.sin((3f * t + phase * 1.5f).toDouble()).toFloat()
                 val sin3 = kotlin.math.sin((5f * t + phase * 2.2f).toDouble()).toFloat()
                 val sin4 = kotlin.math.sin((i * 7 + phase * 3).toDouble()).toFloat()
-                0.3f * sin1 + 0.2f * sin2 + 0.1f * sin3 + 0.1f * sin4
+                val synthetic = 0.3f * sin1 + 0.2f * sin2 + 0.1f * sin3 + 0.1f * sin4
+                // Map -1..1 to 0..1
+                (synthetic + 1f) / 2f
             }
 
-            val barHeight = ((value + 1f) / 2f).coerceIn(0.05f, 1f) * maxHeight
+            // Apply easing for more natural bar movement
+            val easedValue = value.coerceIn(0.05f, 1f)
+            val barHeight = easedValue * maxHeight
 
+            // Center the bar vertically
             drawRoundRect(
                 color = color.copy(
-                    alpha = 0.4f + 0.6f * (barHeight / maxHeight)
+                    alpha = 0.3f + 0.7f * easedValue
                 ),
                 topLeft = Offset(x, centerY - barHeight / 2f),
                 size = androidx.compose.ui.geometry.Size(rectWidth, barHeight),

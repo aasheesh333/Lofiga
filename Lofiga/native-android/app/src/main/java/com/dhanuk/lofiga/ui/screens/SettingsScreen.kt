@@ -24,7 +24,10 @@ import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(viewModel: MainViewModel) {
+fun SettingsScreen(
+    viewModel: MainViewModel,
+    modifier: Modifier = Modifier
+) {
     val settings by viewModel.settingsManager.settingsFlow.collectAsState(initial = SettingsManager.AppSettings())
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -32,7 +35,7 @@ fun SettingsScreen(viewModel: MainViewModel) {
     var showFormatDialog by remember { mutableStateOf(false) }
     var showBitrateDialog by remember { mutableStateOf(false) }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = modifier.fillMaxSize()) {
         AmbientBackground()
 
         Column(

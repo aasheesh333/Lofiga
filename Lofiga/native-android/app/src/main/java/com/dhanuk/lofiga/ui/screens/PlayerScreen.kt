@@ -46,7 +46,8 @@ private fun formatDuration(millis: Long): String {
 @Composable
 fun PlayerScreen(
     viewModel: MainViewModel,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val currentTrack by viewModel.currentTrack.collectAsState()
     val currentValues by viewModel.currentValues.collectAsState()
@@ -69,6 +70,10 @@ fun PlayerScreen(
     var showEffects by remember { mutableStateOf(true) }
     var showAtmosphere by remember { mutableStateOf(false) }
     var showExportInfo by remember { mutableStateOf(false) }
+
+    // Scroll states - properly remembered to prevent recreation
+    val scrollState = rememberScrollState()
+    val presetScrollState = rememberScrollState()
 
     // Selected effect type for menu: "all", "bass", "treble"
     var selectedEffectType by remember { mutableStateOf("all") }
@@ -117,7 +122,7 @@ fun PlayerScreen(
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = modifier.fillMaxSize()) {
         AmbientBackground()
 
         if (currentTrack == null) {
@@ -152,7 +157,7 @@ fun PlayerScreen(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth()
-                        .verticalScroll(rememberScrollState())
+                        .verticalScroll(scrollState)
                         .padding(horizontal = 12.dp)
                 ) {
                     Spacer(Modifier.height(8.dp))
@@ -293,8 +298,8 @@ fun PlayerScreen(
                         // Preset chips - horizontally scrollable row
                         Row(
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .horizontalScroll(rememberScrollState()),
+                                .horizontalScroll(presetScrollState)
+                                .fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             val presetsToShow = if (showAllPresets) LofiPreset.entries.filter { it != LofiPreset.Custom }

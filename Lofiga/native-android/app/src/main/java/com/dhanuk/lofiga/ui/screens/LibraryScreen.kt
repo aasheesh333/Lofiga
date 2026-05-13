@@ -28,7 +28,8 @@ import java.io.File
 @Composable
 fun LibraryScreen(
     viewModel: MainViewModel,
-    onFileSelected: (String, String) -> Unit
+    onFileSelected: (String, String) -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val appContext = LocalContext.current
     var exportedFiles by remember { mutableStateOf<List<File>>(emptyList()) }
@@ -55,7 +56,7 @@ fun LibraryScreen(
         isLoading = false
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = modifier.fillMaxSize()) {
         AmbientBackground()
 
         if (isLoading) {

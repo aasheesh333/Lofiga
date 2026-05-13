@@ -40,7 +40,8 @@ enum class SortOption(val label: String) {
 fun HomeScreen(
     viewModel: MainViewModel,
     onSongSelected: (com.dhanuk.lofiga.model.AudioTrack) -> Unit,
-    onEditConfig: (SavedConfig) -> Unit
+    onEditConfig: (SavedConfig) -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val recentEdits by viewModel.recentEdits.collectAsState()
     val allSongs by viewModel.allSongs.collectAsState()
@@ -71,7 +72,7 @@ fun HomeScreen(
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = modifier.fillMaxSize()) {
         AmbientBackground()
 
         PullToRefreshBox(

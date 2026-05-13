@@ -10,9 +10,7 @@ import android.provider.MediaStore
 import com.dhanuk.lofiga.model.PresetValues
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.io.ByteArrayOutputStream
 import java.io.File
-import java.io.FileOutputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.concurrent.atomic.AtomicBoolean
@@ -429,14 +427,116 @@ val outputFile = File(outputDirPath, "${cleanName}_lofi.$format")
         return output
     }
 
+    /**
+     * Apply all preset effects with optimized single-pass processing where possible.
+     * Speed/pitch must be separate as it changes array length, but all other effects
+     * (delay, reverb, bass, treble) are combined into one loop to reduce allocations.
+     */
     private fun applyPresetEffects(pcm: ShortArray, sampleRate: Int, channels: Int, preset: PresetValues): ShortArray {
         var result = pcm
-        result = applySpeedPitch(result, preset.tempo, preset.pitch, channels)
-        result = applyDelay(result, preset.delay, sampleRate, channels)
-        result = applyReverb(result, preset.reverb, sampleRate, channels)
-        result = applyBassBoost(result, preset.bass)
-        result = applyTrebleCut(result, preset.trebleCut, sampleRate)
+        // Speed/pitch changes array length - must be separate
+        if (preset.tempo != 1.0f || preset.pitch != 0f) {
+            result = applySpeedPitch(result, preset.tempo, preset.pitch, channels)
+        }
+        // Apply all other effects in a single pass to minimize allocations
+        if (preset.delay > 0.01f || preset.reverb > 0.01f || preset.bass > 0.01f || preset.trebleCut > 0.01f) {
+            result = applyCombinedEffects(result, preset.delay, preset.reverb, preset.bass, preset.trebleCut, sampleRate, channels)
+        }
         return result
+    }
+
+    /**
+     * Combined single-pass application of delay, reverb, bass, and treble cut.
+     * Significantly reduces memory allocations and improves cache performance
+     * compared to sequential array allocations.
+     */
+    private fun applyCombinedEffects(
+        pcm: ShortArray,
+        delayWet: Float,
+        reverbWet: Float,
+        bassStrength: Float,
+        trebleCut: Float,
+        sampleRate: Int,
+        channels: Int
+    ): ShortArray {
+        if (delayWet <= 0.01f && reverbWet <= 0.01f && bassStrength <= 0.01f && trebleCut <= 0.01f) return pcm
+
+        val output = ShortArray(pcm.size)
+
+        // Delay line
+        val delayMs = (100 + delayWet * 400).toInt()
+        val delaySamples = (delayMs * sampleRate / 1000) * channels
+
+        // Reverb delay line (comb filter)
+        val revDelayMs = (30 + reverbWet * 100).toInt()
+        val revDelaySamples = (revDelayMs * sampleRate / 1000).coerceAtLeast(1)
+        val revBufSize = revDelaySamples * channels
+        val revBuf = ShortArray(revBufSize)
+        var revPos = 0
+
+        // Bass lowpass state (per channel)
+        val bassAlpha = 0.94f
+        var bassLpL = 0f
+        var bassLpR = 0f
+
+        // Treble lowpass state (per channel)
+        val trebleAlpha = if (trebleCut > 0.01f) {
+            val maxFreq = sampleRate / 2f
+            val cf = maxFreq * (1f - trebleCut * 0.9f) + 1f
+            (cf / (cf + (sampleRate / Math.PI))).toFloat().coerceIn(0.01f, 0.99f)
+        } else 0f
+        var trebleLpL = 0f
+        var trebleLpR = 0f
+
+        // Single pass over all samples (order: delay -> reverb -> bass -> treble)
+        // to match the original sequential processing order
+        for (i in pcm.indices) {
+            var sample = pcm[i].toFloat() / 32768f
+            val ch = i and 1  // 0 for left, 1 for right
+
+            // Delay effect
+            if (delayWet > 0.01f && i >= delaySamples) {
+                val delayed = pcm[i - delaySamples].toFloat() / 32768f
+                sample = sample * (1 - delayWet * 0.3f) + delayed * delayWet * 0.3f
+            }
+
+            // Reverb effect (comb filter with feedback)
+            if (reverbWet > 0.01f) {
+                val wetSample = revBuf[revPos].toFloat() / 32768f
+                val drySample = sample
+                revBuf[revPos] = ((drySample * (1 - 0.4f * reverbWet) + wetSample * 0.3f) * 32768f)
+                    .toInt().coerceIn(-32768, 32767).toShort()
+                revPos = (revPos + 1) % revBufSize
+                sample = drySample * (1 - reverbWet * 0.5f) + wetSample * reverbWet * 0.5f
+            }
+
+            // Bass boost (low shelf filter)
+            if (bassStrength > 0.01f) {
+                if (ch == 0) {
+                    bassLpL = bassAlpha * bassLpL + (1 - bassAlpha) * sample
+                    sample += bassStrength * 2.5f * bassLpL
+                } else {
+                    bassLpR = bassAlpha * bassLpR + (1 - bassAlpha) * sample
+                    sample += bassStrength * 2.5f * bassLpR
+                }
+            }
+
+            // Treble cut (lowpass filter)
+            if (trebleCut > 0.01f) {
+                if (ch == 0) {
+                    trebleLpL = trebleAlpha * trebleLpL + (1 - trebleAlpha) * sample
+                    sample = trebleLpL
+                } else {
+                    trebleLpR = trebleAlpha * trebleLpR + (1 - trebleAlpha) * sample
+                    sample = trebleLpR
+                }
+            }
+
+            // Write output
+            output[i] = (sample * 32768f).toInt().coerceIn(-32768, 32767).toShort()
+        }
+
+        return output
     }
 
     private fun applySpeedPitch(pcm: ShortArray, tempo: Float, semitones: Float, channels: Int): ShortArray {
@@ -462,65 +562,8 @@ val outputFile = File(outputDirPath, "${cleanName}_lofi.$format")
         return output
     }
 
-    private fun applyReverb(pcm: ShortArray, wet: Float, sampleRate: Int, channels: Int): ShortArray {
-        if (wet <= 0.01f) return pcm
-        val delayMs = (30 + wet * 100).toInt()
-        val delaySamples = (delayMs * sampleRate / 1000)
-        val output = ShortArray(pcm.size)
-        val delayBuf = ShortArray(delaySamples * channels)
-        var delayPos = 0
-        for (i in pcm.indices) {
-            val wetSample = delayBuf[delayPos]
-            delayBuf[delayPos] = (pcm[i] * (1 - 0.4f * wet) + wetSample * 0.3f).toInt()
-                .coerceIn(-32768, 32767).toShort()
-            delayPos = (delayPos + 1) % delayBuf.size
-            output[i] = (pcm[i] * (1 - wet * 0.5f) + wetSample * wet * 0.5f).toInt()
-                .coerceIn(-32768, 32767).toShort()
-        }
-        return output
-    }
-
-    private fun applyDelay(pcm: ShortArray, wet: Float, sampleRate: Int, channels: Int): ShortArray {
-        if (wet <= 0.01f) return pcm
-        val delayMs = (100 + wet * 400).toInt()
-        val delaySamples = (delayMs * sampleRate / 1000) * channels
-        val output = ShortArray(pcm.size)
-        for (i in output.indices) {
-            val delayed = if (i >= delaySamples) pcm[i - delaySamples] else 0
-            output[i] = (pcm[i] * (1 - wet * 0.3f) + delayed * wet * 0.3f).toInt()
-                .coerceIn(-32768, 32767).toShort()
-        }
-        return output
-    }
-
-    private fun applyBassBoost(pcm: ShortArray, strength: Float): ShortArray {
-        if (strength <= 0.01f) return pcm
-        val alpha = 0.94f
-        var lp = 0f
-        val output = ShortArray(pcm.size)
-        for (i in pcm.indices) {
-            val sample = pcm[i] / 32768f
-            lp = alpha * lp + (1 - alpha) * sample
-            output[i] = ((sample + strength * 2.5f * lp) * 32768f).toInt()
-                .coerceIn(-32768, 32767).toShort()
-        }
-        return output
-    }
-
-    private fun applyTrebleCut(pcm: ShortArray, cutoffFactor: Float, sampleRate: Int): ShortArray {
-        if (cutoffFactor <= 0.01f) return pcm
-        val maxFreq = sampleRate / 2f
-        val cutoffFreq = maxFreq * (1f - cutoffFactor * 0.9f) + 1f
-        val alpha = (cutoffFreq / (cutoffFreq + (sampleRate / Math.PI))).toFloat().coerceIn(0.01f, 0.99f)
-        var lp = 0f
-        val output = ShortArray(pcm.size)
-        for (i in pcm.indices) {
-            val sample = pcm[i] / 32768f
-            lp = alpha * lp + (1 - alpha) * sample
-            output[i] = (lp * 32768f).toInt().coerceIn(-32768, 32767).toShort()
-        }
-        return output
-    }
+    // Previous individual effect functions (applyReverb, applyDelay, applyBassBoost, applyTrebleCut)
+    // have been replaced by the combined single-pass applyCombinedEffects for better performance.
 
     private fun mixAtmosphereLayers(context: Context, pcm: ShortArray, sampleRate: Int, channels: Int, preset: PresetValues): ShortArray {
         if (preset.rainVolume <= 0.01f && preset.vinylVolume <= 0.01f &&
