@@ -496,11 +496,11 @@ fun PlayerScreen(
 
                                     // Atmosphere sliders - each with proper label & icon
                                     listOf(
-                                        "rain" to "Rain" to Icons.Outlined.WaterDrop,
-                                        "vinyl" to "Vinyl" to Icons.Outlined.DiscFull,
-                                        "wind" to "Wind" to Icons.Outlined.Air,
-                                        "tape" to "Tape" to Icons.Outlined.FiberManualRecord
-                                    ).forEach { ((key, label), icon) ->
+                                        Triple("rain", "Rain", Icons.Outlined.WaterDrop),
+                                        Triple("vinyl", "Vinyl", Icons.Outlined.DiscFull),
+                                        Triple("wind", "Wind", Icons.Outlined.Air),
+                                        Triple("tape", "Tape", Icons.Outlined.FiberManualRecord)
+                                    ).forEach { (key, label, icon) ->
                                         val volume = when (key) {
                                             "rain" -> currentValues.rainVolume
                                             "vinyl" -> currentValues.vinylVolume
