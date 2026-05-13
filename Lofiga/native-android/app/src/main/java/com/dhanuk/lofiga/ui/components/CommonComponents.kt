@@ -134,7 +134,7 @@ fun WaveformVisualizer(
 }
 
 @Composable
-fun LofigaNavigationBar
+fun LofigaNavigationBar(
     selectedIndex: Int,
     onItemSelected: (Int) -> Unit,
     modifier: Modifier = Modifier
