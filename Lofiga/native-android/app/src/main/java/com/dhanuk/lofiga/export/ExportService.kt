@@ -23,7 +23,7 @@ object ExportService {
 
     private val SUPPORTED_FORMATS = listOf("m4a", "wav")
     private val SUPPORTED_BITRATES = listOf("128k", "192k", "256k", "320k")
-    private const val MAX_PCM_SAMPLES = 40_000_000
+    private const val MAX_PCM_SAMPLES = 20_000_000
 
     suspend fun exportTrack(
         context: Context,
@@ -202,6 +202,32 @@ val outputFile = File(outputDirPath, "${cleanName}_lofi.$format")
         }
     }
 
+    /**
+     * Memory-efficient growable buffer for PCM shorts.
+     * Avoids ByteArrayOutputStream + toByteArray() double-copy.
+     */
+    private class ShortArrayBuffer(initialCapacity: Int = 65536) {
+        var data = ShortArray(initialCapacity)
+            private set
+        var size = 0
+            private set
+
+        fun addAll(shorts: ShortArray, count: Int) {
+            val needed = size + count
+            if (needed > data.size) {
+                var newSize = data.size
+                while (newSize < needed) newSize = (newSize * 3) / 2
+                data = data.copyOf(newSize)
+            }
+            System.arraycopy(shorts, 0, data, size, count)
+            size += count
+        }
+
+        fun toShortArray(): ShortArray = data.copyOf(size)
+        fun isEmpty(): Boolean = size == 0
+        val isFull: Boolean get() = size >= MAX_PCM_SAMPLES
+    }
+
     private fun collectAndProcessPcm(
         context: Context,
         sourceUri: Uri,
@@ -234,13 +260,14 @@ val outputFile = File(outputDirPath, "${cleanName}_lofi.$format")
             decoder.configure(inputFormat, null, null, 0)
             decoder.start()
 
-            val outputStream = java.io.ByteArrayOutputStream()
-            val bufInfo = MediaCodec.BufferInfo()
+            // Direct short accumulation — no ByteArrayOutputStream intermediate!
+            val accumulator = ShortArrayBuffer()
             var sawInputEOS = false
             var sawOutputEOS = false
-            var processedBytes = 0L
+            var totalInputBytes = 0L
+            var wasTruncated = false
 
-            while (!sawOutputEOS) {
+            while (!sawOutputEOS && !accumulator.isFull) {
                 if (isCancelled.get()) { decoder.stop(); decoder.release(); extractor.release(); return null }
 
                 if (!sawInputEOS) {
@@ -253,9 +280,9 @@ val outputFile = File(outputDirPath, "${cleanName}_lofi.$format")
                             sawInputEOS = true
                         } else {
                             decoder.queueInputBuffer(inIdx, 0, sampleSize, extractor.sampleTime, 0)
-                            processedBytes += sampleSize
+                            totalInputBytes += sampleSize
                             if (inputDuration > 0) {
-                                onProgress?.invoke((processedBytes.toFloat() / inputDuration).coerceIn(0f, 0.3f))
+                                onProgress?.invoke((totalInputBytes.toFloat() / inputDuration).coerceIn(0f, 0.3f))
                             }
                         }
                     }
@@ -269,10 +296,25 @@ val outputFile = File(outputDirPath, "${cleanName}_lofi.$format")
                     }
                     if (decInfo.size > 0) {
                         val outBuf = decoder.getOutputBuffer(decIdx)!!
-                        val bytes = ByteArray(decInfo.size)
                         outBuf.position(decInfo.offset)
-                        outBuf.get(bytes, 0, decInfo.size)
-                        outputStream.write(bytes)
+                        outBuf.limit(decInfo.offset + decInfo.size)
+
+                        // Read shorts directly from the decoder output buffer
+                        val shortCount = decInfo.size / 2
+                        val tempShorts = ShortArray(shortCount)
+                        outBuf.order(ByteOrder.LITTLE_ENDIAN).asShortBuffer().get(tempShorts, 0, shortCount)
+
+                        if (accumulator.size + shortCount > MAX_PCM_SAMPLES) {
+                            // Partial copy to stay within limit
+                            val allowed = MAX_PCM_SAMPLES - accumulator.size
+                            if (allowed > 0) {
+                                accumulator.addAll(tempShorts, allowed)
+                            }
+                            wasTruncated = true
+                            sawOutputEOS = true // Stop decoding once we hit the limit
+                        } else {
+                            accumulator.addAll(tempShorts, shortCount)
+                        }
                     }
                     decoder.releaseOutputBuffer(decIdx, false)
                     decIdx = decoder.dequeueOutputBuffer(decInfo, 0)
@@ -283,15 +325,12 @@ val outputFile = File(outputDirPath, "${cleanName}_lofi.$format")
             decoder.release()
             extractor.release()
 
-val pcmBytes = outputStream.toByteArray()
-var pcmShorts = ShortArray(pcmBytes.size / 2)
-ByteBuffer.wrap(pcmBytes).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer().get(pcmShorts)
+            var pcmShorts = accumulator.toShortArray()
+            if (pcmShorts.isEmpty()) return pcmShorts
 
-if (pcmShorts.isEmpty()) return pcmShorts
-
-                if (pcmShorts.size > MAX_PCM_SAMPLES) {
-                    pcmShorts = pcmShorts.copyOf(MAX_PCM_SAMPLES)
-                }
+            if (wasTruncated) {
+                android.util.Log.w("ExportService", "Track truncated to $MAX_PCM_SAMPLES samples (~${MAX_PCM_SAMPLES / 44100 / 2}s of audio)")
+            }
 
             if (inputChannels == 1) {
                 pcmShorts = monoToStereo(pcmShorts)
@@ -505,30 +544,51 @@ if (pcmShorts.isEmpty()) return pcmShorts
         val assetPath = getAtmosphereAssetPath(key) ?: return null
         return try {
             val input = context.assets.open(assetPath)
-            val header = ByteArray(44)
-            var read = 0
-            while (read < 44) { val r = input.read(header, read, 44 - read); if (r < 0) break; read += r }
-            if (read < 44) { input.close(); return null }
-
-            val channels = ((header[23].toInt() and 0xFF) shl 8) or (header[22].toInt() and 0xFF)
-            val fileRate = ((header[27].toInt() and 0xFF) shl 24) or
-                    ((header[26].toInt() and 0xFF) shl 16) or
-                    ((header[25].toInt() and 0xFF) shl 8) or
-                    (header[24].toInt() and 0xFF)
-            val dataSize = ((header[43].toInt() and 0xFF) shl 24) or
-                    ((header[42].toInt() and 0xFF) shl 16) or
-                    ((header[41].toInt() and 0xFF) shl 8) or
-                    (header[40].toInt() and 0xFF)
-            val bitsPerSample = ((header[35].toInt() and 0xFF) shl 8) or (header[34].toInt() and 0xFF)
-
-            val pcmBytes = ByteArray(dataSize.coerceIn(0, 50_000_000))
-            var totalRead = 0
-            while (totalRead < pcmBytes.size) {
-                val r = input.read(pcmBytes, totalRead, pcmBytes.size - totalRead)
-                if (r < 0) break
-                totalRead += r
-            }
+            val allBytes = input.readBytes()
             input.close()
+
+            // WAV: search for "data" chunk properly (skip variable-length headers)
+            var offset = 12 // Skip RIFF header (12 bytes: RIFF + size + WAVE)
+            var channels = 2
+            var fileRate = 44100
+            var bitsPerSample = 16
+            var dataSize = 0
+            var dataOffset = 0
+
+            while (offset + 8 <= allBytes.size) {
+                val chunkId = String(allBytes, offset, 4, Charsets.US_ASCII)
+                val chunkSize = ((allBytes[offset + 7].toInt() and 0xFF) shl 24) or
+                        ((allBytes[offset + 6].toInt() and 0xFF) shl 16) or
+                        ((allBytes[offset + 5].toInt() and 0xFF) shl 8) or
+                        (allBytes[offset + 4].toInt() and 0xFF)
+
+                when (chunkId) {
+                    "fmt " -> {
+                        if (offset + 24 <= allBytes.size) {
+                            channels = ((allBytes[offset + 11].toInt() and 0xFF) shl 8) or (allBytes[offset + 10].toInt() and 0xFF)
+                            fileRate = ((allBytes[offset + 15].toInt() and 0xFF) shl 24) or
+                                    ((allBytes[offset + 14].toInt() and 0xFF) shl 16) or
+                                    ((allBytes[offset + 13].toInt() and 0xFF) shl 8) or
+                                    (allBytes[offset + 12].toInt() and 0xFF)
+                            bitsPerSample = ((allBytes[offset + 23].toInt() and 0xFF) shl 8) or (allBytes[offset + 22].toInt() and 0xFF)
+                        }
+                    }
+                    "data" -> {
+                        dataSize = chunkSize
+                        dataOffset = offset + 8
+                        break
+                    }
+                }
+                offset += 8 + chunkSize
+                // Pad to even boundary if needed
+                if (chunkSize % 2 != 0) offset++
+            }
+
+            if (dataSize <= 0) return null
+
+            // Extract PCM data from the data chunk
+            val dataEnd = minOf(dataOffset + dataSize, allBytes.size)
+            val pcmBytes = allBytes.copyOfRange(dataOffset, dataEnd)
 
             val sampleBytes = if (bitsPerSample == 16) 2 else 1
             val shortCount = pcmBytes.size / sampleBytes

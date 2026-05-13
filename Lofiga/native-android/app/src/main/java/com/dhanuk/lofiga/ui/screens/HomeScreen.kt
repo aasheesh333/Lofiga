@@ -39,7 +39,7 @@ enum class SortOption(val label: String) {
 @Composable
 fun HomeScreen(
     viewModel: MainViewModel,
-    onSongSelected: (String, String) -> Unit,
+    onSongSelected: (com.dhanuk.lofiga.model.AudioTrack) -> Unit,
     onEditConfig: (SavedConfig) -> Unit
 ) {
     val recentEdits by viewModel.recentEdits.collectAsState()
@@ -212,7 +212,7 @@ fun HomeScreen(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             modifier = Modifier.padding(24.dp)
                         ) {
-                            // Animated Music Icon
+                                            // Dynamic gradient icon based on animation
                             Box(
                                 modifier = Modifier
                                     .size(100.dp)
@@ -300,8 +300,10 @@ fun HomeScreen(
                         title = song.title,
                         artist = song.artist,
                         duration = song.formattedDuration,
-                        isCurrentlyPlaying = currentTrack?.dataPath == song.dataPath,
-                        onClick = { onSongSelected(song.dataPath, song.title) }
+                        gradientThumb = true,
+                        thumbTitle = song.title,
+                        isCurrentlyPlaying = currentTrack?.dataPath == song.dataPath || (currentTrack?.uri != null && currentTrack?.uri == song.uri),
+                        onClick = { onSongSelected(song) }
                     )
                 }
             }

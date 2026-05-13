@@ -130,6 +130,20 @@ private fun LibraryItem(
     onDelete: () -> Unit
 ) {
     val context = LocalContext.current
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+
+    if (showDeleteConfirm) {
+        DeleteConfirmDialog(
+            title = "Delete Mix",
+            message = "Are you sure you want to delete \"$fileName\"? This action cannot be undone.",
+            onConfirm = {
+                onDelete()
+                showDeleteConfirm = false
+            },
+            onDismiss = { showDeleteConfirm = false }
+        )
+    }
+
     Card(
         modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
         shape = RoundedCornerShape(16.dp),
@@ -200,7 +214,7 @@ private fun LibraryItem(
                         DropdownMenuItem(
                             text = { Text("Delete", color = Color(0xFFFF5252)) },
                             onClick = {
-                                onDelete()
+                                showDeleteConfirm = true
                                 showMenu = false
                             },
                             leadingIcon = { Icon(Icons.Outlined.Delete, contentDescription = null, tint = Color(0xFFFF5252)) }

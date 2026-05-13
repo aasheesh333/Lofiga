@@ -116,16 +116,16 @@ class AudioEngine(private val context: Context) {
         audioManager.abandonAudioFocus(audioFocusRequest)
     }
 
-    fun loadTrack(uri: Uri) {
+    fun loadTrack(uri: Uri): Boolean {
         releaseMainPlayer()
         releaseEffects()
         releaseVisualizer()
         _error.value = null
+        _position.value = 0
 
-        // Request audio focus
         if (!requestAudioFocus()) {
             _error.value = "Cannot get audio focus"
-            return
+            return false
         }
 
         try {
@@ -139,6 +139,7 @@ class AudioEngine(private val context: Context) {
                 )
                 prepare()
                 _duration.value = duration.toLong()
+                _isPlaying.value = false
                 setOnCompletionListener {
                     if (!_isLooping.value) {
                         _isPlaying.value = false
@@ -151,23 +152,25 @@ class AudioEngine(private val context: Context) {
             mainPlayer = player
             initEffects(player.audioSessionId)
             initVisualizer(player.audioSessionId)
+            return true
         } catch (e: Exception) {
             _error.value = "Failed to load track: ${e.message}"
             abandonAudioFocus()
             e.printStackTrace()
+            return false
         }
     }
 
-    fun loadTrackFromFile(filePath: String) {
+    fun loadTrackFromFile(filePath: String): Boolean {
         releaseMainPlayer()
         releaseEffects()
         releaseVisualizer()
         _error.value = null
+        _position.value = 0
 
-        // Request audio focus
         if (!requestAudioFocus()) {
             _error.value = "Cannot get audio focus"
-            return
+            return false
         }
 
         try {
@@ -181,6 +184,7 @@ class AudioEngine(private val context: Context) {
                 )
                 prepare()
                 _duration.value = duration.toLong()
+                _isPlaying.value = false
                 setOnCompletionListener {
                     if (!_isLooping.value) {
                         _isPlaying.value = false
@@ -193,9 +197,11 @@ class AudioEngine(private val context: Context) {
             mainPlayer = player
             initEffects(player.audioSessionId)
             initVisualizer(player.audioSessionId)
+            return true
         } catch (e: Exception) {
             _error.value = "Failed to load file: ${e.message}"
             e.printStackTrace()
+            return false
         }
     }
 
@@ -206,48 +212,72 @@ class AudioEngine(private val context: Context) {
     }
 
     fun play() {
-        mainPlayer?.let { player ->
-            try {
-                if (!player.isPlaying) {
-                    // Check if player is prepared
-                    if (player.duration <= 0) {
-                        _error.value = "Track not ready - please wait"
-                        return
-                    }
-                    player.start()
-                    _isPlaying.value = true
-                    startPositionPolling()
-                    syncAtmospheres()
-                }
-            } catch (e: IllegalStateException) {
-                _error.value = "Playback error: ${e.message}"
-                e.printStackTrace()
-            }
-        } ?: run {
+        val player = mainPlayer
+        if (player == null) {
             _error.value = "No track loaded"
+            return
+        }
+        try {
+            if (!player.isPlaying) {
+                // After stop(), MediaPlayer enters Stopped state and needs prepare() before start()
+                try {
+                    player.prepare()
+                } catch (_: Exception) {
+                    // If already prepared, prepare() may throw - ignore
+                }
+                player.start()
+                _isPlaying.value = true
+                startPositionPolling()
+                syncAtmospheres()
+            }
+        } catch (e: Exception) {
+            _error.value = "Playback error: ${e.message}"
+            e.printStackTrace()
         }
     }
 
+
     fun pause() {
-        mainPlayer?.let {
-            try {
-                if (it.isPlaying) {
-                    it.pause()
-                    _isPlaying.value = false
-                    pauseAtmospheres()
-                }
-            } catch (e: IllegalStateException) {
-                _error.value = "Pause error: ${e.message}"
-                e.printStackTrace()
+        val player = mainPlayer
+        if (player == null) return
+        try {
+            if (player.isPlaying) {
+                player.pause()
             }
+            _isPlaying.value = false
+            pauseAtmospheres()
+        } catch (e: Exception) {
+            _error.value = "Pause error: ${e.message}"
+            e.printStackTrace()
         }
     }
 
     fun togglePlayPause() {
-        if (_isPlaying.value) {
-            pause()
-        } else {
-            play()
+        val player = mainPlayer
+        if (player == null) {
+            _error.value = "No track loaded"
+            return
+        }
+        try {
+            if (player.isPlaying) {
+                player.pause()
+                _isPlaying.value = false
+                pauseAtmospheres()
+            } else {
+                // After stop(), MediaPlayer enters Stopped state and needs prepare() before start()
+                try {
+                    player.prepare()
+                } catch (_: Exception) {
+                    // If already prepared, prepare() may throw - safe to ignore
+                }
+                player.start()
+                _isPlaying.value = true
+                startPositionPolling()
+                syncAtmospheres()
+            }
+        } catch (e: Exception) {
+            _error.value = "Play/Pause error: ${e.message}"
+            e.printStackTrace()
         }
     }
 
@@ -268,16 +298,18 @@ class AudioEngine(private val context: Context) {
     fun stop() {
         _isPlaying.value = false
         pauseAtmospheres()
-        mainPlayer?.apply {
-            if (isPlaying) stop()
-            reset()
+        mainPlayer?.let { player ->
+            try {
+                if (player.isPlaying) {
+                    player.stop()
+                }
+            } catch (_: Exception) {}
         }
         _position.value = 0
         positionJob?.cancel()
     }
 
     fun release() {
-        stop()
         positionJob?.cancel()
         scope.cancel()
         releaseMainPlayer()
@@ -506,8 +538,13 @@ class AudioEngine(private val context: Context) {
         if (player == null) return
         val vol = volume.coerceIn(0f, 1f)
         player.setVolume(vol, vol)
-        if (vol > 0.01f && _isPlaying.value && !player.isPlaying) {
-            player.start()
+        // Start atmosphere player whenever volume > 0, regardless of main track playing state
+        // The atmosphere is an independent layer
+        if (vol > 0.01f && !player.isPlaying) {
+            try {
+                player.seekTo(0)
+                player.start()
+            } catch (_: Exception) {}
         } else if (vol <= 0.01f && player.isPlaying) {
             player.pause()
         }
@@ -523,9 +560,12 @@ class AudioEngine(private val context: Context) {
     private fun syncAtmospheres() {
         atmospherePlayers.forEach { (key, player) ->
             val vol = atmosphereVolumes[key] ?: 0f
-            if (vol > 0.01f && _isPlaying.value && !player.isPlaying) {
-                player.start()
-            } else if ((vol <= 0.01f || !_isPlaying.value) && player.isPlaying) {
+            if (vol > 0.01f && !player.isPlaying) {
+                try {
+                    player.seekTo(0)
+                    player.start()
+                } catch (_: Exception) {}
+            } else if (vol <= 0.01f && player.isPlaying) {
                 player.pause()
             }
         }
@@ -533,7 +573,9 @@ class AudioEngine(private val context: Context) {
 
     private fun pauseAtmospheres() {
         atmospherePlayers.values.forEach {
-            if (it.isPlaying) it.pause()
+            try {
+                if (it.isPlaying) it.pause()
+            } catch (_: Exception) {}
         }
     }
 
@@ -543,12 +585,15 @@ class AudioEngine(private val context: Context) {
         positionJob?.cancel()
         positionJob = scope.launch {
             while (isActive) {
-                mainPlayer?.let {
-                    if (it.isPlaying) {
-                        _position.value = it.currentPosition.toLong()
-                    }
+                mainPlayer?.let { player ->
+                    try {
+                        val pos = player.currentPosition.toLong()
+                        if (pos >= 0) {
+                            _position.value = pos
+                        }
+                    } catch (_: Exception) {}
                 }
-                delay(100)
+                delay(250)
             }
         }
     }
@@ -556,12 +601,23 @@ class AudioEngine(private val context: Context) {
     // --- Cleanup ---
 
     private fun releaseMainPlayer() {
-        mainPlayer?.apply {
-            if (isPlaying) stop()
-            release()
+        mainPlayer?.let { player ->
+            try {
+                if (player.isPlaying) {
+                    player.stop()
+                }
+                player.release()
+            } catch (_: Exception) {}
         }
         mainPlayer = null
         abandonAudioFocus()
+    }
+
+    /**
+     * Ensure main audio session is established before initializing effects.
+     */
+    fun ensureAudioSessionReady(): Boolean {
+        return mainPlayer != null && mainPlayer!!.audioSessionId > 0
     }
 
     private fun releaseAtmospherePlayers() {

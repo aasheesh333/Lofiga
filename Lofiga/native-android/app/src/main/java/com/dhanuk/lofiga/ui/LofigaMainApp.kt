@@ -4,8 +4,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
-import com.dhanuk.lofiga.model.SavedConfig
 import com.dhanuk.lofiga.ui.components.LofigaNavigationBar
 import com.dhanuk.lofiga.ui.screens.*
 
@@ -28,12 +26,15 @@ fun LofigaMainApp(
         when (selectedIndex) {
             0 -> HomeScreen(
                 viewModel = viewModel,
-                onSongSelected = { path, name ->
-                    viewModel.loadTrackFromFile(path, name)
-                    selectedIndex = 1 // Switch to player after selecting song
+                onSongSelected = { track ->
+                    viewModel.loadTrack(track)
+                    selectedIndex = 1
                 },
                 onEditConfig = { config ->
-                    viewModel.editConfig(config)
+                    val success = viewModel.editConfig(config)
+                    if (success) {
+                        selectedIndex = 1
+                    }
                 }
             )
             1 -> PlayerScreen(
@@ -44,7 +45,7 @@ fun LofigaMainApp(
                 viewModel = viewModel,
                 onFileSelected = { path, name ->
                     viewModel.loadTrackFromFile(path, name)
-                    selectedIndex = 1 // Switch to player after selecting song
+                    selectedIndex = 1
                 }
             )
             3 -> SettingsScreen(

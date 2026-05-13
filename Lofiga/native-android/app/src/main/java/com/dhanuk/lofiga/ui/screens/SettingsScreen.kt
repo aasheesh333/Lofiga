@@ -106,6 +106,18 @@ fun SettingsScreen(viewModel: MainViewModel) {
                 )
             } else {
                 customPresets.forEach { preset ->
+                    var showPresetDeleteConfirm by remember { mutableStateOf(false) }
+                    if (showPresetDeleteConfirm) {
+                        DeleteConfirmDialog(
+                            title = "Delete Preset",
+                            message = "Are you sure you want to delete \"${preset.name}\"? This cannot be undone.",
+                            onConfirm = {
+                                viewModel.deleteCustomPreset(preset.id)
+                                showPresetDeleteConfirm = false
+                            },
+                            onDismiss = { showPresetDeleteConfirm = false }
+                        )
+                    }
                     Surface(
                         modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
                         shape = RoundedCornerShape(12.dp),
@@ -127,13 +139,19 @@ fun SettingsScreen(viewModel: MainViewModel) {
                                 modifier = Modifier.size(20.dp)
                             )
                             Spacer(Modifier.width(12.dp))
-                            Text(
-                                text = preset.name,
-                                color = Color.White,
-                                style = MaterialTheme.typography.titleMedium,
-                                modifier = Modifier.weight(1f)
-                            )
-                            IconButton(onClick = { viewModel.deleteCustomPreset(preset.id) }) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = preset.name,
+                                    color = Color.White,
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                                Text(
+                                    text = "Custom preset",
+                                    color = White38,
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                            IconButton(onClick = { showPresetDeleteConfirm = true }) {
                                 Icon(
                                     Icons.Outlined.Delete,
                                     contentDescription = "Delete",

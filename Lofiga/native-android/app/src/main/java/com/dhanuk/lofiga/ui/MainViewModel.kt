@@ -51,6 +51,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _currentPreset = MutableStateFlow(LofiPreset.LofiSlow)
     val currentPreset: StateFlow<LofiPreset> = _currentPreset.asStateFlow()
 
+    private val _selectedCustomPresetId = MutableStateFlow<Long?>(null)
+    val selectedCustomPresetId: StateFlow<Long?> = _selectedCustomPresetId.asStateFlow()
+
     // --- Recent Edits ---
     private val _recentEdits = MutableStateFlow<List<SavedConfig>>(emptyList())
     val recentEdits: StateFlow<List<SavedConfig>> = _recentEdits.asStateFlow()
@@ -109,45 +112,62 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun loadTrack(track: AudioTrack) {
         _currentTrack.value = track
         _currentTrackIndex.value = filteredSongs.value.indexOf(track)
-        track.uri?.let { audioEngine.loadTrack(it) }
-        applyPreset(LofiPreset.LofiSlow) // Default preset
-        audioEngine.play()
+        val success = track.uri?.let { audioEngine.loadTrack(it) } ?: false
+        if (success) {
+            applyPreset(LofiPreset.LofiSlow)
+            audioEngine.play()
+        } else {
+            _snackbarMessage.tryEmit(audioEngine.error.value ?: "Failed to load track")
+        }
     }
 
-    fun loadTrackFromFile(filePath: String, fileName: String) {
+    fun loadTrackFromFile(filePath: String, fileName: String): Boolean {
         _currentTrack.value = AudioTrack(
             title = fileName,
             dataPath = filePath
         )
-        audioEngine.loadTrackFromFile(filePath)
-        applyPreset(LofiPreset.LofiSlow)
-
-        // Try to play, show error if fails
-        try {
+        val success = audioEngine.loadTrackFromFile(filePath)
+        if (success) {
+            applyPreset(LofiPreset.LofiSlow)
             audioEngine.play()
-        } catch (e: Exception) {
-            _snackbarMessage.tryEmit("Playback error: ${e.message}")
+            return true
+        } else {
+            _snackbarMessage.tryEmit(audioEngine.error.value ?: "Failed to load track")
+            return false
         }
     }
 
     fun nextTrack() {
         val songs = filteredSongs.value
         if (songs.isEmpty()) return
-        val nextIndex = (_currentTrackIndex.value + 1) % songs.size
-        loadTrack(songs[nextIndex])
+        val currentIdx = _currentTrackIndex.value
+        if (currentIdx < 0 || currentIdx >= songs.size) {
+            // Current track not in filtered songs (e.g., loaded from file picker)
+            loadTrack(songs[0])
+        } else {
+            val nextIndex = (currentIdx + 1) % songs.size
+            loadTrack(songs[nextIndex])
+        }
     }
 
     fun previousTrack() {
         val songs = filteredSongs.value
         if (songs.isEmpty()) return
-        val prevIndex = if (_currentTrackIndex.value <= 0) songs.size - 1 else _currentTrackIndex.value - 1
-        loadTrack(songs[prevIndex])
+        val currentIdx = _currentTrackIndex.value
+        if (currentIdx < 0 || currentIdx >= songs.size) {
+            // Current track not in filtered songs (e.g., loaded from file picker)
+            loadTrack(songs[0])
+        } else {
+            val prevIndex = if (currentIdx <= 0) songs.size - 1 else currentIdx - 1
+            loadTrack(songs[prevIndex])
+        }
     }
 
     // --- Presets ---
 
     fun applyPreset(preset: LofiPreset) {
         _currentPreset.value = preset
+        _selectedCustomPresetId.value = null
         _currentValues.value = preset.values
 
         audioEngine.setSpeedAndPitch(preset.values.tempo, preset.values.pitch)
@@ -162,6 +182,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val newValues = _currentValues.value.copy(tempo = value)
         _currentValues.value = newValues
         _currentPreset.value = LofiPreset.Custom
+        _selectedCustomPresetId.value = null
         audioEngine.setSpeedAndPitch(value, newValues.pitch)
     }
 
@@ -169,6 +190,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val newValues = _currentValues.value.copy(pitch = value)
         _currentValues.value = newValues
         _currentPreset.value = LofiPreset.Custom
+        _selectedCustomPresetId.value = null
         audioEngine.setSpeedAndPitch(newValues.tempo, value)
     }
 
@@ -176,6 +198,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val newValues = _currentValues.value.copy(reverb = value)
         _currentValues.value = newValues
         _currentPreset.value = LofiPreset.Custom
+        _selectedCustomPresetId.value = null
         audioEngine.setReverb(value)
     }
 
@@ -183,6 +206,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val newValues = _currentValues.value.copy(delay = value)
         _currentValues.value = newValues
         _currentPreset.value = LofiPreset.Custom
+        _selectedCustomPresetId.value = null
         audioEngine.setDelay(value)
     }
 
@@ -190,6 +214,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val newValues = _currentValues.value.copy(bass = value)
         _currentValues.value = newValues
         _currentPreset.value = LofiPreset.Custom
+        _selectedCustomPresetId.value = null
         audioEngine.setBassBoost(value)
     }
 
@@ -197,6 +222,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val newValues = _currentValues.value.copy(trebleCut = value)
         _currentValues.value = newValues
         _currentPreset.value = LofiPreset.Custom
+        _selectedCustomPresetId.value = null
         audioEngine.setTrebleCut(value)
     }
 
@@ -211,6 +237,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
         _currentValues.value = newValues
         _currentPreset.value = LofiPreset.Custom
+        _selectedCustomPresetId.value = null
         audioEngine.setAtmosphereVolume(key, volume)
     }
 
@@ -245,20 +272,43 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun editConfig(config: SavedConfig) {
-        _currentValues.value = config.values
-        _currentPreset.value = LofiPreset.Custom
+    fun editConfig(config: SavedConfig): Boolean {
+        // First load the track audio
+        if (config.filePath.isBlank()) {
+            _snackbarMessage.tryEmit("Config has no file path")
+            return false
+        }
+        val fileExists = java.io.File(config.filePath).exists()
+        if (!fileExists) {
+            _snackbarMessage.tryEmit("File not found: ${config.fileName}")
+            return false
+        }
+
         _currentTrack.value = AudioTrack(
             title = config.fileName,
             dataPath = config.filePath
         )
 
+        val success = audioEngine.loadTrackFromFile(config.filePath)
+        if (!success) {
+            _snackbarMessage.tryEmit(audioEngine.error.value ?: "Failed to load file")
+            return false
+        }
+
+        // Now apply the saved values
+        _currentValues.value = config.values
+        _currentPreset.value = LofiPreset.Custom
+        _selectedCustomPresetId.value = null
+        
         audioEngine.setSpeedAndPitch(config.values.tempo, config.values.pitch)
         audioEngine.setReverb(config.values.reverb)
         audioEngine.setBassBoost(config.values.bass)
         audioEngine.setTrebleCut(config.values.trebleCut)
         audioEngine.setDelay(config.values.delay)
         audioEngine.setAllAtmosphereVolumes(config.values)
+        
+        audioEngine.play()
+        return true
     }
 
     // --- Custom Presets ---
@@ -271,13 +321,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun saveCustomPreset(name: String) {
         viewModelScope.launch {
-            repository.saveCustomPreset(
+            val newId = repository.saveCustomPreset(
                 CustomPreset(
                     name = name,
                     values = _currentValues.value
                 )
             )
             loadCustomPresets()
+            _selectedCustomPresetId.value = newId
             _snackbarMessage.tryEmit("Preset '$name' saved!")
         }
     }
@@ -286,12 +337,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             repository.deleteCustomPreset(id)
             loadCustomPresets()
+            if (_selectedCustomPresetId.value == id) {
+                _selectedCustomPresetId.value = null
+            }
         }
     }
 
     fun applyCustomPreset(preset: CustomPreset) {
         _currentValues.value = preset.values
         _currentPreset.value = LofiPreset.Custom
+        _selectedCustomPresetId.value = preset.id
 
         audioEngine.setSpeedAndPitch(preset.values.tempo, preset.values.pitch)
         audioEngine.setReverb(preset.values.reverb)
@@ -303,20 +358,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     // --- Export ---
 
+    private val _exportedFilePath = MutableStateFlow<String?>(null)
+    val exportedFilePath: StateFlow<String?> = _exportedFilePath.asStateFlow()
+
     fun exportTrack(context: android.content.Context) {
         val track = _currentTrack.value ?: run {
             _snackbarMessage.tryEmit("No track selected - select a song first")
             return
         }
 
-        // Check if we have either URI or file path
         val hasValidSource = track.uri != null || (track.dataPath.isNotBlank())
         if (!hasValidSource) {
             _snackbarMessage.tryEmit("Export failed: Track source not found - reload the song")
             return
         }
 
-        // Additional check: verify the source actually exists
         if (track.dataPath.isNotBlank() && !java.io.File(track.dataPath).exists()) {
             _snackbarMessage.tryEmit("Export failed: Audio file not found at path")
             return
@@ -325,6 +381,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _isExporting.value = true
             _exportProgress.value = 0f
+            _exportedFilePath.value = null
             try {
                 val settings = settingsManager.settingsFlow.first()
                 val inputPath = if (track.dataPath.isNotBlank()) track.dataPath else null
@@ -339,9 +396,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     onProgress = { _exportProgress.value = it }
                 )
                 if (result != null) {
-                    _snackbarMessage.tryEmit("Exported to: $result")
+                    _exportedFilePath.value = result
                 } else {
-                    _snackbarMessage.tryEmit("Export completed, but no file path returned")
+                    _snackbarMessage.tryEmit("Export cancelled")
                 }
             } catch (e: Exception) {
                 _snackbarMessage.tryEmit("Export failed: ${e.message}")
@@ -349,6 +406,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _isExporting.value = false
             }
         }
+    }
+
+    fun clearExportedFilePath() {
+        _exportedFilePath.value = null
     }
 
     fun cancelExport() {

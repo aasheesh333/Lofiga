@@ -191,7 +191,7 @@ fun LofigaNavigationBar(
         contentColor = Color.White,
         tonalElevation = 0.dp
     ) {
-        listOf("Songs", "Player", "Mixes", "Settings").forEachIndexed { index, label ->
+        listOf("Browse", "Player", "Exports", "Settings").forEachIndexed { index, label ->
             NavigationBarItem(
                 selected = selectedIndex == index,
                 onClick = { onItemSelected(index) },
@@ -290,7 +290,9 @@ fun SongItem(
     duration: String,
     onClick: () -> Unit,
     isCurrentlyPlaying: Boolean = false,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    gradientThumb: Boolean = false,
+    thumbTitle: String = title
 ) {
     Card(
         modifier = modifier
@@ -311,19 +313,23 @@ fun SongItem(
             modifier = Modifier.padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(
-                modifier = Modifier
-                    .size(50.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(if (isCurrentlyPlaying) Purple500.copy(alpha = 0.15f) else DarkSurfaceHighlight),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = if (isCurrentlyPlaying) Icons.Outlined.Equalizer else Icons.Outlined.MusicNote,
-                    contentDescription = null,
-                    tint = if (isCurrentlyPlaying) Purple500 else White38,
-                    modifier = Modifier.size(24.dp)
-                )
+            if (gradientThumb) {
+                GradientThumbnail(size = 50, title = thumbTitle, isActive = isCurrentlyPlaying)
+            } else {
+                Box(
+                    modifier = Modifier
+                        .size(50.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(if (isCurrentlyPlaying) Purple500.copy(alpha = 0.15f) else DarkSurfaceHighlight),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = if (isCurrentlyPlaying) Icons.Outlined.Equalizer else Icons.Outlined.MusicNote,
+                        contentDescription = null,
+                        tint = if (isCurrentlyPlaying) Purple500 else White38,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
             }
             Spacer(Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {
@@ -365,6 +371,152 @@ fun SectionHeader(
         style = MaterialTheme.typography.labelSmall,
         color = White38,
         letterSpacing = 2.sp
+    )
+}
+
+/**
+ * Creates a gradient thumbnail based on a string hash for visual variety.
+ */
+fun gradientForTitle(title: String): List<Color> {
+    val pairs = listOf(
+        Purple500 to Cyan400,
+        Purple700 to Purple400,
+        Color(0xFFE040FB) to Color(0xFF7C4DFF),
+        Color(0xFF00E5FF) to Color(0xFF1DE9B6),
+        Color(0xFFFF4081) to Color(0xFF7C4DFF),
+        Color(0xFFFFAB00) to Color(0xFFFF6D00),
+        Color(0xFF00BCD4) to Color(0xFF8BC34A),
+        Color(0xFF7C4DFF) to Color(0xFF448AFF)
+    )
+    val hash = title.hashCode().let { if (it == Int.MIN_VALUE) 0 else kotlin.math.abs(it) }
+    return listOf(pairs[hash % pairs.size].first, pairs[hash % pairs.size].second)
+}
+
+@Composable
+fun GradientThumbnail(
+    size: Int = 50,
+    title: String,
+    isActive: Boolean = false
+) {
+    val colors = remember(title) { gradientForTitle(title) }
+    Box(
+        modifier = Modifier
+            .size(size.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(
+                Brush.linearGradient(
+                    colors = listOf(
+                        colors[0].copy(alpha = if (isActive) 0.8f else 0.6f),
+                        colors[1].copy(alpha = if (isActive) 0.6f else 0.4f)
+                    )
+                )
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            Icons.Outlined.MusicNote,
+            contentDescription = null,
+            tint = Color.White.copy(alpha = if (isActive) 0.9f else 0.7f),
+            modifier = Modifier.size((size * 0.45f).dp)
+        )
+    }
+}
+
+@Composable
+fun EffectCard(
+    modifier: Modifier = Modifier,
+    icon: @Composable () -> Unit,
+    label: String,
+    value: String,
+    sliderValue: Float,
+    onSliderChange: (Float) -> Unit
+) {
+    val isActive = sliderValue > 0.01f || label == "Tempo"
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(14.dp),
+        color = if (isActive) Purple500.copy(alpha = 0.1f) else DarkSurfaceHighlight,
+        border = BorderStroke(
+            1.dp,
+            if (isActive) Purple500.copy(alpha = 0.3f) else White12
+        )
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Surface(
+                    modifier = Modifier.size(28.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    color = Purple500.copy(alpha = if (isActive) 0.8f else 0.3f)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        icon()
+                    }
+                }
+                Spacer(Modifier.width(8.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (isActive) Color.White else White60,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+                Text(
+                    text = value,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Cyan400,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+            Slider(
+                value = sliderValue,
+                onValueChange = onSliderChange,
+                modifier = Modifier.fillMaxWidth().height(20.dp),
+                colors = SliderDefaults.colors(
+                    thumbColor = Purple500,
+                    activeTrackColor = Purple500,
+                    inactiveTrackColor = White12
+                )
+            )
+        }
+    }
+}
+
+@Composable
+fun DeleteConfirmDialog(
+    title: String,
+    message: String,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        containerColor = DarkSurface,
+        onDismissRequest = onDismiss,
+        icon = {
+            Icon(
+                Icons.Outlined.Delete,
+                contentDescription = null,
+                tint = Color(0xFFFF5252),
+                modifier = Modifier.size(32.dp)
+            )
+        },
+        title = {
+            Text(text = title, color = Color.White, fontWeight = FontWeight.Bold)
+        },
+        text = {
+            Text(text = message, color = White60)
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text("Delete", color = Color(0xFFFF5252), fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel", color = White38)
+            }
+        }
     )
 }
 
