@@ -26,6 +26,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
+import androidx.compose.material3.ExperimentalMaterial3Api
 import com.dhanuk.lofiga.model.CustomPreset
 import com.dhanuk.lofiga.model.LofiPreset
 import com.dhanuk.lofiga.ui.MainViewModel
@@ -40,6 +41,7 @@ private fun formatDuration(millis: Long): String {
     return "%d:%02d".format(min, sec)
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PlayerScreen(
     viewModel: MainViewModel,
