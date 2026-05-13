@@ -419,8 +419,28 @@ class AudioEngine(private val context: Context) {
     }
 
     fun setDelay(wet: Float) {
-        if (wet > 0.01f) {
-            setReverb((wet * 0.5f).coerceIn(0f, 1f))
+        // No-op: delay is combined with reverb via setReverbAndDelay()
+        // to prevent overriding the reverb setting.
+    }
+
+    /**
+     * Combines both reverb and delay into a single reverb effect since
+     * Android's AudioEffect framework only provides PresetReverb.
+     */
+    fun setReverbAndDelay(reverbWet: Float, delayWet: Float) {
+        reverb?.let { r ->
+            try {
+                val combined = (reverbWet + delayWet * 0.4f).coerceIn(0f, 1f)
+                r.enabled = combined > 0.01f
+                if (combined > 0.01f) {
+                    r.preset = when {
+                        combined < 0.25f -> PresetReverb.PRESET_SMALLROOM
+                        combined < 0.5f -> PresetReverb.PRESET_MEDIUMROOM
+                        combined < 0.75f -> PresetReverb.PRESET_LARGEHALL
+                        else -> PresetReverb.PRESET_PLATE
+                    }
+                }
+            } catch (e: Exception) { e.printStackTrace() }
         }
     }
 
@@ -464,8 +484,8 @@ class AudioEngine(private val context: Context) {
                     ) {}
                 },
                 android.media.audiofx.Visualizer.getMaxCaptureRate() / 2,
-                false,
-                true
+                true,
+                false
             )
             v.enabled = true
             visualizer = v

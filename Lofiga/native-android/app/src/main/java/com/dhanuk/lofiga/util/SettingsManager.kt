@@ -23,7 +23,7 @@ companion object {
         private val KEY_HAS_SEEN_ONBOARDING = booleanPreferencesKey("has_seen_onboarding")
 
         const val DEFAULT_FORMAT = "m4a"
-        const val DEFAULT_BITRATE = "320k"
+        const val DEFAULT_BITRATE = "192k"
     }
 
     data class AppSettings(

@@ -25,6 +25,9 @@ object ExportService {
     private val SUPPORTED_BITRATES = listOf("128k", "192k", "256k", "320k")
     private const val MAX_PCM_SAMPLES = 20_000_000
 
+    // Cache for atmosphere PCM data to avoid re-reading WAV files on every export
+    private val atmospherePcmCache = mutableMapOf<String, ShortArray?>()
+
     suspend fun exportTrack(
         context: Context,
         inputUri: Uri,
@@ -542,6 +545,25 @@ val outputFile = File(outputDirPath, "${cleanName}_lofi.$format")
 
     private fun readAtmospherePcm(context: Context, key: String, targetRate: Int, targetLength: Int): ShortArray? {
         val assetPath = getAtmosphereAssetPath(key) ?: return null
+
+        // Check cache first
+        val cached = atmospherePcmCache[key]
+        if (cached != null) {
+            // Resample if needed and create properly sized array
+            val pcmAtTargetRate = if (targetRate != 44100) {
+                resamplePcm(cached, 44100, targetRate, 2)
+            } else cached
+            val result = ShortArray(targetLength)
+            var pos = 0
+            val copySize = pcmAtTargetRate.size
+            while (pos < targetLength) {
+                val len = minOf(copySize, targetLength - pos)
+                System.arraycopy(pcmAtTargetRate, 0, result, pos, len)
+                pos += len
+            }
+            return result
+        }
+
         return try {
             val input = context.assets.open(assetPath)
             val allBytes = input.readBytes()
@@ -601,6 +623,11 @@ val outputFile = File(outputDirPath, "${cleanName}_lofi.$format")
 
             if (channels == 1) pcm = monoToStereo(pcm)
             if (fileRate != targetRate) pcm = resamplePcm(pcm, fileRate, targetRate, 2)
+
+            // Cache the processed atmosphere at 44100/2ch for next time
+            if (targetRate == 44100) {
+                atmospherePcmCache[key] = pcm.copyOf()
+            }
 
             val result = ShortArray(targetLength)
             var pos = 0

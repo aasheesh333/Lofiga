@@ -171,10 +171,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _currentValues.value = preset.values
 
         audioEngine.setSpeedAndPitch(preset.values.tempo, preset.values.pitch)
-        audioEngine.setReverb(preset.values.reverb)
+        audioEngine.setReverbAndDelay(preset.values.reverb, preset.values.delay)
         audioEngine.setBassBoost(preset.values.bass)
         audioEngine.setTrebleCut(preset.values.trebleCut)
-        audioEngine.setDelay(preset.values.delay)
         audioEngine.setAllAtmosphereVolumes(preset.values)
     }
 
@@ -199,7 +198,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _currentValues.value = newValues
         _currentPreset.value = LofiPreset.Custom
         _selectedCustomPresetId.value = null
-        audioEngine.setReverb(value)
+        audioEngine.setReverbAndDelay(value, newValues.delay)
     }
 
     fun updateDelay(value: Float) {
@@ -207,7 +206,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _currentValues.value = newValues
         _currentPreset.value = LofiPreset.Custom
         _selectedCustomPresetId.value = null
-        audioEngine.setDelay(value)
+        audioEngine.setReverbAndDelay(newValues.reverb, value)
     }
 
     fun updateBass(value: Float) {
@@ -301,10 +300,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _selectedCustomPresetId.value = null
         
         audioEngine.setSpeedAndPitch(config.values.tempo, config.values.pitch)
-        audioEngine.setReverb(config.values.reverb)
+        audioEngine.setReverbAndDelay(config.values.reverb, config.values.delay)
         audioEngine.setBassBoost(config.values.bass)
         audioEngine.setTrebleCut(config.values.trebleCut)
-        audioEngine.setDelay(config.values.delay)
         audioEngine.setAllAtmosphereVolumes(config.values)
         
         audioEngine.play()
@@ -349,10 +347,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _selectedCustomPresetId.value = preset.id
 
         audioEngine.setSpeedAndPitch(preset.values.tempo, preset.values.pitch)
-        audioEngine.setReverb(preset.values.reverb)
+        audioEngine.setReverbAndDelay(preset.values.reverb, preset.values.delay)
         audioEngine.setBassBoost(preset.values.bass)
         audioEngine.setTrebleCut(preset.values.trebleCut)
-        audioEngine.setDelay(preset.values.delay)
         audioEngine.setAllAtmosphereVolumes(preset.values)
     }
 
