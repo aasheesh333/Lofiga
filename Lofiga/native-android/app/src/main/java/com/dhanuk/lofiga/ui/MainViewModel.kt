@@ -115,7 +115,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val success = track.uri?.let { audioEngine.loadTrack(it) } ?: false
         if (success) {
             applyPreset(LofiPreset.LofiSlow)
-            audioEngine.play()
         } else {
             _snackbarMessage.tryEmit(audioEngine.error.value ?: "Failed to load track")
         }
@@ -129,7 +128,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val success = audioEngine.loadTrackFromFile(filePath)
         if (success) {
             applyPreset(LofiPreset.LofiSlow)
-            audioEngine.play()
             return true
         } else {
             _snackbarMessage.tryEmit(audioEngine.error.value ?: "Failed to load track")
@@ -304,8 +302,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         audioEngine.setBassBoost(config.values.bass)
         audioEngine.setTrebleCut(config.values.trebleCut)
         audioEngine.setAllAtmosphereVolumes(config.values)
-        
-        audioEngine.play()
         return true
     }
 
