@@ -39,46 +39,67 @@ fun LibraryScreen(
     var isLoading by remember { mutableStateOf(true) }
 
 
-    // Helper to load exported files
-    fun loadExports() {
-        // Load exports directly
-            // Look for exported files in app-specific Music/Lofiga directory
-            val files = mutableListOf<File>()
-            val musDir = appContext.getExternalFilesDir(Environment.DIRECTORY_MUSIC)
-            val dirs = mutableListOf<File>()
-            if (musDir != null) {
-                dirs.add(File(musDir, "Lofiga"))
-            }
-            // Also check old shared storage paths for backward compatibility
-            try {
-                dirs.add(File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC), "Lofiga"))
-                dirs.add(File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "Lofiga"))
-            } catch (_: Exception) {
-                // On Android 11+, shared storage paths may not be accessible
-            }
-            dirs.forEach { dir ->
-                if (dir.exists()) {
-                    files.addAll(
-                        dir.listFiles { f -> f.extension in listOf("wav", "m4a", "aac") }
-                            ?.sortedByDescending { it.lastModified() }
-                            ?: emptyList()
-                    )
-                }
-            }
-            exportedFiles = files.distinctBy { it.absolutePath }
-            isLoading = false
-        }
-    }
+    // Helper removed; loading logic inlined in LaunchedEffect blocks
 
     // Initial load
     LaunchedEffect(Unit) {
-        loadExports()
+        // Load exports directly
+        // Look for exported files in app-specific Music/Lofiga directory
+        val files = mutableListOf<File>()
+        val musDir = appContext.getExternalFilesDir(Environment.DIRECTORY_MUSIC)
+        val dirs = mutableListOf<File>()
+        if (musDir != null) {
+            dirs.add(File(musDir, "Lofiga"))
+        }
+        // Also check old shared storage paths for backward compatibility
+        try {
+            dirs.add(File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC), "Lofiga"))
+            dirs.add(File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "Lofiga"))
+        } catch (_: Exception) {
+            // On Android 11+, shared storage paths may not be accessible
+        }
+        dirs.forEach { dir ->
+            if (dir.exists()) {
+                files.addAll(
+                    dir.listFiles { f -> f.extension in listOf("wav", "m4a", "aac") }
+                        ?.sortedByDescending { it.lastModified() }
+                        ?: emptyList()
+                )
+            }
+        }
+        exportedFiles = files.distinctBy { it.absolutePath }
+        isLoading = false
     }
 
     // Refresh when an export completes
     LaunchedEffect(viewModel) {
         viewModel.exportCompleted.collect {
-            loadExports()
+        // Load exports directly
+        // Look for exported files in app-specific Music/Lofiga directory
+        val files = mutableListOf<File>()
+        val musDir = appContext.getExternalFilesDir(Environment.DIRECTORY_MUSIC)
+        val dirs = mutableListOf<File>()
+        if (musDir != null) {
+            dirs.add(File(musDir, "Lofiga"))
+        }
+        // Also check old shared storage paths for backward compatibility
+        try {
+            dirs.add(File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC), "Lofiga"))
+            dirs.add(File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "Lofiga"))
+        } catch (_: Exception) {
+            // On Android 11+, shared storage paths may not be accessible
+        }
+        dirs.forEach { dir ->
+            if (dir.exists()) {
+                files.addAll(
+                    dir.listFiles { f -> f.extension in listOf("wav", "m4a", "aac") }
+                        ?.sortedByDescending { it.lastModified() }
+                        ?: emptyList()
+                )
+            }
+        }
+        exportedFiles = files.distinctBy { it.absolutePath }
+        isLoading = false
         }
     }
 
