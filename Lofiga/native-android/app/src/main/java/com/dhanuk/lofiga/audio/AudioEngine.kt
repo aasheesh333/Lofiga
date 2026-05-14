@@ -34,6 +34,9 @@ class AudioEngine(private val context: Context) {
     private val _waveformData = MutableStateFlow(FloatArray(32))
     val waveformData: StateFlow<FloatArray> = _waveformData.asStateFlow()
 
+    private val _fftData = MutableStateFlow(FloatArray(16))
+    val fftData: StateFlow<FloatArray> = _fftData.asStateFlow()
+
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
@@ -141,7 +144,6 @@ class AudioEngine(private val context: Context) {
                 )
                 prepare()
                 _duration.value = duration.toLong()
-                _isPlaying.value = false
                 setOnCompletionListener {
                     if (!_isLooping.value) {
                         _isPlaying.value = false
@@ -186,7 +188,6 @@ class AudioEngine(private val context: Context) {
                 )
                 prepare()
                 _duration.value = duration.toLong()
-                _isPlaying.value = false
                 setOnCompletionListener {
                     if (!_isLooping.value) {
                         _isPlaying.value = false
@@ -224,14 +225,10 @@ class AudioEngine(private val context: Context) {
                 try {
                     player.prepare()
                 } catch (_: Exception) {
-                    // If already prepared, prepare() may throw - ignore
                 }
                 player.start()
                 _isPlaying.value = true
-                // Always re-init visualizer on play to ensure real-time waveform capture
-                try {
-                    initVisualizer(player.audioSessionId)
-                } catch (_: Exception) {}
+                visualizer?.enabled = true
                 startPositionPolling()
                 syncAtmospheres()
             }
@@ -272,14 +269,10 @@ class AudioEngine(private val context: Context) {
                 try {
                     player.prepare()
                 } catch (_: Exception) {
-                    // If already prepared, prepare() may throw - safe to ignore
                 }
                 player.start()
                 _isPlaying.value = true
-                // Always re-init visualizer on play toggle for real-time waveform capture
-                try {
-                    initVisualizer(player.audioSessionId)
-                } catch (_: Exception) {}
+                visualizer?.enabled = true
                 startPositionPolling()
                 syncAtmospheres()
             }
@@ -409,9 +402,8 @@ class AudioEngine(private val context: Context) {
                     val bands = eq.numberOfBands
                     for (i in 0 until bands) {
                         val freq = eq.getCenterFreq(i.toShort())
-                        // getCenterFreq() returns millihertz (mHz), so 2000 Hz = 2000000 mHz
-                    if (freq > 2_000_000) {
-                            val gain = (-(cutoffFactor * 15f)).toInt().coerceIn(-1500, 0).toShort()
+                        if (freq > 2_000_000) {
+                            val gain = (-(cutoffFactor * 1500f)).toInt().coerceIn(-1500, 0).toShort()
                             eq.setBandLevel(i.toShort(), gain)
                         } else {
                             eq.setBandLevel(i.toShort(), 0.toShort())
@@ -441,16 +433,14 @@ class AudioEngine(private val context: Context) {
     fun setReverbAndDelay(reverbWet: Float, delayWet: Float) {
         reverb?.let { r ->
             try {
-                // Delay contributes more significantly for a noticeable echo-like effect.
-                // Combined value drives the PresetReverb preset selection.
-                val combined = (reverbWet + delayWet * 0.7f).coerceIn(0f, 1f)
+                val combined = (reverbWet + delayWet * 1.0f).coerceIn(0f, 1f)
                 r.enabled = combined > 0.01f
                 if (combined > 0.01f) {
                     r.preset = when {
-                        combined < 0.08f -> PresetReverb.PRESET_NONE
-                        combined < 0.20f -> PresetReverb.PRESET_SMALLROOM
-                        combined < 0.40f -> PresetReverb.PRESET_MEDIUMROOM
-                        combined < 0.65f -> PresetReverb.PRESET_LARGEHALL
+                        combined < 0.06f -> PresetReverb.PRESET_NONE
+                        combined < 0.15f -> PresetReverb.PRESET_SMALLROOM
+                        combined < 0.30f -> PresetReverb.PRESET_MEDIUMROOM
+                        combined < 0.55f -> PresetReverb.PRESET_LARGEHALL
                         else -> PresetReverb.PRESET_PLATE
                     }
                 }
@@ -464,10 +454,9 @@ class AudioEngine(private val context: Context) {
         try {
             releaseVisualizer()
             val maxCapture = android.media.audiofx.Visualizer.getCaptureSizeRange()
-            val captureSize = maxCapture[1].coerceAtMost(1024) // Higher resolution for detailed waveform
+            val captureSize = maxCapture[1].coerceAtMost(1024)
             val v = android.media.audiofx.Visualizer(audioSessionId)
             v.captureSize = captureSize
-            // Use max capture rate for responsive real-time visualization
             val captureRate = android.media.audiofx.Visualizer.getMaxCaptureRate()
             v.setDataCaptureListener(
                 object : android.media.audiofx.Visualizer.OnDataCaptureListener {
@@ -500,11 +489,32 @@ class AudioEngine(private val context: Context) {
                         visualizer: android.media.audiofx.Visualizer?,
                         fft: ByteArray?,
                         samplingRate: Int
-                    ) {}
+                    ) {
+                        fft?.let { data ->
+                            if (data.size >= 4) {
+                                val bands = 16
+                                val step = (data.size / 2) / bands
+                                if (step > 0) {
+                                    val floats = FloatArray(bands) { i ->
+                                        var energy = 0f
+                                        val start = i * step
+                                        val end = minOf(start + step, data.size / 2)
+                                        for (j in start until end) {
+                                            val real = data[j * 2].toFloat() / 128f
+                                            val imag = data[j * 2 + 1].toFloat() / 128f
+                                            energy += (real * real + imag * imag)
+                                        }
+                                        (energy / (end - start)).coerceIn(0f, 1f)
+                                    }
+                                    _fftData.value = floats
+                                }
+                            }
+                        }
+                    }
                 },
                 captureRate,
                 true,
-                false
+                true
             )
             v.enabled = true
             visualizer = v

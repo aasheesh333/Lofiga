@@ -60,6 +60,7 @@ fun PlayerScreen(
     val customPresets by viewModel.customPresets.collectAsState()
     val selectedCustomPresetId by viewModel.selectedCustomPresetId.collectAsState()
     val waveformData by viewModel.audioEngine.waveformData.collectAsState()
+    val fftData by viewModel.audioEngine.fftData.collectAsState()
     val audioError by viewModel.audioEngine.error.collectAsState()
     val exportedFilePath by viewModel.exportedFilePath.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -123,11 +124,9 @@ fun PlayerScreen(
     }
 
     Box(modifier = modifier.fillMaxSize()) {
-        AmbientBackground()
+        AmbientBackground(modifier = Modifier.fillMaxSize())
 
         if (currentTrack == null) {
-            // EMPTY STATE - Centered and visually appealing
-            // Scaffold already provides bottom padding for the nav bar
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
@@ -137,7 +136,6 @@ fun PlayerScreen(
                     verticalArrangement = Arrangement.Center,
                     modifier = Modifier.padding(horizontal = 32.dp)
                 ) {
-                    // Gradient circle background with vinyl icon
                     Surface(
                         modifier = Modifier.size(140.dp),
                         shape = CircleShape,
@@ -146,7 +144,7 @@ fun PlayerScreen(
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Icon(
-                                Icons.Outlined.Equalizer,
+                                Icons.Outlined.LibraryMusic,
                                 contentDescription = null,
                                 tint = Purple500.copy(alpha = 0.6f),
                                 modifier = Modifier.size(64.dp)
@@ -170,7 +168,6 @@ fun PlayerScreen(
                         lineHeight = 22.sp
                     )
                     Spacer(Modifier.height(32.dp))
-                    // Small hint chips
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Surface(
                             shape = RoundedCornerShape(20.dp),
@@ -324,7 +321,8 @@ fun PlayerScreen(
                         barCount = 32,
                         color = Purple500,
                         isPlaying = isPlaying,
-                        waveformData = waveformData
+                        waveformData = waveformData,
+                        fftData = fftData
                     )
 
                     Spacer(Modifier.height(16.dp))

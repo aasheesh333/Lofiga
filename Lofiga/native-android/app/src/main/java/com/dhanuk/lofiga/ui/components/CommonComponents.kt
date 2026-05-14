@@ -52,7 +52,8 @@ fun WaveformVisualizer(
     barCount: Int = 32,
     color: Color = Purple500,
     isPlaying: Boolean = false,
-    waveformData: FloatArray? = null
+    waveformData: FloatArray? = null,
+    fftData: FloatArray? = null
 ) {
     val hasRealData = waveformData != null && waveformData.isNotEmpty() && waveformData.any { kotlin.math.abs(it) > 0.01f }
 
@@ -69,7 +70,6 @@ fun WaveformVisualizer(
 
     Canvas(modifier = modifier.fillMaxWidth().height(80.dp)) {
         if (!isPlaying) {
-            // Draw subtle animated bars even when paused for visual interest
             val barWidth = size.width / barCount
             val centerY = size.height / 2
             val maxHeight = size.height * 0.3f
@@ -96,31 +96,34 @@ fun WaveformVisualizer(
         val maxHeight = size.height * 0.9f
         val centerY = size.height / 2
 
+        var bassEnergy = 0f
+        if (fftData != null && fftData.isNotEmpty()) {
+            for (j in 0 until minOf(4, fftData.size)) {
+                bassEnergy = maxOf(bassEnergy, fftData[j])
+            }
+        }
+        val beatPulse = 1f + bassEnergy * 0.3f
+
         for (i in 0 until barCount) {
             val x = i * barWidth + barWidth * 0.15f
             val rectWidth = barWidth * 0.7f
 
             val value: Float = if (hasRealData && i < waveformData!!.size) {
-                // AudioEngine returns 0..1 positive values - map to centered bar
                 val rawValue = waveformData[i].coerceIn(0f, 1f)
-                rawValue
+                rawValue * beatPulse
             } else {
-                // Generate synthetic waveform for visual appeal when no real data
                 val t = i.toFloat() / barCount * 2f * kotlin.math.PI.toFloat()
                 val sin1 = kotlin.math.sin((2f * t + phase).toDouble()).toFloat()
                 val sin2 = kotlin.math.sin((3f * t + phase * 1.5f).toDouble()).toFloat()
                 val sin3 = kotlin.math.sin((5f * t + phase * 2.2f).toDouble()).toFloat()
                 val sin4 = kotlin.math.sin((i * 7 + phase * 3).toDouble()).toFloat()
                 val synthetic = 0.3f * sin1 + 0.2f * sin2 + 0.1f * sin3 + 0.1f * sin4
-                // Map -1..1 to 0..1
                 (synthetic + 1f) / 2f
             }
 
-            // Apply easing for more natural bar movement
             val easedValue = value.coerceIn(0.05f, 1f)
             val barHeight = easedValue * maxHeight
 
-            // Center the bar vertically
             drawRoundRect(
                 color = color.copy(
                     alpha = 0.3f + 0.7f * easedValue
