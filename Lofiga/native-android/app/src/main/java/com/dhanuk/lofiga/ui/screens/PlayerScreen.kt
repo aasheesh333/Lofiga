@@ -319,7 +319,7 @@ fun PlayerScreen(
                     WaveformVisualizer(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(100.dp),
+                            .height(150.dp),
                         isPlaying = isPlaying,
                         waveformData = waveformSnapshot.data
                     )

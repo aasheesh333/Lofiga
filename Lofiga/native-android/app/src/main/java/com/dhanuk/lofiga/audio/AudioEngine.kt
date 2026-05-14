@@ -235,13 +235,15 @@ class AudioEngine(private val context: Context) {
         }
         try {
             if (!player.isPlaying) {
-                if (visualizer == null) {
-                    try {
-                        initVisualizer(player.audioSessionId)
-                    } catch (_: Exception) {}
+                val sessionId = player.audioSessionId
+                if (sessionId > 0 && visualizer == null) {
+                    initVisualizer(sessionId)
                 }
                 player.start()
-                _isPlaying.value = true
+                scope.launch {
+                    delay(50)
+                    _isPlaying.value = true
+                }
                 startPositionPolling()
                 syncAtmospheres()
             }
@@ -278,17 +280,24 @@ class AudioEngine(private val context: Context) {
         try {
             if (player.isPlaying) {
                 player.pause()
-                _isPlaying.value = false
+                scope.launch {
+                    delay(50)
+                    _isPlaying.value = false
+                }
                 positionJob?.cancel()
                 pauseAtmospheres()
             } else {
-                if (visualizer == null) {
-                    try {
-                        initVisualizer(player.audioSessionId)
-                    } catch (_: Exception) {}
+                if (visualizer == null || !player.isPlaying) {
+                    val sessionId = player.audioSessionId
+                    if (sessionId > 0) {
+                        initVisualizer(sessionId)
+                    }
                 }
                 player.start()
-                _isPlaying.value = true
+                scope.launch {
+                    delay(50)
+                    _isPlaying.value = true
+                }
                 startPositionPolling()
                 syncAtmospheres()
             }
@@ -478,6 +487,11 @@ class AudioEngine(private val context: Context) {
     }
 
     private fun initVisualizer(audioSessionId: Int) {
+        if (audioSessionId <= 0) {
+            android.util.Log.w("AudioEngine", "Invalid audio session ID: $audioSessionId, cannot init visualizer")
+            scheduleVisualizerRetry(audioSessionId)
+            return
+        }
         try {
             releaseVisualizer()
             val maxCapture = android.media.audiofx.Visualizer.getCaptureSizeRange()
@@ -529,8 +543,19 @@ class AudioEngine(private val context: Context) {
             visualizer = v
             android.util.Log.i("AudioEngine", "Visualizer initialized on session $audioSessionId")
         } catch (e: Exception) {
-            android.util.Log.w("AudioEngine", "Visualizer unavailable: ${e.message}")
-            _error.value = "Visualizer unavailable: ${e.message}"
+            val errorMsg = e.message ?: "Unknown error"
+            android.util.Log.w("AudioEngine", "Visualizer unavailable: $errorMsg")
+            scheduleVisualizerRetry(audioSessionId)
+        }
+    }
+
+    private fun scheduleVisualizerRetry(audioSessionId: Int) {
+        scope.launch {
+            delay(500)
+            if (mainPlayer != null && mainPlayer!!.audioSessionId > 0) {
+                android.util.Log.i("AudioEngine", "Retrying visualizer init with session ${mainPlayer!!.audioSessionId}")
+                initVisualizer(mainPlayer!!.audioSessionId)
+            }
         }
     }
 
