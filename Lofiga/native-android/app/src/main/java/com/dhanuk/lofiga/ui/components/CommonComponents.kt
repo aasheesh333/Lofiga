@@ -53,17 +53,14 @@ fun WaveformVisualizer(
     isPlaying: Boolean = false,
     waveformData: List<Float> = emptyList()
 ) {
-    val hasRealData = waveformData.isNotEmpty() && waveformData.any { kotlin.math.abs(it) > 0.001f }
-
     AndroidView(
         factory = { context ->
             com.dhanuk.lofiga.view.WaveformView(context).apply {
                 barCount = 32
-                barColor = android.graphics.Color.rgb(153, 61, 245)
             }
         },
         update = { view ->
-            if (isPlaying && hasRealData) {
+            if (isPlaying) {
                 view.setAmplitudeData(waveformData)
             } else {
                 view.setIdle()

@@ -110,12 +110,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) { 
     // --- Track Loading ---
 
     fun loadTrack(track: AudioTrack) {
-        _currentTrack.value = track
-        _currentTrackIndex.value = filteredSongs.value.indexOf(track)
         val success = track.uri?.let { audioEngine.loadTrack(it) } ?: false
         if (success) {
+            _currentTrack.value = track
+            _currentTrackIndex.value = filteredSongs.value.indexOf(track)
             applyPreset(LofiPreset.LofiSlow)
-            // Auto-start playback after loading a new track
             audioEngine.play()
         } else {
             _snackbarMessage.tryEmit(audioEngine.error.value ?: "Failed to load track")

@@ -60,7 +60,7 @@ fun PlayerScreen(
     val isExporting by viewModel.isExporting.collectAsState()
     val customPresets by viewModel.customPresets.collectAsState()
     val selectedCustomPresetId by viewModel.selectedCustomPresetId.collectAsState()
-    val waveformData by viewModel.audioEngine.waveformData.collectAsState()
+    val waveformSnapshot by viewModel.audioEngine.waveformData.collectAsState()
     val fftData by viewModel.audioEngine.fftData.collectAsState()
     val audioError by viewModel.audioEngine.error.collectAsState()
     val exportedFilePath by viewModel.exportedFilePath.collectAsState()
@@ -321,7 +321,7 @@ fun PlayerScreen(
                             .fillMaxWidth()
                             .height(100.dp),
                         isPlaying = isPlaying,
-                        waveformData = waveformData
+                        waveformData = waveformSnapshot.data
                     )
 
                     Spacer(Modifier.height(16.dp))

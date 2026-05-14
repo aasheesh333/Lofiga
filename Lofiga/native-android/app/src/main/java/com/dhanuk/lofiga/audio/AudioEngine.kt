@@ -31,11 +31,14 @@ class AudioEngine(private val context: Context) {
     private val _duration = MutableStateFlow(0L)
     val duration: StateFlow<Long> = _duration.asStateFlow()
 
-    private val _waveformData = MutableStateFlow(List(32) { 0f })
-    val waveformData: StateFlow<List<Float>> = _waveformData.asStateFlow()
+    private var waveformSeq = 0L
+    private val _waveformData = MutableStateFlow(WaveformSnapshot(List(32) { 0f }, 0L))
+    val waveformData: StateFlow<WaveformSnapshot> = _waveformData.asStateFlow()
 
-    private val _fftData = MutableStateFlow(List(16) { 0f })
+    private val _fftData = MutableStateFlow(List(32) { 0f })
     val fftData: StateFlow<List<Float>> = _fftData.asStateFlow()
+
+    data class WaveformSnapshot(val data: List<Float>, val seq: Long)
 
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
@@ -129,6 +132,7 @@ class AudioEngine(private val context: Context) {
         _error.value = null
         _position.value = 0
         _duration.value = 0
+        resetWaveformData()
 
         if (!requestAudioFocus()) {
             _error.value = "Cannot get audio focus"
@@ -176,6 +180,7 @@ class AudioEngine(private val context: Context) {
         _error.value = null
         _position.value = 0
         _duration.value = 0
+        resetWaveformData()
 
         if (!requestAudioFocus()) {
             _error.value = "Cannot get audio focus"
@@ -467,6 +472,11 @@ class AudioEngine(private val context: Context) {
 
     // --- Visualizer (Real waveform data) ---
 
+    private fun resetWaveformData() {
+        _waveformData.value = WaveformSnapshot(List(32) { 0f }, ++waveformSeq)
+        _fftData.value = List(32) { 0f }
+    }
+
     private fun initVisualizer(audioSessionId: Int) {
         try {
             releaseVisualizer()
@@ -482,21 +492,6 @@ class AudioEngine(private val context: Context) {
                         waveform: ByteArray?,
                         samplingRate: Int
                     ) {
-                        val data = waveform ?: return
-                        if (data.isEmpty()) return
-                        val barCount = 32
-                        val step = data.size / barCount
-                        if (step <= 0) return
-                        val floats = (0 until barCount).map { i ->
-                            val start = i * step
-                            val end = minOf(start + step, data.size)
-                            var sum = 0f
-                            for (j in start until end) {
-                                sum += kotlin.math.abs(data[j].toFloat() / 128f)
-                            }
-                            (sum / (end - start)).coerceIn(0f, 1f)
-                        }
-                        _waveformData.value = floats
                     }
 
                     override fun onFftDataCapture(
@@ -506,21 +501,24 @@ class AudioEngine(private val context: Context) {
                     ) {
                         val data = fft ?: return
                         if (data.size < 4) return
-                        val bands = 16
-                        val step = (data.size / 2) / bands
-                        if (step <= 0) return
+                        val magnitudeCount = data.size / 2
+                        val magnitudes = FloatArray(magnitudeCount) { i ->
+                            val real = data[i * 2].toFloat() / 128f
+                            val imag = data[i * 2 + 1].toFloat() / 128f
+                            kotlin.math.sqrt(real * real + imag * imag).coerceIn(0f, 1f)
+                        }
+                        val bands = 32
                         val floats = (0 until bands).map { i ->
-                            var energy = 0f
-                            val start = i * step
-                            val end = minOf(start + step, data.size / 2)
-                            for (j in start until end) {
-                                val real = data[j * 2].toFloat() / 128f
-                                val imag = data[j * 2 + 1].toFloat() / 128f
-                                energy += (real * real + imag * imag)
+                            val binStart = (magnitudeCount * i) / bands
+                            val binEnd = (magnitudeCount * (i + 1)) / bands
+                            var maxVal = 0f
+                            for (j in binStart until binEnd.coerceAtMost(magnitudeCount)) {
+                                if (magnitudes[j] > maxVal) maxVal = magnitudes[j]
                             }
-                            (energy / (end - start)).coerceIn(0f, 1f)
+                            maxVal
                         }
                         _fftData.value = floats
+                        _waveformData.value = WaveformSnapshot(floats, ++waveformSeq)
                     }
                 },
                 captureRate,
@@ -532,6 +530,7 @@ class AudioEngine(private val context: Context) {
             android.util.Log.i("AudioEngine", "Visualizer initialized on session $audioSessionId")
         } catch (e: Exception) {
             android.util.Log.w("AudioEngine", "Visualizer unavailable: ${e.message}")
+            _error.value = "Visualizer unavailable: ${e.message}"
         }
     }
 
