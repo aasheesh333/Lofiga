@@ -31,11 +31,11 @@ class AudioEngine(private val context: Context) {
     private val _duration = MutableStateFlow(0L)
     val duration: StateFlow<Long> = _duration.asStateFlow()
 
-    private val _waveformData = MutableStateFlow(FloatArray(32))
-    val waveformData: StateFlow<FloatArray> = _waveformData.asStateFlow()
+    private val _waveformData = MutableStateFlow(List(32) { 0f })
+    val waveformData: StateFlow<List<Float>> = _waveformData.asStateFlow()
 
-    private val _fftData = MutableStateFlow(FloatArray(16))
-    val fftData: StateFlow<FloatArray> = _fftData.asStateFlow()
+    private val _fftData = MutableStateFlow(List(16) { 0f })
+    val fftData: StateFlow<List<Float>> = _fftData.asStateFlow()
 
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
@@ -98,7 +98,7 @@ class AudioEngine(private val context: Context) {
     }
 
     suspend fun init() {
-        withContext(Dispatchers.Main) {
+        withContext(Dispatchers.IO) {
             ATMOSPHERE_KEYS.forEach { key ->
                 createAtmospherePlayer(key)
             }
@@ -122,11 +122,13 @@ class AudioEngine(private val context: Context) {
     }
 
     fun loadTrack(uri: Uri): Boolean {
+        _isPlaying.value = false
         releaseMainPlayer()
         releaseEffects()
         releaseVisualizer()
         _error.value = null
         _position.value = 0
+        _duration.value = 0
 
         if (!requestAudioFocus()) {
             _error.value = "Cannot get audio focus"
@@ -147,6 +149,7 @@ class AudioEngine(private val context: Context) {
                 setOnCompletionListener {
                     if (!_isLooping.value) {
                         _isPlaying.value = false
+                        positionJob?.cancel()
                         pauseAtmospheres()
                     } else {
                         start()
@@ -166,11 +169,13 @@ class AudioEngine(private val context: Context) {
     }
 
     fun loadTrackFromFile(filePath: String): Boolean {
+        _isPlaying.value = false
         releaseMainPlayer()
         releaseEffects()
         releaseVisualizer()
         _error.value = null
         _position.value = 0
+        _duration.value = 0
 
         if (!requestAudioFocus()) {
             _error.value = "Cannot get audio focus"
@@ -191,6 +196,7 @@ class AudioEngine(private val context: Context) {
                 setOnCompletionListener {
                     if (!_isLooping.value) {
                         _isPlaying.value = false
+                        positionJob?.cancel()
                         pauseAtmospheres()
                     } else {
                         start()
@@ -203,6 +209,8 @@ class AudioEngine(private val context: Context) {
             return true
         } catch (e: Exception) {
             _error.value = "Failed to load file: ${e.message}"
+            _duration.value = 0
+            abandonAudioFocus()
             e.printStackTrace()
             return false
         }
@@ -222,13 +230,11 @@ class AudioEngine(private val context: Context) {
         }
         try {
             if (!player.isPlaying) {
-                try {
-                    player.prepare()
-                } catch (_: Exception) {
+                if (visualizer == null) {
+                    try {
+                        initVisualizer(player.audioSessionId)
+                    } catch (_: Exception) {}
                 }
-                try {
-                    initVisualizer(player.audioSessionId)
-                } catch (_: Exception) {}
                 player.start()
                 _isPlaying.value = true
                 startPositionPolling()
@@ -244,11 +250,13 @@ class AudioEngine(private val context: Context) {
     fun pause() {
         val player = mainPlayer
         if (player == null) return
+        wasPlayingBeforeFocusLoss = false
         try {
             if (player.isPlaying) {
                 player.pause()
             }
             _isPlaying.value = false
+            positionJob?.cancel()
             pauseAtmospheres()
         } catch (e: Exception) {
             _error.value = "Pause error: ${e.message}"
@@ -266,15 +274,14 @@ class AudioEngine(private val context: Context) {
             if (player.isPlaying) {
                 player.pause()
                 _isPlaying.value = false
+                positionJob?.cancel()
                 pauseAtmospheres()
             } else {
-                try {
-                    player.prepare()
-                } catch (_: Exception) {
+                if (visualizer == null) {
+                    try {
+                        initVisualizer(player.audioSessionId)
+                    } catch (_: Exception) {}
                 }
-                try {
-                    initVisualizer(player.audioSessionId)
-                } catch (_: Exception) {}
                 player.start()
                 _isPlaying.value = true
                 startPositionPolling()
@@ -287,8 +294,12 @@ class AudioEngine(private val context: Context) {
     }
 
     fun seekTo(millis: Long) {
-        mainPlayer?.seekTo(millis.toInt())
-        _position.value = millis
+        try {
+            mainPlayer?.seekTo(millis.toInt())
+            _position.value = millis
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 
     fun setLooping(loop: Boolean) {
@@ -302,6 +313,7 @@ class AudioEngine(private val context: Context) {
 
     fun stop() {
         _isPlaying.value = false
+        wasPlayingBeforeFocusLoss = false
         pauseAtmospheres()
         mainPlayer?.let { player ->
             try {
@@ -312,6 +324,7 @@ class AudioEngine(private val context: Context) {
         }
         _position.value = 0
         positionJob?.cancel()
+        abandonAudioFocus()
     }
 
     fun release() {
@@ -469,24 +482,21 @@ class AudioEngine(private val context: Context) {
                         waveform: ByteArray?,
                         samplingRate: Int
                     ) {
-                        waveform?.let { data ->
-                            if (data.isNotEmpty()) {
-                                val barCount = 32
-                                val step = data.size / barCount
-                                if (step > 0) {
-                                    val floats = FloatArray(barCount) { i ->
-                                        var sum = 0f
-                                        val start = i * step
-                                        val end = minOf(start + step, data.size)
-                                        for (j in start until end) {
-                                            sum += kotlin.math.abs(data[j].toFloat() / 128f)
-                                        }
-                                        (sum / (end - start)).coerceIn(0f, 1f)
-                                    }
-                                    _waveformData.value = floats
-                                }
+                        val data = waveform ?: return
+                        if (data.isEmpty()) return
+                        val barCount = 32
+                        val step = data.size / barCount
+                        if (step <= 0) return
+                        val floats = (0 until barCount).map { i ->
+                            val start = i * step
+                            val end = minOf(start + step, data.size)
+                            var sum = 0f
+                            for (j in start until end) {
+                                sum += kotlin.math.abs(data[j].toFloat() / 128f)
                             }
+                            (sum / (end - start)).coerceIn(0f, 1f)
                         }
+                        _waveformData.value = floats
                     }
 
                     override fun onFftDataCapture(
@@ -494,26 +504,23 @@ class AudioEngine(private val context: Context) {
                         fft: ByteArray?,
                         samplingRate: Int
                     ) {
-                        fft?.let { data ->
-                            if (data.size >= 4) {
-                                val bands = 16
-                                val step = (data.size / 2) / bands
-                                if (step > 0) {
-                                    val floats = FloatArray(bands) { i ->
-                                        var energy = 0f
-                                        val start = i * step
-                                        val end = minOf(start + step, data.size / 2)
-                                        for (j in start until end) {
-                                            val real = data[j * 2].toFloat() / 128f
-                                            val imag = data[j * 2 + 1].toFloat() / 128f
-                                            energy += (real * real + imag * imag)
-                                        }
-                                        (energy / (end - start)).coerceIn(0f, 1f)
-                                    }
-                                    _fftData.value = floats
-                                }
+                        val data = fft ?: return
+                        if (data.size < 4) return
+                        val bands = 16
+                        val step = (data.size / 2) / bands
+                        if (step <= 0) return
+                        val floats = (0 until bands).map { i ->
+                            var energy = 0f
+                            val start = i * step
+                            val end = minOf(start + step, data.size / 2)
+                            for (j in start until end) {
+                                val real = data[j * 2].toFloat() / 128f
+                                val imag = data[j * 2 + 1].toFloat() / 128f
+                                energy += (real * real + imag * imag)
                             }
+                            (energy / (end - start)).coerceIn(0f, 1f)
                         }
+                        _fftData.value = floats
                     }
                 },
                 captureRate,
@@ -655,6 +662,8 @@ class AudioEngine(private val context: Context) {
     // --- Cleanup ---
 
     private fun releaseMainPlayer() {
+        _isPlaying.value = false
+        positionJob?.cancel()
         mainPlayer?.let { player ->
             try {
                 if (player.isPlaying) {

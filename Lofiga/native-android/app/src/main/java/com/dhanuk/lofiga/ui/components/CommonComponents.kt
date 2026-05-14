@@ -1,6 +1,5 @@
 package com.dhanuk.lofiga.ui.components
 
-import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -15,9 +14,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.dhanuk.lofiga.ui.theme.LocalAppColors
@@ -50,88 +49,27 @@ fun AmbientBackground(modifier: Modifier = Modifier) {
 @Composable
 fun WaveformVisualizer(
     modifier: Modifier = Modifier,
-    barCount: Int = 32,
-    color: Color = Purple500,
     isPlaying: Boolean = false,
-    waveformData: FloatArray? = null,
-    fftData: FloatArray? = null
+    waveformData: List<Float> = emptyList()
 ) {
-    val hasRealData = waveformData != null && waveformData.isNotEmpty() && waveformData.any { kotlin.math.abs(it) > 0.001f }
+    val hasRealData = waveformData.isNotEmpty() && waveformData.any { kotlin.math.abs(it) > 0.001f }
 
-    val infiniteTransition = rememberInfiniteTransition(label = "waveform")
-    val phase by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 2f * Math.PI.toFloat(),
-        animationSpec = infiniteRepeatable(
-            animation = tween(1500, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "phase"
-    )
-
-    Canvas(modifier = modifier.fillMaxWidth().height(80.dp)) {
-        if (!isPlaying) {
-            val barWidth = size.width / barCount
-            val centerY = size.height / 2
-            val maxHeight = size.height * 0.3f
-
-            for (i in 0 until barCount) {
-                val x = i * barWidth + barWidth * 0.15f
-                val rectWidth = barWidth * 0.7f
-
-                val t = i.toFloat() / barCount * 2f * kotlin.math.PI.toFloat()
-                val value = 0.15f * kotlin.math.sin((3f * t + phase * 0.5f).toDouble()).toFloat()
-                val barHeight = ((value + 1f) / 2f).coerceIn(0.05f, 0.5f) * maxHeight
-
-                drawRoundRect(
-                    color = color.copy(alpha = 0.15f),
-                    topLeft = Offset(x, centerY - barHeight / 2f),
-                    size = androidx.compose.ui.geometry.Size(rectWidth, barHeight),
-                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(2f, 2f)
-                )
+    AndroidView(
+        factory = { context ->
+            com.dhanuk.lofiga.view.WaveformView(context).apply {
+                barCount = 32
+                barColor = android.graphics.Color.rgb(153, 61, 245)
             }
-            return@Canvas
-        }
-
-        val barWidth = size.width / barCount
-        val maxHeight = size.height * 0.9f
-        val centerY = size.height / 2
-
-        var bassEnergy = 0f
-        if (fftData != null && fftData.isNotEmpty()) {
-            for (j in 0 until minOf(4, fftData.size)) {
-                bassEnergy = maxOf(bassEnergy, fftData[j])
-            }
-        }
-        val beatPulse = 1f + bassEnergy * 0.3f
-
-        for (i in 0 until barCount) {
-            val x = i * barWidth + barWidth * 0.15f
-            val rectWidth = barWidth * 0.7f
-
-            val value: Float = if (hasRealData && i < waveformData!!.size) {
-                val rawValue = waveformData[i].coerceIn(0f, 1f)
-                rawValue * beatPulse
+        },
+        update = { view ->
+            if (isPlaying && hasRealData) {
+                view.setAmplitudeData(waveformData)
             } else {
-                val t = i.toFloat() / barCount * 2f * kotlin.math.PI.toFloat()
-                val pulseBase = 0.12f
-                val pulseVar = 0.06f * kotlin.math.sin((phase * 0.5f + t).toDouble()).toFloat()
-                (pulseBase + pulseVar).coerceIn(0.05f, 0.2f)
+                view.setIdle()
             }
-
-            val easedValue = value.coerceIn(0.05f, 1f)
-            val barHeight = easedValue * maxHeight
-
-            drawRoundRect(
-                color = color.copy(
-                    alpha = 0.3f + 0.7f * easedValue
-                ),
-                topLeft = Offset(x, centerY - barHeight / 2f),
-                size = androidx.compose.ui.geometry.Size(rectWidth, barHeight),
-                cornerRadius = androidx.compose.ui.geometry.CornerRadius(2f, 2f)
-            )
-        }
-    }
+        },
+        modifier = modifier
+    )
 }
 
 @Composable

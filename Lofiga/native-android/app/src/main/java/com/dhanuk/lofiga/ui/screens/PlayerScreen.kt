@@ -320,11 +320,8 @@ fun PlayerScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(100.dp),
-                        barCount = 32,
-                        color = Purple500,
                         isPlaying = isPlaying,
-                        waveformData = waveformData,
-                        fftData = fftData
+                        waveformData = waveformData
                     )
 
                     Spacer(Modifier.height(16.dp))
