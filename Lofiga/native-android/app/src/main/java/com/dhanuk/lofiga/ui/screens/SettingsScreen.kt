@@ -200,6 +200,7 @@ private fun FormatSelectionDialog(
     onSelect: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
+    val colors = LocalAppColors.current
     val formats = listOf("m4a" to "M4A (AAC) - Best quality/size", "wav" to "WAV - Uncompressed")
 
     AlertDialog(
@@ -247,6 +248,7 @@ private fun BitrateSelectionDialog(
     onSelect: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
+    val colors = LocalAppColors.current
     val bitrates = listOf("128k" to "128 Kbps - Small file", "192k" to "192 Kbps - Balanced", "256k" to "256 Kbps - High quality", "320k" to "320 Kbps - Best quality")
 
     AlertDialog(
@@ -298,6 +300,7 @@ private fun SettingItem(
     switchValue: Boolean = false,
     onSwitchChange: (Boolean) -> Unit = {}
 ) {
+    val colors = LocalAppColors.current
     Surface(
         modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
         shape = RoundedCornerShape(16.dp),

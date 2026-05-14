@@ -321,6 +321,7 @@ private fun RecentEditItem(
     onClick: () -> Unit,
     onDelete: () -> Unit
 ) {
+    val colors = LocalAppColors.current
     Card(
         modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
         shape = MaterialTheme.shapes.medium,
