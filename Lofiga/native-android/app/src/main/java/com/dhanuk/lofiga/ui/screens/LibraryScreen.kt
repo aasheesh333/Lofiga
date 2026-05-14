@@ -3,6 +3,7 @@ package com.dhanuk.lofiga.ui.screens
 import android.content.Intent
 import android.os.Environment
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -11,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -36,11 +38,10 @@ fun LibraryScreen(
     var exportedFiles by remember { mutableStateOf<List<File>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
 
-    val coroutineScope = rememberCoroutineScope()
 
     // Helper to load exported files
     fun loadExports() {
-        coroutineScope.launch {
+        // Load exports directly
             // Look for exported files in app-specific Music/Lofiga directory
             val files = mutableListOf<File>()
             val musDir = appContext.getExternalFilesDir(Environment.DIRECTORY_MUSIC)

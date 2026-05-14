@@ -96,9 +96,9 @@ fun HomeScreen(
                             color = Color.White,
                         )
                         Text(
-                            text = "Turn Any Song Into Lofi", color = MaterialTheme.colorScheme.onBackground,
+                            text = "Turn Any Song Into Lofi",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = White38,
+                            color = MaterialTheme.colorScheme.onBackground,
                             modifier = Modifier.padding(bottom = 20.dp)
                         )
                     }
