@@ -33,6 +33,7 @@ import com.dhanuk.lofiga.model.LofiPreset
 import com.dhanuk.lofiga.ui.MainViewModel
 import com.dhanuk.lofiga.ui.components.*
 import com.dhanuk.lofiga.ui.theme.*
+import com.dhanuk.lofiga.ui.theme.LocalAppColors
 import java.io.File
 
 private fun formatDuration(millis: Long): String {
@@ -65,6 +66,7 @@ fun PlayerScreen(
     val exportedFilePath by viewModel.exportedFilePath.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
+    val colors = LocalAppColors.current
 
     var showSavePresetSheet by remember { mutableStateOf(false) }
     var showAllPresets by remember { mutableStateOf(false) }
@@ -154,7 +156,7 @@ fun PlayerScreen(
                     Spacer(Modifier.height(28.dp))
                     Text(
                         "Select a song to begin",
-                        color = Color.White,
+                        color = colors.textPrimary,
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -162,7 +164,7 @@ fun PlayerScreen(
                     Spacer(Modifier.height(8.dp))
                     Text(
                         "Pick a song from the Browse tab or\nload one from your files",
-                        color = White38,
+                        color = colors.textTertiary,
                         style = MaterialTheme.typography.bodyMedium,
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                         lineHeight = 22.sp
@@ -171,8 +173,8 @@ fun PlayerScreen(
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Surface(
                             shape = RoundedCornerShape(20.dp),
-                            color = DarkSurfaceHighlight,
-                            border = BorderStroke(1.dp, White12)
+                            color = colors.surfaceHighlight,
+                            border = BorderStroke(1.dp, colors.outline)
                         ) {
                             Row(
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
@@ -180,13 +182,13 @@ fun PlayerScreen(
                             ) {
                                 Icon(Icons.Outlined.Speed, contentDescription = null, tint = Purple400, modifier = Modifier.size(14.dp))
                                 Spacer(Modifier.width(4.dp))
-                                Text("Tempo", color = White60, style = MaterialTheme.typography.labelSmall)
+                                Text("Tempo", color = colors.textSecondary, style = MaterialTheme.typography.labelSmall)
                             }
                         }
                         Surface(
                             shape = RoundedCornerShape(20.dp),
-                            color = DarkSurfaceHighlight,
-                            border = BorderStroke(1.dp, White12)
+                            color = colors.surfaceHighlight,
+                            border = BorderStroke(1.dp, colors.outline)
                         ) {
                             Row(
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
@@ -194,13 +196,13 @@ fun PlayerScreen(
                             ) {
                                 Icon(Icons.Outlined.Forward30, contentDescription = null, tint = Purple400, modifier = Modifier.size(14.dp))
                                 Spacer(Modifier.width(4.dp))
-                                Text("Reverb", color = White60, style = MaterialTheme.typography.labelSmall)
+                                Text("Reverb", color = colors.textSecondary, style = MaterialTheme.typography.labelSmall)
                             }
                         }
                         Surface(
                             shape = RoundedCornerShape(20.dp),
-                            color = DarkSurfaceHighlight,
-                            border = BorderStroke(1.dp, White12)
+                            color = colors.surfaceHighlight,
+                            border = BorderStroke(1.dp, colors.outline)
                         ) {
                             Row(
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
@@ -208,7 +210,7 @@ fun PlayerScreen(
                             ) {
                                 Icon(Icons.Outlined.Cloud, contentDescription = null, tint = Purple400, modifier = Modifier.size(14.dp))
                                 Spacer(Modifier.width(4.dp))
-                                Text("Atmosphere", color = White60, style = MaterialTheme.typography.labelSmall)
+                                Text("Atmosphere", color = colors.textSecondary, style = MaterialTheme.typography.labelSmall)
                             }
                         }
                     }
@@ -260,14 +262,14 @@ fun PlayerScreen(
                             Text(
                                 text = currentTrack!!.title,
                                 style = MaterialTheme.typography.titleLarge,
-                                color = Color.White,
+                                color = colors.textPrimary,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
                             Text(
                                 text = currentTrack!!.artist,
                                 style = MaterialTheme.typography.bodySmall,
-                                color = White38,
+                                color = colors.textTertiary,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -276,36 +278,36 @@ fun PlayerScreen(
                         var showActionsMenu by remember { mutableStateOf(false) }
                         Box {
                             IconButton(onClick = { showActionsMenu = true }) {
-                                Icon(Icons.Outlined.MoreVert, contentDescription = "Actions", tint = White60)
+                                Icon(Icons.Outlined.MoreVert, contentDescription = "Actions", tint = colors.textSecondary)
                             }
                             DropdownMenu(
                                 expanded = showActionsMenu,
                                 onDismissRequest = { showActionsMenu = false },
-                                containerColor = DarkSurface
+                                containerColor = colors.surface
                             ) {
                                 DropdownMenuItem(
-                                    text = { Text("Export", color = Color.White) },
+                                    text = { Text("Export", color = colors.textPrimary) },
                                     onClick = {
                                         viewModel.exportTrack(viewModel.getApplication())
                                         showActionsMenu = false
                                     },
-                                    leadingIcon = { Icon(Icons.Outlined.FileDownload, contentDescription = null, tint = White60) }
+                                    leadingIcon = { Icon(Icons.Outlined.FileDownload, contentDescription = null, tint = colors.textSecondary) }
                                 )
                                 DropdownMenuItem(
-                                    text = { Text("Save Config", color = Color.White) },
+                                    text = { Text("Save Config", color = colors.textPrimary) },
                                     onClick = {
                                         viewModel.saveCurrentConfig()
                                         showActionsMenu = false
                                     },
-                                    leadingIcon = { Icon(Icons.Outlined.Save, contentDescription = null, tint = White60) }
+                                    leadingIcon = { Icon(Icons.Outlined.Save, contentDescription = null, tint = colors.textSecondary) }
                                 )
                                 DropdownMenuItem(
-                                    text = { Text("Save as Preset", color = Color.White) },
+                                    text = { Text("Save as Preset", color = colors.textPrimary) },
                                     onClick = {
                                         showSavePresetSheet = true
                                         showActionsMenu = false
                                     },
-                                    leadingIcon = { Icon(Icons.Outlined.BookmarkAdd, contentDescription = null, tint = White60) }
+                                    leadingIcon = { Icon(Icons.Outlined.BookmarkAdd, contentDescription = null, tint = colors.textSecondary) }
                                 )
                             }
                         }
@@ -380,12 +382,12 @@ fun PlayerScreen(
                                     label = { Text(preset.displayName, fontSize = MaterialTheme.typography.labelSmall.fontSize) },
                                     colors = FilterChipDefaults.filterChipColors(
                                         selectedContainerColor = Purple500.copy(alpha = 0.2f),
-                                        containerColor = DarkSurfaceHighlight,
+                                        containerColor = colors.surfaceHighlight,
                                         selectedLabelColor = Purple400,
-                                        labelColor = White60
+                                        labelColor = colors.textSecondary
                                     ),
                                     border = FilterChipDefaults.filterChipBorder(
-                                        borderColor = White12,
+                                        borderColor = colors.outline,
                                         selectedBorderColor = Purple500.copy(alpha = 0.5f),
                                         enabled = true,
                                         selected = currentPreset == preset
@@ -401,12 +403,12 @@ fun PlayerScreen(
                                     label = { Text(preset.name, fontSize = MaterialTheme.typography.labelSmall.fontSize) },
                                     colors = FilterChipDefaults.filterChipColors(
                                         selectedContainerColor = Cyan400.copy(alpha = 0.15f),
-                                        containerColor = DarkSurfaceHighlight,
+                                        containerColor = colors.surfaceHighlight,
                                         selectedLabelColor = Cyan400,
-                                        labelColor = White60
+                                        labelColor = colors.textSecondary
                                     ),
                                     border = FilterChipDefaults.filterChipBorder(
-                                        borderColor = White12,
+                                        borderColor = colors.outline,
                                         selectedBorderColor = Cyan400.copy(alpha = 0.5f),
                                         enabled = true,
                                         selected = isSelected
@@ -422,7 +424,7 @@ fun PlayerScreen(
                     Surface(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
                         shape = RoundedCornerShape(16.dp),
-                        color = DarkSurface.copy(alpha = 0.5f)
+                        color = colors.surface.copy(alpha = 0.5f)
                     ) {
                         Column {
                             Row(
@@ -437,19 +439,19 @@ fun PlayerScreen(
                                 Text(
                                     text = "EFFECTS",
                                     style = MaterialTheme.typography.titleMedium,
-                                    color = Color.White,
+                                    color = colors.textPrimary,
                                     fontWeight = FontWeight.SemiBold,
                                     modifier = Modifier.weight(1f)
                                 )
                                 Icon(
                                     if (showEffects) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
                                     contentDescription = null,
-                                    tint = White38,
+                                    tint = colors.textTertiary,
                                     modifier = Modifier.size(20.dp)
                                 )
                             }
                             if (showEffects) {
-                                HorizontalDivider(color = White12, thickness = 0.5.dp)
+                                HorizontalDivider(color = colors.outline, thickness = 0.5.dp)
                                 Column(modifier = Modifier.padding(12.dp)) {
                                     // Card-based effect grid (2 columns)
                                     Row(
@@ -536,7 +538,7 @@ fun PlayerScreen(
                     Surface(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
                         shape = RoundedCornerShape(16.dp),
-                        color = DarkSurface.copy(alpha = 0.5f)
+                        color = colors.surface.copy(alpha = 0.5f)
                     ) {
                         Column {
                             Row(
@@ -551,23 +553,23 @@ fun PlayerScreen(
                                 Text(
                                     text = "ATMOSPHERE",
                                     style = MaterialTheme.typography.titleMedium,
-                                    color = Color.White,
+                                    color = colors.textPrimary,
                                     fontWeight = FontWeight.SemiBold,
                                     modifier = Modifier.weight(1f)
                                 )
                                 Icon(
                                     if (showAtmosphere) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
                                     contentDescription = null,
-                                    tint = White38,
+                                    tint = colors.textTertiary,
                                     modifier = Modifier.size(20.dp)
                                 )
                             }
                             if (showAtmosphere) {
-                                HorizontalDivider(color = White12, thickness = 0.5.dp)
+                                HorizontalDivider(color = colors.outline, thickness = 0.5.dp)
                                 Column(modifier = Modifier.padding(16.dp)) {
                                     Text(
                                         "Add background ambiance to your mix",
-                                        color = White38,
+                                        color = colors.textTertiary,
                                         style = MaterialTheme.typography.bodySmall,
                                         modifier = Modifier.padding(bottom = 12.dp)
                                     )
@@ -590,10 +592,10 @@ fun PlayerScreen(
                                         Surface(
                                             modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
                                             shape = RoundedCornerShape(12.dp),
-                                            color = if (isActive) Purple500.copy(alpha = 0.1f) else DarkSurfaceHighlight,
+                                            color = if (isActive) Purple500.copy(alpha = 0.1f) else colors.surfaceHighlight,
                                             border = BorderStroke(
                                                 1.dp,
-                                                if (isActive) Purple500.copy(alpha = 0.3f) else White12
+                                                if (isActive) Purple500.copy(alpha = 0.3f) else colors.outline
                                             )
                                         ) {
                                             Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
@@ -601,21 +603,21 @@ fun PlayerScreen(
                                                     Icon(
                                                         icon,
                                                         contentDescription = label,
-                                                        tint = if (isActive) Purple400 else White38,
+                                                        tint = if (isActive) Purple400 else colors.textTertiary,
                                                         modifier = Modifier.size(18.dp)
                                                     )
                                                     Spacer(Modifier.width(8.dp))
                                                     Text(
                                                         text = label,
                                                         style = MaterialTheme.typography.bodyMedium,
-                                                        color = if (isActive) Color.White else White60,
+                                                        color = if (isActive) colors.textPrimary else colors.textSecondary,
                                                         fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Normal
                                                     )
                                                     Spacer(Modifier.weight(1f))
                                                     Text(
                                                         text = "${(volume * 100).toInt()}%",
                                                         style = MaterialTheme.typography.bodySmall,
-                                                        color = if (isActive) Purple400 else White38
+                                                        color = if (isActive) Purple400 else colors.textTertiary
                                                     )
                                                 }
                                                 Slider(
@@ -625,7 +627,7 @@ fun PlayerScreen(
                                                     colors = SliderDefaults.colors(
                                                         thumbColor = Purple500,
                                                         activeTrackColor = Purple500,
-                                                        inactiveTrackColor = White12
+                                                        inactiveTrackColor = colors.outline
                                                     )
                                                 )
                                             }
@@ -672,23 +674,23 @@ fun PlayerScreen(
                         horizontalArrangement = Arrangement.Start
                     ) {
                         TextButton(onClick = { showExportInfo = !showExportInfo }) {
-                            Icon(Icons.Outlined.Info, contentDescription = null, tint = White38, modifier = Modifier.size(14.dp))
+                            Icon(Icons.Outlined.Info, contentDescription = null, tint = colors.textTertiary, modifier = Modifier.size(14.dp))
                             Spacer(Modifier.width(4.dp))
-                            Text("How export works", color = White38, style = MaterialTheme.typography.bodySmall)
+                            Text("How export works", color = colors.textTertiary, style = MaterialTheme.typography.bodySmall)
                         }
                     }
                     if (showExportInfo) {
                         Surface(
                             modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp).padding(bottom = 8.dp),
                             shape = RoundedCornerShape(12.dp),
-                            color = DarkSurfaceHighlight
+                            color = colors.surfaceHighlight
                         ) {
                             Text(
                                 "Export saves your current mix with all effects applied. " +
                                 "The processed file is saved to Music/Lofiga folder. " +
                                 "M4A offers the best balance of quality and file size. " +
                                 "After export, you can share directly.",
-                                color = White60,
+                                color = colors.textSecondary,
                                 style = MaterialTheme.typography.bodySmall,
                                 modifier = Modifier.padding(12.dp)
                             )
@@ -704,7 +706,7 @@ fun PlayerScreen(
                 // ========================
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
-                    color = DarkSurface.copy(alpha = 0.95f),
+                    color = colors.surface.copy(alpha = 0.95f),
                     tonalElevation = 8.dp,
                     shadowElevation = 16.dp
                 ) {
@@ -718,7 +720,7 @@ fun PlayerScreen(
                             Text(
                                 formatDuration(sliderDisplayValue.toLong()),
                                 style = MaterialTheme.typography.bodySmall,
-                                color = White38,
+                                color = colors.textTertiary,
                                 modifier = Modifier.width(40.dp)
                             )
                             Slider(
@@ -736,13 +738,13 @@ fun PlayerScreen(
                                 colors = SliderDefaults.colors(
                                     thumbColor = Purple500,
                                     activeTrackColor = Purple500,
-                                    inactiveTrackColor = White12
+                                    inactiveTrackColor = colors.outline
                                 )
                             )
                             Text(
                                 formatDuration(duration),
                                 style = MaterialTheme.typography.bodySmall,
-                                color = White38,
+                                color = colors.textTertiary,
                                 modifier = Modifier.width(40.dp)
                             )
                         }
@@ -758,7 +760,7 @@ fun PlayerScreen(
                                 onClick = { viewModel.audioEngine.seekTo((position - 10000).coerceAtLeast(0)) },
                                 modifier = Modifier.size(40.dp)
                             ) {
-                                Icon(Icons.Filled.Replay10, contentDescription = "-10s", tint = White60, modifier = Modifier.size(24.dp))
+                                Icon(Icons.Filled.Replay10, contentDescription = "-10s", tint = colors.textSecondary, modifier = Modifier.size(24.dp))
                             }
                             Spacer(Modifier.width(4.dp))
                             // Previous
@@ -766,7 +768,7 @@ fun PlayerScreen(
                                 onClick = { viewModel.previousTrack() },
                                 modifier = Modifier.size(40.dp)
                             ) {
-                                Icon(Icons.Filled.SkipPrevious, contentDescription = "Previous", tint = White60, modifier = Modifier.size(24.dp))
+                                Icon(Icons.Filled.SkipPrevious, contentDescription = "Previous", tint = colors.textSecondary, modifier = Modifier.size(24.dp))
                             }
                             Spacer(Modifier.width(12.dp))
                             // Play/Pause - Big button
@@ -793,7 +795,7 @@ fun PlayerScreen(
                                 onClick = { viewModel.nextTrack() },
                                 modifier = Modifier.size(40.dp)
                             ) {
-                                Icon(Icons.Filled.SkipNext, contentDescription = "Next", tint = White60, modifier = Modifier.size(24.dp))
+                                Icon(Icons.Filled.SkipNext, contentDescription = "Next", tint = colors.textSecondary, modifier = Modifier.size(24.dp))
                             }
                             Spacer(Modifier.width(4.dp))
                             // Forward 10s
@@ -801,7 +803,7 @@ fun PlayerScreen(
                                 onClick = { viewModel.audioEngine.seekTo((position + 10000).coerceAtMost(duration)) },
                                 modifier = Modifier.size(40.dp)
                             ) {
-                                Icon(Icons.Filled.Forward10, contentDescription = "+10s", tint = White60, modifier = Modifier.size(24.dp))
+                                Icon(Icons.Filled.Forward10, contentDescription = "+10s", tint = colors.textSecondary, modifier = Modifier.size(24.dp))
                             }
                             Spacer(Modifier.width(8.dp))
                             // Loop
@@ -812,7 +814,7 @@ fun PlayerScreen(
                                 Icon(
                                     if (isLooping) Icons.Filled.RepeatOne else Icons.Outlined.Repeat,
                                     contentDescription = "Loop",
-                                    tint = if (isLooping) Purple500 else White38,
+                                    tint = if (isLooping) Purple500 else colors.textTertiary,
                                     modifier = Modifier.size(22.dp)
                                 )
                             }
@@ -832,7 +834,7 @@ fun PlayerScreen(
                 ) {
                     Card(
                         shape = RoundedCornerShape(24.dp),
-                        colors = CardDefaults.cardColors(containerColor = DarkSurface)
+                        colors = CardDefaults.cardColors(containerColor = colors.surface)
                     ) {
                         Column(
                             modifier = Modifier.padding(32.dp),
@@ -846,7 +848,7 @@ fun PlayerScreen(
                             Spacer(Modifier.height(20.dp))
                             Text(
                                 "Rendering Lofi Mix...",
-                                color = Color.White,
+                                color = colors.textPrimary,
                                 fontWeight = FontWeight.Bold,
                                 style = MaterialTheme.typography.titleMedium
                             )
@@ -862,14 +864,14 @@ fun PlayerScreen(
                                 progress = { exportProgress },
                                 modifier = Modifier.fillMaxWidth(0.8f).height(6.dp),
                                 color = Purple500,
-                                trackColor = White12,
+                                trackColor = colors.outline,
                             )
                             Spacer(Modifier.height(24.dp))
                             OutlinedButton(
                                 onClick = { viewModel.cancelExport() },
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = White60)
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = colors.textSecondary)
                             ) {
-                                Text("Cancel", color = White60)
+                                Text("Cancel", color = colors.textSecondary)
                             }
                         }
                     }
@@ -884,7 +886,7 @@ fun PlayerScreen(
             var presetName by remember { mutableStateOf("") }
             ModalBottomSheet(
                 onDismissRequest = { showSavePresetSheet = false },
-                containerColor = DarkSurface,
+                containerColor = colors.surface,
                 shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
             ) {
                 Column(
@@ -901,33 +903,33 @@ fun PlayerScreen(
                     Spacer(Modifier.height(12.dp))
                     Text(
                         "Save Custom Preset",
-                        color = Color.White,
+                        color = colors.textPrimary,
                         fontWeight = FontWeight.Bold,
                         style = MaterialTheme.typography.titleLarge
                     )
                     Text(
                         "Save the current effect settings as a reusable preset",
-                        color = White38,
+                        color = colors.textTertiary,
                         style = MaterialTheme.typography.bodySmall,
                         modifier = Modifier.padding(top = 4.dp, bottom = 20.dp)
                     )
                     OutlinedTextField(
                         value = presetName,
                         onValueChange = { presetName = it },
-                        label = { Text("Preset Name", color = White38) },
-                        placeholder = { Text("e.g. My Chill Mix", color = White38.copy(alpha = 0.5f)) },
+                        label = { Text("Preset Name", color = colors.textTertiary) },
+                        placeholder = { Text("e.g. My Chill Mix", color = colors.textTertiary.copy(alpha = 0.5f)) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White,
+                            focusedTextColor = colors.textPrimary,
+                            unfocusedTextColor = colors.textPrimary,
                             cursorColor = Purple500,
                             focusedBorderColor = Purple500,
-                            unfocusedBorderColor = White12,
-                            focusedContainerColor = DarkSurfaceHighlight,
-                            unfocusedContainerColor = DarkSurfaceHighlight,
+                            unfocusedBorderColor = colors.outline,
+                            focusedContainerColor = colors.surfaceHighlight,
+                            unfocusedContainerColor = colors.surfaceHighlight,
                             focusedLabelColor = Purple400,
-                            unfocusedLabelColor = White38
+                            unfocusedLabelColor = colors.textTertiary
                         ),
                         shape = RoundedCornerShape(12.dp)
                     )

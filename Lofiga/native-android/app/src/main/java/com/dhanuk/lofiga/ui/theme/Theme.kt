@@ -4,6 +4,8 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -27,6 +29,38 @@ val White60 = Color(0x99FFFFFF)
 // Light theme colors
 val LightBg = Color(0xFFF5F0FA)
 val LightSurface = Color(0xFFFFFFFF)
+
+data class AppColors(
+    val surface: Color,
+    val surfaceHighlight: Color,
+    val bg: Color,
+    val textPrimary: Color,
+    val textSecondary: Color,
+    val textTertiary: Color,
+    val outline: Color,
+)
+
+val LocalAppColors = staticCompositionLocalOf {
+    AppColors(
+        surface = DarkSurface,
+        surfaceHighlight = DarkSurfaceHighlight,
+        bg = DarkBg,
+        textPrimary = Color.White,
+        textSecondary = White60,
+        textTertiary = White38,
+        outline = White12,
+    )
+}
+
+private val LightAppColors = AppColors(
+    surface = Color(0xFFF5F0FA),
+    surfaceHighlight = Color(0xFFEEE8F4),
+    bg = Color(0xFFFDFCFE),
+    textPrimary = Color(0xFF1C1B1F),
+    textSecondary = Color(0xFF49454F),
+    textTertiary = Color(0xFF6B6770),
+    outline = Color(0xFFCAC4D0),
+)
 
 private val LofigaDarkColorScheme = darkColorScheme(
     primary = Purple500,
@@ -84,11 +118,22 @@ fun LofigaTheme(
     content: @Composable () -> Unit
 ) {
     val colorScheme = if (darkTheme) LofigaDarkColorScheme else LofigaLightColorScheme
+    val appColors = if (darkTheme) AppColors(
+        surface = DarkSurface,
+        surfaceHighlight = DarkSurfaceHighlight,
+        bg = DarkBg,
+        textPrimary = Color.White,
+        textSecondary = White60,
+        textTertiary = White38,
+        outline = White12,
+    ) else LightAppColors
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        shapes = LofigaShapes,
-        typography = LofigaTypography,
-        content = content
-    )
+    CompositionLocalProvider(LocalAppColors provides appColors) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            shapes = LofigaShapes,
+            typography = LofigaTypography,
+            content = content
+        )
+    }
 }

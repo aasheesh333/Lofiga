@@ -26,6 +26,7 @@ import com.dhanuk.lofiga.model.SavedConfig
 import com.dhanuk.lofiga.ui.MainViewModel
 import com.dhanuk.lofiga.ui.components.*
 import com.dhanuk.lofiga.ui.theme.*
+import com.dhanuk.lofiga.ui.theme.LocalAppColors
 
 enum class SortOption(val label: String) {
     DATE_ADDED("Date Added"),
@@ -43,6 +44,7 @@ fun HomeScreen(
     onEditConfig: (SavedConfig) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val colors = LocalAppColors.current
     val recentEdits by viewModel.recentEdits.collectAsState()
     val allSongs by viewModel.allSongs.collectAsState()
     val filteredSongs by viewModel.filteredSongs.collectAsState()
@@ -93,7 +95,7 @@ fun HomeScreen(
                         Text(
                             text = "Lofiga",
                             style = MaterialTheme.typography.displayLarge,
-                            color = Color.White,
+                            color = colors.textPrimary,
                         )
                         Text(
                             text = "Turn Any Song Into Lofi",
@@ -109,27 +111,27 @@ fun HomeScreen(
                 OutlinedTextField(
                     value = searchQuery,
                     onValueChange = { viewModel.setSearchQuery(it) },
-                    placeholder = { Text("Search songs...", color = White38) },
+                    placeholder = { Text("Search songs...", color = colors.textTertiary) },
                     leadingIcon = {
-                        Icon(Icons.Outlined.Search, contentDescription = "Search", tint = White38)
+                        Icon(Icons.Outlined.Search, contentDescription = "Search", tint = colors.textTertiary)
                     },
                     trailingIcon = {
                         if (searchQuery.isNotEmpty()) {
                             IconButton(onClick = { viewModel.setSearchQuery("") }) {
-                                Icon(Icons.Outlined.Clear, contentDescription = "Clear", tint = White38)
+                                Icon(Icons.Outlined.Clear, contentDescription = "Clear", tint = colors.textTertiary)
                             }
                         }
                     },
                     modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
                     singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = Color.White,
-                        unfocusedTextColor = Color.White,
+                        focusedTextColor = colors.textPrimary,
+                        unfocusedTextColor = colors.textPrimary,
                         cursorColor = Purple500,
                         focusedBorderColor = Purple500,
-                        unfocusedBorderColor = White12,
-                        focusedContainerColor = DarkSurface,
-                        unfocusedContainerColor = DarkSurface
+                        unfocusedBorderColor = colors.outline,
+                        focusedContainerColor = colors.surface,
+                        unfocusedContainerColor = colors.surface
                     ),
                     shape = MaterialTheme.shapes.medium
                 )
@@ -144,7 +146,7 @@ fun HomeScreen(
                     Text(
                         "${allSongs.size} songs",
                         style = MaterialTheme.typography.bodySmall,
-                        color = White38
+                        color = colors.textTertiary
                     )
                     Box {
                         TextButton(onClick = { showSortMenu = true }) {
@@ -155,7 +157,7 @@ fun HomeScreen(
                         DropdownMenu(
                             expanded = showSortMenu,
                             onDismissRequest = { showSortMenu = false },
-                            containerColor = DarkSurface
+                            containerColor = colors.surface
                         ) {
                             SortOption.entries.forEach { option ->
                                 DropdownMenuItem(
@@ -165,7 +167,7 @@ fun HomeScreen(
                                                 Icon(Icons.Outlined.Check, contentDescription = null, tint = Purple500, modifier = Modifier.size(16.dp))
                                                 Spacer(Modifier.width(8.dp))
                                             }
-                                            Text(option.label, color = Color.White)
+                                            Text(option.label, color = colors.textPrimary)
                                         }
                                     },
                                     onClick = {
@@ -255,7 +257,7 @@ color = MaterialTheme.colorScheme.onBackground,
                                     "Try a different search term"
                                 else
                                     "Add music files to your device to get started",
-                                color = White38,
+                                color = colors.textTertiary,
                                 style = MaterialTheme.typography.bodyMedium,
                                 modifier = Modifier.padding(horizontal = 32.dp),
                                 textAlign = TextAlign.Center
@@ -288,7 +290,7 @@ color = MaterialTheme.colorScheme.onBackground,
 
                                 Text(
                                     "Make sure music files are stored on your device",
-                                    color = White38,
+                                    color = colors.textTertiary,
                                     style = MaterialTheme.typography.bodySmall
                                 )
                             }
@@ -322,7 +324,7 @@ private fun RecentEditItem(
     Card(
         modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
         shape = MaterialTheme.shapes.medium,
-        colors = CardDefaults.cardColors(containerColor = DarkSurface),
+        colors = CardDefaults.cardColors(containerColor = colors.surface),
         onClick = onClick
     ) {
         Row(
@@ -346,19 +348,19 @@ private fun RecentEditItem(
                     text = edit.fileName,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.W600,
-                    color = Color.White
+                    color = colors.textPrimary
                 )
                 Text(
                     text = "Saved recently",
                     style = MaterialTheme.typography.bodySmall,
-                    color = White38
+                    color = colors.textTertiary
                 )
             }
             IconButton(onClick = onDelete) {
                 Icon(
                     Icons.Outlined.Delete,
                     contentDescription = "Delete",
-                    tint = White38
+                    tint = colors.textTertiary
                 )
             }
         }

@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import com.dhanuk.lofiga.ui.MainViewModel
 import com.dhanuk.lofiga.ui.components.*
 import com.dhanuk.lofiga.ui.theme.*
+import com.dhanuk.lofiga.ui.theme.LocalAppColors
 import com.dhanuk.lofiga.util.SettingsManager
 import kotlinx.coroutines.launch
 
@@ -31,6 +32,7 @@ fun SettingsScreen(
     val settings by viewModel.settingsManager.settingsFlow.collectAsState(initial = SettingsManager.AppSettings())
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val colors = LocalAppColors.current
 
     var showFormatDialog by remember { mutableStateOf(false) }
     var showBitrateDialog by remember { mutableStateOf(false) }
@@ -44,7 +46,7 @@ fun SettingsScreen(
             Text(
                 text = "Settings",
                 style = MaterialTheme.typography.headlineLarge,
-                color = Color.White,
+                color = colors.textPrimary,
                 modifier = Modifier.padding(bottom = 20.dp)
             )
 
@@ -103,7 +105,7 @@ fun SettingsScreen(
             if (customPresets.isEmpty()) {
                 Text(
                     "No custom presets saved yet",
-                    color = White38,
+                    color = colors.textTertiary,
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.padding(vertical = 16.dp)
                 )
@@ -124,10 +126,10 @@ fun SettingsScreen(
                     Surface(
                         modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
                         shape = RoundedCornerShape(12.dp),
-                        color = DarkSurface,
+                        color = colors.surface,
                         border = ButtonDefaults.outlinedButtonBorder.copy(
                             brush = androidx.compose.ui.graphics.Brush.linearGradient(
-                                listOf(White12, White12)
+                                listOf(colors.outline, colors.outline)
                             )
                         )
                     ) {
@@ -145,12 +147,12 @@ fun SettingsScreen(
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = preset.name,
-                                    color = Color.White,
+                                    color = colors.textPrimary,
                                     style = MaterialTheme.typography.titleMedium
                                 )
                                 Text(
                                     text = "Custom preset",
-                                    color = White38,
+                                    color = colors.textTertiary,
                                     style = MaterialTheme.typography.bodySmall
                                 )
                             }
@@ -201,9 +203,9 @@ private fun FormatSelectionDialog(
     val formats = listOf("m4a" to "M4A (AAC) - Best quality/size", "wav" to "WAV - Uncompressed")
 
     AlertDialog(
-        containerColor = DarkSurface,
+        containerColor = colors.surface,
         onDismissRequest = onDismiss,
-        title = { Text("Export Format", color = Color.White) },
+        title = { Text("Export Format", color = colors.textPrimary) },
         text = {
             Column {
                 formats.forEach { (value, label) ->
@@ -219,13 +221,13 @@ private fun FormatSelectionDialog(
                             onClick = { onSelect(value) },
                             colors = RadioButtonDefaults.colors(
                                 selectedColor = Purple500,
-                                unselectedColor = White38
+                                unselectedColor = colors.textTertiary
                             )
                         )
                         Spacer(Modifier.width(8.dp))
                         Column {
-                            Text(value.uppercase(), color = Color.White, style = MaterialTheme.typography.bodyMedium)
-                            Text(label, color = White38, style = MaterialTheme.typography.bodySmall)
+                            Text(value.uppercase(), color = colors.textPrimary, style = MaterialTheme.typography.bodyMedium)
+                            Text(label, color = colors.textTertiary, style = MaterialTheme.typography.bodySmall)
                         }
                     }
                 }
@@ -248,9 +250,9 @@ private fun BitrateSelectionDialog(
     val bitrates = listOf("128k" to "128 Kbps - Small file", "192k" to "192 Kbps - Balanced", "256k" to "256 Kbps - High quality", "320k" to "320 Kbps - Best quality")
 
     AlertDialog(
-        containerColor = DarkSurface,
+        containerColor = colors.surface,
         onDismissRequest = onDismiss,
-        title = { Text("Audio Bitrate", color = Color.White) },
+        title = { Text("Audio Bitrate", color = colors.textPrimary) },
         text = {
             Column {
                 bitrates.forEach { (value, label) ->
@@ -266,13 +268,13 @@ private fun BitrateSelectionDialog(
                             onClick = { onSelect(value) },
                             colors = RadioButtonDefaults.colors(
                                 selectedColor = Purple500,
-                                unselectedColor = White38
+                                unselectedColor = colors.textTertiary
                             )
                         )
                         Spacer(Modifier.width(8.dp))
                         Column {
-                            Text(value, color = Color.White, style = MaterialTheme.typography.bodyMedium)
-                            Text(label, color = White38, style = MaterialTheme.typography.bodySmall)
+                            Text(value, color = colors.textPrimary, style = MaterialTheme.typography.bodyMedium)
+                            Text(label, color = colors.textTertiary, style = MaterialTheme.typography.bodySmall)
                         }
                     }
                 }
@@ -299,10 +301,10 @@ private fun SettingItem(
     Surface(
         modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
         shape = RoundedCornerShape(16.dp),
-        color = DarkSurface,
+        color = colors.surface,
         border = ButtonDefaults.outlinedButtonBorder.copy(
             brush = androidx.compose.ui.graphics.Brush.linearGradient(
-                listOf(White12, White12)
+                listOf(colors.outline, colors.outline)
             )
         ),
         onClick = onClick
@@ -315,7 +317,7 @@ private fun SettingItem(
                 modifier = Modifier.size(40.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(icon, contentDescription = title, tint = White60, modifier = Modifier.size(20.dp))
+                Icon(icon, contentDescription = title, tint = colors.textSecondary, modifier = Modifier.size(20.dp))
             }
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
@@ -323,13 +325,13 @@ private fun SettingItem(
                     title,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.W600,
-                    color = Color.White
+                    color = colors.textPrimary
                 )
                 if (subtitle.isNotEmpty()) {
                     Text(
                         subtitle,
                         style = MaterialTheme.typography.bodySmall,
-                        color = White38
+                        color = colors.textTertiary
                     )
                 }
             }
@@ -340,15 +342,15 @@ private fun SettingItem(
                     colors = SwitchDefaults.colors(
                         checkedThumbColor = Purple500,
                         checkedTrackColor = Purple500.copy(alpha = 0.3f),
-                        uncheckedThumbColor = White38,
-                        uncheckedTrackColor = White12
+                        uncheckedThumbColor = colors.textTertiary,
+                        uncheckedTrackColor = colors.outline
                     )
                 )
             } else {
                 Icon(
                     Icons.Outlined.NavigateNext,
                     contentDescription = null,
-                    tint = White38,
+                    tint = colors.textTertiary,
                     modifier = Modifier.size(16.dp)
                 )
             }

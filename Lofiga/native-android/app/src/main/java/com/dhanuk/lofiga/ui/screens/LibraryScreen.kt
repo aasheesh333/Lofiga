@@ -74,32 +74,26 @@ fun LibraryScreen(
     // Refresh when an export completes
     LaunchedEffect(viewModel) {
         viewModel.exportCompleted.collect {
-        // Load exports directly
-        // Look for exported files in app-specific Music/Lofiga directory
-        val files = mutableListOf<File>()
-        val musDir = appContext.getExternalFilesDir(Environment.DIRECTORY_MUSIC)
-        val dirs = mutableListOf<File>()
-        if (musDir != null) {
-            dirs.add(File(musDir, "Lofiga"))
-        }
-        // Also check old shared storage paths for backward compatibility
-        try {
-            dirs.add(File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC), "Lofiga"))
-            dirs.add(File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "Lofiga"))
-        } catch (_: Exception) {
-            // On Android 11+, shared storage paths may not be accessible
-        }
-        dirs.forEach { dir ->
-            if (dir.exists()) {
-                files.addAll(
-                    dir.listFiles { f -> f.extension in listOf("wav", "m4a", "aac") }
-                        ?.sortedByDescending { it.lastModified() }
-                        ?: emptyList()
-                )
+            val files = mutableListOf<File>()
+            val musDir = appContext.getExternalFilesDir(Environment.DIRECTORY_MUSIC)
+            val dirs = mutableListOf<File>()
+            if (musDir != null) {
+                dirs.add(File(musDir, "Lofiga"))
             }
-        }
-        exportedFiles = files.distinctBy { it.absolutePath }
-        isLoading = false
+            try {
+                dirs.add(File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC), "Lofiga"))
+                dirs.add(File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "Lofiga"))
+            } catch (_: Exception) { }
+            dirs.forEach { dir ->
+                if (dir.exists()) {
+                    files.addAll(
+                        dir.listFiles { f -> f.extension in listOf("wav", "m4a", "aac") }
+                            ?.sortedByDescending { it.lastModified() }
+                            ?: emptyList()
+                    )
+                }
+            }
+            exportedFiles = files.distinctBy { it.absolutePath }
         }
     }
 
@@ -128,7 +122,7 @@ color = MaterialTheme.colorScheme.onSurface,
                 if (exportedFiles.isEmpty()) {
                     item {
                         Box(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 48.dp),
+                            modifier = Modifier.fillMaxWidth().fillMaxHeight(),
                             contentAlignment = Alignment.Center
                         ) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -151,7 +145,7 @@ color = MaterialTheme.colorScheme.onSurface,
                                 Spacer(Modifier.height(28.dp))
                                 Text(
                                     "No generated songs yet",
-                                    color = White38,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     style = MaterialTheme.typography.titleLarge,
                                     fontWeight = FontWeight.Bold,
                                     textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -159,7 +153,7 @@ color = MaterialTheme.colorScheme.onSurface,
                                 Spacer(Modifier.height(8.dp))
                                 Text(
                                     "Export a track to see it here",
-                                    color = White38.copy(alpha = 0.5f),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                                     style = MaterialTheme.typography.bodySmall,
                                     textAlign = androidx.compose.ui.text.style.TextAlign.Center
                                 )
@@ -209,7 +203,7 @@ private fun LibraryItem(
     Card(
         modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = DarkSurface)
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Row(
             modifier = Modifier.padding(12.dp),
@@ -218,12 +212,12 @@ private fun LibraryItem(
             Surface(
                 modifier = Modifier.size(48.dp),
                 shape = RoundedCornerShape(12.dp),
-                color = DarkSurfaceHighlight
+                color = MaterialTheme.colorScheme.surfaceVariant
             ) {
                 Icon(
                     Icons.Outlined.PlayArrow,
                     contentDescription = "Play",
-                    tint = Color.White,
+                    tint = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.fillMaxSize().padding(12.dp)
                 )
             }
@@ -233,13 +227,13 @@ private fun LibraryItem(
                     text = fileName,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.W600,
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1
                 )
                 Text(
                     text = "Exported Lofi Track",
                     style = MaterialTheme.typography.bodySmall,
-                    color = White38
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
             Row {
@@ -249,15 +243,15 @@ private fun LibraryItem(
                 var showMenu by remember { mutableStateOf(false) }
                 Box {
                     IconButton(onClick = { showMenu = true }) {
-                        Icon(Icons.Outlined.MoreVert, contentDescription = "More", tint = White38)
+                        Icon(Icons.Outlined.MoreVert, contentDescription = "More", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     DropdownMenu(
                         expanded = showMenu,
                         onDismissRequest = { showMenu = false },
-                        containerColor = DarkSurface
+                        containerColor = MaterialTheme.colorScheme.surface
                     ) {
                         DropdownMenuItem(
-                            text = { Text("Share", color = Color.White) },
+                            text = { Text("Share", color = MaterialTheme.colorScheme.onSurface) },
                             onClick = {
                                 showMenu = false
                                 val shareFile = File(filePath)
@@ -271,7 +265,7 @@ private fun LibraryItem(
                                     context.startActivity(Intent.createChooser(shareIntent, "Share track"))
                                 }
                             },
-                            leadingIcon = { Icon(Icons.Outlined.Share, contentDescription = null, tint = White60) }
+                            leadingIcon = { Icon(Icons.Outlined.Share, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)) }
                         )
                         DropdownMenuItem(
                             text = { Text("Delete", color = Color(0xFFFF5252)) },

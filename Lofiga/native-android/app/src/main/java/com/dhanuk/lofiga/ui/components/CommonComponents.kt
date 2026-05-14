@@ -20,6 +20,7 @@ import androidx.compose.ui.graphics.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.dhanuk.lofiga.ui.theme.LocalAppColors
 import com.dhanuk.lofiga.ui.theme.*
 
 @Composable
@@ -55,7 +56,7 @@ fun WaveformVisualizer(
     waveformData: FloatArray? = null,
     fftData: FloatArray? = null
 ) {
-    val hasRealData = waveformData != null && waveformData.isNotEmpty() && waveformData.any { kotlin.math.abs(it) > 0.01f }
+    val hasRealData = waveformData != null && waveformData.isNotEmpty() && waveformData.any { kotlin.math.abs(it) > 0.001f }
 
     val infiniteTransition = rememberInfiniteTransition(label = "waveform")
     val phase by infiniteTransition.animateFloat(
@@ -113,12 +114,9 @@ fun WaveformVisualizer(
                 rawValue * beatPulse
             } else {
                 val t = i.toFloat() / barCount * 2f * kotlin.math.PI.toFloat()
-                val sin1 = kotlin.math.sin((2f * t + phase).toDouble()).toFloat()
-                val sin2 = kotlin.math.sin((3f * t + phase * 1.5f).toDouble()).toFloat()
-                val sin3 = kotlin.math.sin((5f * t + phase * 2.2f).toDouble()).toFloat()
-                val sin4 = kotlin.math.sin((i * 7 + phase * 3).toDouble()).toFloat()
-                val synthetic = 0.3f * sin1 + 0.2f * sin2 + 0.1f * sin3 + 0.1f * sin4
-                (synthetic + 1f) / 2f
+                val pulseBase = 0.12f
+                val pulseVar = 0.06f * kotlin.math.sin((phase * 0.5f + t).toDouble()).toFloat()
+                (pulseBase + pulseVar).coerceIn(0.05f, 0.2f)
             }
 
             val easedValue = value.coerceIn(0.05f, 1f)
@@ -142,10 +140,11 @@ fun LofigaNavigationBar(
     onItemSelected: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val colors = LocalAppColors.current
     NavigationBar(
         modifier = modifier,
-        containerColor = DarkSurface,
-        contentColor = Color.White,
+        containerColor = colors.surface,
+        contentColor = colors.textPrimary,
         tonalElevation = 0.dp
     ) {
         listOf("Browse", "Player", "Exports", "Settings").forEachIndexed { index, label ->
@@ -174,8 +173,8 @@ fun LofigaNavigationBar(
                 colors = NavigationBarItemDefaults.colors(
                     selectedIconColor = Purple500,
                     selectedTextColor = Purple500,
-                    unselectedIconColor = White38,
-                    unselectedTextColor = White38,
+                    unselectedIconColor = colors.textTertiary,
+                    unselectedTextColor = colors.textTertiary,
                     indicatorColor = Purple500.copy(alpha = 0.15f)
                 )
             )
@@ -195,6 +194,7 @@ fun EffectSlider(
     min: Float = 0f,
     max: Float = 1f
 ) {
+    val colors = LocalAppColors.current
     Column(modifier = modifier.padding(vertical = 4.dp)) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -214,14 +214,14 @@ fun EffectSlider(
                     Text(
                         text = description,
                         style = MaterialTheme.typography.bodySmall,
-                        color = White38
+                        color = colors.textTertiary
                     )
                 }
             }
             Text(
                 text = displayValue ?: "${(value * 100).toInt()}%",
                 style = MaterialTheme.typography.bodySmall,
-                color = White60
+                color = colors.textSecondary
             )
         }
         Slider(
@@ -232,9 +232,9 @@ fun EffectSlider(
             colors = SliderDefaults.colors(
                 thumbColor = Purple500,
                 activeTrackColor = Purple500,
-                inactiveTrackColor = White12,
+                inactiveTrackColor = colors.outline,
                 activeTickColor = Purple500,
-                inactiveTickColor = White12
+                inactiveTickColor = colors.outline
             )
         )
     }
@@ -251,17 +251,18 @@ fun SongItem(
     gradientThumb: Boolean = false,
     thumbTitle: String = title
 ) {
+    val colors = LocalAppColors.current
     Card(
         modifier = modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = if (isCurrentlyPlaying) DarkSurfaceHighlight else DarkSurface),
+        colors = CardDefaults.cardColors(containerColor = if (isCurrentlyPlaying) colors.surfaceHighlight else colors.surface),
         border = ButtonDefaults.outlinedButtonBorder.copy(
             brush = Brush.linearGradient(
                 listOf(
-                    if (isCurrentlyPlaying) Purple500.copy(alpha = 0.3f) else White12,
-                    if (isCurrentlyPlaying) Purple500.copy(alpha = 0.1f) else White12
+                    if (isCurrentlyPlaying) Purple500.copy(alpha = 0.3f) else colors.outline,
+                    if (isCurrentlyPlaying) Purple500.copy(alpha = 0.1f) else colors.outline
                 )
             )
         )
@@ -277,13 +278,13 @@ fun SongItem(
                     modifier = Modifier
                         .size(50.dp)
                         .clip(RoundedCornerShape(12.dp))
-                        .background(if (isCurrentlyPlaying) Purple500.copy(alpha = 0.15f) else DarkSurfaceHighlight),
+                        .background(if (isCurrentlyPlaying) Purple500.copy(alpha = 0.15f) else colors.surfaceHighlight),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = if (isCurrentlyPlaying) Icons.Outlined.Equalizer else Icons.Outlined.MusicNote,
                         contentDescription = null,
-                        tint = if (isCurrentlyPlaying) Purple500 else White38,
+                        tint = if (isCurrentlyPlaying) Purple500 else colors.textTertiary,
                         modifier = Modifier.size(24.dp)
                     )
                 }
@@ -300,18 +301,18 @@ fun SongItem(
                     text = artist,
                     maxLines = 1,
                     style = MaterialTheme.typography.bodySmall,
-                    color = if (isCurrentlyPlaying) Purple400 else White38
+                    color = if (isCurrentlyPlaying) Purple400 else colors.textTertiary
                 )
             }
             Text(
                 text = duration,
                 style = MaterialTheme.typography.bodySmall,
-                color = White38
+                color = colors.textTertiary
             )
             Icon(
                 imageVector = if (isCurrentlyPlaying) Icons.Outlined.PlayArrow else Icons.Outlined.NavigateNext,
                 contentDescription = null,
-                tint = if (isCurrentlyPlaying) Purple500 else White38
+                tint = if (isCurrentlyPlaying) Purple500 else colors.textTertiary
             )
         }
     }
@@ -322,11 +323,12 @@ fun SectionHeader(
     title: String,
     modifier: Modifier = Modifier
 ) {
+    val colors = LocalAppColors.current
     Text(
         text = title,
         modifier = modifier.padding(vertical = 8.dp),
         style = MaterialTheme.typography.labelSmall,
-        color = White38,
+        color = colors.textTertiary,
         letterSpacing = 2.sp
     )
 }
@@ -355,7 +357,8 @@ fun GradientThumbnail(
     title: String,
     isActive: Boolean = false
 ) {
-    val colors = remember(title) { gradientForTitle(title) }
+    val appColors = LocalAppColors.current
+    val gradientColors = remember(title) { gradientForTitle(title) }
     Box(
         modifier = Modifier
             .size(size.dp)
@@ -363,8 +366,8 @@ fun GradientThumbnail(
             .background(
                 Brush.linearGradient(
                     colors = listOf(
-                        colors[0].copy(alpha = if (isActive) 0.8f else 0.6f),
-                        colors[1].copy(alpha = if (isActive) 0.6f else 0.4f)
+                        gradientColors[0].copy(alpha = if (isActive) 0.8f else 0.6f),
+                        gradientColors[1].copy(alpha = if (isActive) 0.6f else 0.4f)
                     )
                 )
             ),
@@ -373,7 +376,7 @@ fun GradientThumbnail(
         Icon(
             Icons.Outlined.MusicNote,
             contentDescription = null,
-            tint = Color.White.copy(alpha = if (isActive) 0.9f else 0.7f),
+            tint = appColors.textPrimary.copy(alpha = if (isActive) 0.9f else 0.7f),
             modifier = Modifier.size((size * 0.45f).dp)
         )
     }
@@ -388,14 +391,15 @@ fun EffectCard(
     sliderValue: Float,
     onSliderChange: (Float) -> Unit
 ) {
+    val colors = LocalAppColors.current
     val isActive = sliderValue > 0.01f || label == "Tempo"
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(14.dp),
-        color = if (isActive) Purple500.copy(alpha = 0.1f) else DarkSurfaceHighlight,
+        color = if (isActive) Purple500.copy(alpha = 0.1f) else colors.surfaceHighlight,
         border = BorderStroke(
             1.dp,
-            if (isActive) Purple500.copy(alpha = 0.3f) else White12
+            if (isActive) Purple500.copy(alpha = 0.3f) else colors.outline
         )
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
@@ -414,7 +418,7 @@ fun EffectCard(
                     Text(
                         text = label,
                         style = MaterialTheme.typography.bodySmall,
-                        color = if (isActive) Color.White else White60,
+                        color = if (isActive) colors.textPrimary else colors.textSecondary,
                         fontWeight = FontWeight.SemiBold
                     )
                 }
@@ -433,7 +437,7 @@ fun EffectCard(
                 colors = SliderDefaults.colors(
                     thumbColor = Purple500,
                     activeTrackColor = Purple500,
-                    inactiveTrackColor = White12
+                    inactiveTrackColor = colors.outline
                 )
             )
         }
@@ -447,8 +451,9 @@ fun DeleteConfirmDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val colors = LocalAppColors.current
     AlertDialog(
-        containerColor = DarkSurface,
+        containerColor = colors.surface,
         onDismissRequest = onDismiss,
         icon = {
             Icon(
@@ -462,7 +467,7 @@ fun DeleteConfirmDialog(
             Text(text = title, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
         },
         text = {
-            Text(text = message, color = White60)
+            Text(text = message, color = colors.textSecondary)
         },
         confirmButton = {
             TextButton(onClick = onConfirm) {
@@ -471,7 +476,7 @@ fun DeleteConfirmDialog(
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel", color = White38)
+                Text("Cancel", color = colors.textTertiary)
             }
         }
     )
@@ -484,16 +489,17 @@ fun AtmosphereChip(
     onVolumeChange: (Float) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val colors = LocalAppColors.current
     val isActive = volume > 0.01f
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(12.dp),
-        color = if (isActive) Purple500.copy(alpha = 0.2f) else DarkSurfaceHighlight,
+        color = if (isActive) Purple500.copy(alpha = 0.2f) else colors.surfaceHighlight,
         border = ButtonDefaults.outlinedButtonBorder.copy(
             brush = Brush.linearGradient(
                 listOf(
-                    if (isActive) Purple500.copy(alpha = 0.5f) else White12,
-                    if (isActive) Purple500.copy(alpha = 0.3f) else White12
+                    if (isActive) Purple500.copy(alpha = 0.5f) else colors.outline,
+                    if (isActive) Purple500.copy(alpha = 0.3f) else colors.outline
                 )
             )
         )
@@ -506,7 +512,7 @@ fun AtmosphereChip(
                 text = label,
                 style = MaterialTheme.typography.bodySmall,
                 fontWeight = FontWeight.SemiBold,
-                color = if (isActive) Purple400 else White60
+                color = if (isActive) Purple400 else colors.textSecondary
             )
             Slider(
                 value = volume,
@@ -515,7 +521,7 @@ fun AtmosphereChip(
                 colors = SliderDefaults.colors(
                     thumbColor = Purple500,
                     activeTrackColor = Purple500,
-                    inactiveTrackColor = White12
+                    inactiveTrackColor = colors.outline
                 )
             )
         }

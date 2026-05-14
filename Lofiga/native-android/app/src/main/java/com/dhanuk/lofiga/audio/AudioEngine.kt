@@ -155,6 +155,7 @@ class AudioEngine(private val context: Context) {
             }
             mainPlayer = player
             initEffects(player.audioSessionId)
+            initVisualizer(player.audioSessionId)
             return true
         } catch (e: Exception) {
             _error.value = "Failed to load track: ${e.message}"
@@ -198,6 +199,7 @@ class AudioEngine(private val context: Context) {
             }
             mainPlayer = player
             initEffects(player.audioSessionId)
+            initVisualizer(player.audioSessionId)
             return true
         } catch (e: Exception) {
             _error.value = "Failed to load file: ${e.message}"
@@ -224,11 +226,11 @@ class AudioEngine(private val context: Context) {
                     player.prepare()
                 } catch (_: Exception) {
                 }
-                player.start()
-                _isPlaying.value = true
                 try {
                     initVisualizer(player.audioSessionId)
                 } catch (_: Exception) {}
+                player.start()
+                _isPlaying.value = true
                 startPositionPolling()
                 syncAtmospheres()
             }
@@ -270,11 +272,11 @@ class AudioEngine(private val context: Context) {
                     player.prepare()
                 } catch (_: Exception) {
                 }
-                player.start()
-                _isPlaying.value = true
                 try {
                     initVisualizer(player.audioSessionId)
                 } catch (_: Exception) {}
+                player.start()
+                _isPlaying.value = true
                 startPositionPolling()
                 syncAtmospheres()
             }
