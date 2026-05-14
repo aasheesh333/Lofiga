@@ -115,6 +115,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val success = track.uri?.let { audioEngine.loadTrack(it) } ?: false
         if (success) {
             applyPreset(LofiPreset.LofiSlow)
+            // Auto-start playback after loading a new track
+            audioEngine.play()
         } else {
             _snackbarMessage.tryEmit(audioEngine.error.value ?: "Failed to load track")
         }
@@ -128,6 +130,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val success = audioEngine.loadTrackFromFile(filePath)
         if (success) {
             applyPreset(LofiPreset.LofiSlow)
+            // Auto-start playback after loading file
+            audioEngine.play()
             return true
         } else {
             _snackbarMessage.tryEmit(audioEngine.error.value ?: "Failed to load track")
@@ -352,6 +356,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     // --- Export ---
 
     private val _exportedFilePath = MutableStateFlow<String?>(null)
+    // Flow to notify when an export completes (used to refresh export list)
+    private val _exportCompleted = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val exportCompleted = _exportCompleted.asSharedFlow()
     val exportedFilePath: StateFlow<String?> = _exportedFilePath.asStateFlow()
 
     fun exportTrack(context: android.content.Context) {
@@ -390,6 +397,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 )
                 if (result != null) {
                     _exportedFilePath.value = result
+                        _exportCompleted.tryEmit(Unit)
                 } else {
                     _snackbarMessage.tryEmit("Export cancelled")
                 }

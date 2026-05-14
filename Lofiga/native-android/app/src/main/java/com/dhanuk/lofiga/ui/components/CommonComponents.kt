@@ -208,7 +208,7 @@ fun EffectSlider(
                 Text(
                     text = label,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Color.White
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 if (description != null) {
                     Text(
@@ -294,7 +294,7 @@ fun SongItem(
                     text = title,
                     maxLines = 1,
                     style = MaterialTheme.typography.titleMedium,
-                    color = Color.White
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
                     text = artist,
@@ -459,7 +459,7 @@ fun DeleteConfirmDialog(
             )
         },
         title = {
-            Text(text = title, color = Color.White, fontWeight = FontWeight.Bold)
+            Text(text = title, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
         },
         text = {
             Text(text = message, color = White60)

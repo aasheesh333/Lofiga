@@ -3,6 +3,7 @@ package com.dhanuk.lofiga.ui.screens
 import android.content.Intent
 import android.os.Environment
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -35,32 +36,51 @@ fun LibraryScreen(
     var exportedFiles by remember { mutableStateOf<List<File>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
 
-    LaunchedEffect(Unit) {
-        // Look for exported files in app-specific Music/Lofiga directory
-        val files = mutableListOf<File>()
-        // Primary: app-specific directory (used by ExportService on Android 11+)
-        // Fallback: old shared storage paths for previously exported files
-        val musDir = appContext.getExternalFilesDir(Environment.DIRECTORY_MUSIC)
-        val dirs = mutableListOf(File(musDir, "Lofiga"))
-        // Also check old shared storage paths for backward compatibility
-        try {
-            dirs.add(File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC), "Lofiga"))
-            dirs.add(File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "Lofiga"))
-        } catch (_: Exception) {
-            // On Android 11+, shared storage paths may not be accessible
-        }
-        dirs.forEach { dir ->
-            if (dir.exists()) {
-                files.addAll(
-                    dir.listFiles { f -> f.extension in listOf("wav", "m4a", "aac") }
-                        ?.sortedByDescending { it.lastModified() }
-                        ?: emptyList()
-                )
+    val coroutineScope = rememberCoroutineScope()
+
+    // Helper to load exported files
+    fun loadExports() {
+        coroutineScope.launch {
+            // Look for exported files in app-specific Music/Lofiga directory
+            val files = mutableListOf<File>()
+            val musDir = appContext.getExternalFilesDir(Environment.DIRECTORY_MUSIC)
+            val dirs = mutableListOf<File>()
+            if (musDir != null) {
+                dirs.add(File(musDir, "Lofiga"))
             }
+            // Also check old shared storage paths for backward compatibility
+            try {
+                dirs.add(File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC), "Lofiga"))
+                dirs.add(File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "Lofiga"))
+            } catch (_: Exception) {
+                // On Android 11+, shared storage paths may not be accessible
+            }
+            dirs.forEach { dir ->
+                if (dir.exists()) {
+                    files.addAll(
+                        dir.listFiles { f -> f.extension in listOf("wav", "m4a", "aac") }
+                            ?.sortedByDescending { it.lastModified() }
+                            ?: emptyList()
+                    )
+                }
+            }
+            exportedFiles = files.distinctBy { it.absolutePath }
+            isLoading = false
         }
-        exportedFiles = files.distinctBy { it.absolutePath }
-        isLoading = false
     }
+
+    // Initial load
+    LaunchedEffect(Unit) {
+        loadExports()
+    }
+
+    // Refresh when an export completes
+    LaunchedEffect(viewModel) {
+        viewModel.exportCompleted.collect {
+            loadExports()
+        }
+    }
+
 
     Box(modifier = modifier.fillMaxSize()) {
         AmbientBackground()
@@ -78,7 +98,7 @@ fun LibraryScreen(
                     Text(
                         text = "Your Mixes",
                         style = MaterialTheme.typography.headlineLarge,
-                        color = Color.White,
+color = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.padding(bottom = 20.dp)
                     )
                 }
@@ -90,23 +110,36 @@ fun LibraryScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(
-                                    Icons.Outlined.Album,
-                                    contentDescription = null,
-                                    tint = White38,
-                                    modifier = Modifier.size(64.dp)
-                                )
-                                Spacer(Modifier.height(16.dp))
+                                // Replicate empty state from PlayerScreen for consistency
+                                Surface(
+                                    modifier = Modifier.size(140.dp),
+                                    shape = CircleShape,
+                                    color = Purple500.copy(alpha = 0.1f),
+                                    border = BorderStroke(2.dp, Purple500.copy(alpha = 0.2f))
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            Icons.Outlined.LibraryMusic,
+                                            contentDescription = null,
+                                            tint = Purple500.copy(alpha = 0.6f),
+                                            modifier = Modifier.size(64.dp)
+                                        )
+                                    }
+                                }
+                                Spacer(Modifier.height(28.dp))
                                 Text(
                                     "No generated songs yet",
                                     color = White38,
-                                    style = MaterialTheme.typography.bodyLarge
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
                                 )
                                 Spacer(Modifier.height(8.dp))
                                 Text(
                                     "Export a track to see it here",
                                     color = White38.copy(alpha = 0.5f),
-                                    style = MaterialTheme.typography.bodySmall
+                                    style = MaterialTheme.typography.bodySmall,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
                                 )
                             }
                         }

@@ -96,7 +96,7 @@ fun HomeScreen(
                             color = Color.White,
                         )
                         Text(
-                            text = "Turn Any Song Into Lofi",
+                            text = "Turn Any Song Into Lofi", color = MaterialTheme.colorScheme.onBackground,
                             style = MaterialTheme.typography.bodyMedium,
                             color = White38,
                             modifier = Modifier.padding(bottom = 20.dp)
@@ -243,7 +243,7 @@ fun HomeScreen(
                                     "No songs match \"$searchQuery\""
                                 else
                                     "No songs yet!",
-                                color = Color.White,
+color = MaterialTheme.colorScheme.onBackground,
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.SemiBold
                             )
