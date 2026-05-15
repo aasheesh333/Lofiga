@@ -49,11 +49,6 @@ android {
             isMinifyEnabled = false
         }
     }
-        debug {
-            signingConfig = signingConfigs.getByName("demo")
-            isMinifyEnabled = false
-        }
-    }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
