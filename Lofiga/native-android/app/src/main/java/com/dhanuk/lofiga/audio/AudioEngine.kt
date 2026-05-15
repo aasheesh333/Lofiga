@@ -240,10 +240,7 @@ class AudioEngine(private val context: Context) {
                     initVisualizer(sessionId)
                 }
                 player.start()
-                scope.launch {
-                    delay(50)
-                    _isPlaying.value = true
-                }
+                _isPlaying.value = true
                 startPositionPolling()
                 syncAtmospheres()
             }
@@ -280,10 +277,7 @@ class AudioEngine(private val context: Context) {
         try {
             if (player.isPlaying) {
                 player.pause()
-                scope.launch {
-                    delay(50)
-                    _isPlaying.value = false
-                }
+                _isPlaying.value = false
                 positionJob?.cancel()
                 pauseAtmospheres()
             } else {
@@ -294,10 +288,7 @@ class AudioEngine(private val context: Context) {
                     }
                 }
                 player.start()
-                scope.launch {
-                    delay(50)
-                    _isPlaying.value = true
-                }
+                _isPlaying.value = true
                 startPositionPolling()
                 syncAtmospheres()
             }

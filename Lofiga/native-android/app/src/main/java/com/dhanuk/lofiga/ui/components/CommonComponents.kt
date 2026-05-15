@@ -60,7 +60,8 @@ fun WaveformVisualizer(
             }
         },
         update = { view ->
-            if (isPlaying) {
+            val hasData = waveformData.isNotEmpty() && waveformData.any { it > 0.01f }
+            if (isPlaying && hasData) {
                 view.setAmplitudeData(waveformData)
             } else {
                 view.setIdle()

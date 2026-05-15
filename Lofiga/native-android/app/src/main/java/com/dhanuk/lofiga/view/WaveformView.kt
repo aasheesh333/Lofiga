@@ -36,10 +36,18 @@ class WaveformView @JvmOverloads constructor(
     private var lastHeight = 0f
 
     fun setAmplitudeData(data: List<Float>) {
-        isActive = true
         val raw = FloatArray(barCount) { i ->
             data.getOrElse(i) { 0f }.coerceIn(0f, 1f)
         }
+        val hasActualData = raw.any { it > 0.01f }
+
+        if (!hasActualData) {
+            isActive = false
+            invalidate()
+            return
+        }
+
+        isActive = true
         val smoothing = 0.35f
         for (i in 0 until barCount) {
             smoothed[i] += (raw[i] - smoothed[i]) * smoothing
