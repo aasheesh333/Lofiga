@@ -149,7 +149,14 @@ class AudioEngine(private val context: Context) {
                         .build()
                 )
                 prepare()
-                _duration.value = duration.toLong()
+                var dur = duration.toLong()
+                if (dur == 0L) {
+                    android.util.Log.w("AudioEngine", "Duration is 0 after prepare, waiting...")
+                    Thread.sleep(100)
+                    dur = duration.toLong()
+                }
+                _duration.value = dur
+                android.util.Log.i("AudioEngine", "Track loaded, duration: ${dur}ms")
                 setOnCompletionListener {
                     if (!_isLooping.value) {
                         _isPlaying.value = false
@@ -197,7 +204,14 @@ class AudioEngine(private val context: Context) {
                         .build()
                 )
                 prepare()
-                _duration.value = duration.toLong()
+                var dur = duration.toLong()
+                if (dur == 0L) {
+                    android.util.Log.w("AudioEngine", "Duration is 0 after prepare, waiting...")
+                    Thread.sleep(100)
+                    dur = duration.toLong()
+                }
+                _duration.value = dur
+                android.util.Log.i("AudioEngine", "File loaded, duration: ${dur}ms")
                 setOnCompletionListener {
                     if (!_isLooping.value) {
                         _isPlaying.value = false
@@ -236,13 +250,21 @@ class AudioEngine(private val context: Context) {
         try {
             if (!player.isPlaying) {
                 val sessionId = player.audioSessionId
+                android.util.Log.i("AudioEngine", "play() called, sessionId: $sessionId, visualizer: ${visualizer}")
                 if (sessionId > 0 && visualizer == null) {
                     initVisualizer(sessionId)
                 }
                 player.start()
                 _isPlaying.value = true
+                
+                // Immediately set current position
+                try {
+                    _position.value = player.currentPosition.toLong()
+                } catch (e: Exception) {}
+                
                 startPositionPolling()
                 syncAtmospheres()
+                android.util.Log.i("AudioEngine", "Play started, position: ${_position.value}, duration: ${_duration.value}")
             }
         } catch (e: Exception) {
             _error.value = "Playback error: ${e.message}"
@@ -487,9 +509,12 @@ class AudioEngine(private val context: Context) {
             releaseVisualizer()
             val maxCapture = android.media.audiofx.Visualizer.getCaptureSizeRange()
             val captureSize = maxCapture[1].coerceAtMost(1024)
+            val captureRate = android.media.audiofx.Visualizer.getMaxCaptureRate()
+            android.util.Log.i("AudioEngine", "Creating Visualizer: sessionId=$audioSessionId, captureSize=$captureSize, rate=$captureRate")
+            
             val v = android.media.audiofx.Visualizer(audioSessionId)
             v.captureSize = captureSize
-            val captureRate = android.media.audiofx.Visualizer.getMaxCaptureRate()
+            
             v.setDataCaptureListener(
                 object : android.media.audiofx.Visualizer.OnDataCaptureListener {
                     override fun onWaveFormDataCapture(
@@ -504,12 +529,11 @@ class AudioEngine(private val context: Context) {
                         fft: ByteArray?,
                         samplingRate: Int
                     ) {
-                        val data = fft ?: return
-                        if (data.size < 4) return
-                        val magnitudeCount = data.size / 2
+                        if (fft == null || fft.size < 4) return
+                        val magnitudeCount = fft.size / 2
                         val magnitudes = FloatArray(magnitudeCount) { i ->
-                            val real = data[i * 2].toFloat() / 128f
-                            val imag = data[i * 2 + 1].toFloat() / 128f
+                            val real = fft[i * 2].toFloat() / 128f
+                            val imag = fft[i * 2 + 1].toFloat() / 128f
                             kotlin.math.sqrt(real * real + imag * imag).coerceIn(0f, 1f)
                         }
                         val bands = 32
@@ -527,15 +551,15 @@ class AudioEngine(private val context: Context) {
                     }
                 },
                 captureRate,
-                true,
-                true
+                false, // waveform disabled - we only need FFT
+                true   // FFT enabled
             )
             v.enabled = true
             visualizer = v
-            android.util.Log.i("AudioEngine", "Visualizer initialized on session $audioSessionId")
+            android.util.Log.i("AudioEngine", "Visualizer ENABLED on session $audioSessionId")
         } catch (e: Exception) {
             val errorMsg = e.message ?: "Unknown error"
-            android.util.Log.w("AudioEngine", "Visualizer unavailable: $errorMsg")
+            android.util.Log.e("AudioEngine", "Visualizer FAILED: $errorMsg")
             scheduleVisualizerRetry(audioSessionId)
         }
     }
