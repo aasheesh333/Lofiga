@@ -52,7 +52,8 @@ class AudioEngine(private val context: Context) {
     private var reverb: PresetReverb? = null
     private var bassBoost: BassBoost? = null
     private var equalizer: Equalizer? = null
-    private var precomputedFrames: List<List<Float>> = emptyList()
+    private var precomputedFrames = mutableListOf<List<Float>>()
+    private val framesLock = Any()
 
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     private var positionJob: Job? = null
@@ -468,18 +469,25 @@ try {
 
 
     private fun resetWaveformData() {
+        synchronized(framesLock) {
+            precomputedFrames.clear()
+        }
         _waveformData.value = WaveformSnapshot(List(32) { 0f }, ++waveformSeq)
         _fftData.value = List(32) { 0f }
-        precomputedFrames = emptyList()
     }
 
     private fun precomputeFFT(context: Context, uri: Uri): Boolean {
         return try {
             val extractor = MediaExtractor()
             extractor.setDataSource(context, uri, null)
-            precomputedFrames = decodeAndComputeFFT(extractor)
+            decodeAndComputeFFT(extractor) { newFrames ->
+                synchronized(framesLock) {
+                    precomputedFrames.addAll(newFrames)
+                }
+                android.util.Log.d("AudioEngine", "FFT progress: ${precomputedFrames.size} frames")
+            }
             extractor.release()
-            android.util.Log.i("AudioEngine", "Precomputed ${precomputedFrames.size} FFT frames")
+            android.util.Log.i("AudioEngine", "Precomputed ${precomputedFrames.size} FFT frames total")
             true
         } catch (e: Exception) {
             android.util.Log.e("AudioEngine", "Failed to precompute FFT: ${e.message}")
@@ -491,9 +499,14 @@ try {
         return try {
             val extractor = MediaExtractor()
             extractor.setDataSource(filePath)
-            precomputedFrames = decodeAndComputeFFT(extractor)
+            decodeAndComputeFFT(extractor) { newFrames ->
+                synchronized(framesLock) {
+                    precomputedFrames.addAll(newFrames)
+                }
+                android.util.Log.d("AudioEngine", "FFT progress: ${precomputedFrames.size} frames")
+            }
             extractor.release()
-            android.util.Log.i("AudioEngine", "Precomputed ${precomputedFrames.size} FFT frames")
+            android.util.Log.i("AudioEngine", "Precomputed ${precomputedFrames.size} FFT frames total")
             true
         } catch (e: Exception) {
             android.util.Log.e("AudioEngine", "Failed to precompute FFT: ${e.message}")
@@ -501,7 +514,7 @@ try {
         }
     }
 
-    private fun decodeAndComputeFFT(extractor: MediaExtractor): List<List<Float>> {
+    private fun decodeAndComputeFFT(extractor: MediaExtractor, onBatch: (List<List<Float>>) -> Unit) {
         for (i in 0 until extractor.trackCount) {
             val format = extractor.getTrackFormat(i)
             val mime = format.getString(MediaFormat.KEY_MIME) ?: continue
@@ -514,7 +527,7 @@ try {
             codec.start()
 
             val bufferInfo = MediaCodec.BufferInfo()
-            val frames = mutableListOf<List<Float>>()
+            val batch = mutableListOf<List<Float>>()
             var sawInputEOS = false
             var sawOutputEOS = false
 
@@ -554,20 +567,23 @@ try {
                         var start = 0
                         while (start + windowSize <= shorts.size) {
                             val window = shorts.sliceArray(start until start + windowSize)
-                            frames.add(computeFFTMagnitudes(window))
+                            batch.add(computeFFTMagnitudes(window))
                             start += hopSize
+                        }
+                        if (batch.size >= 500) {
+                            onBatch(batch.toList())
+                            batch.clear()
                         }
                     }
                     codec.releaseOutputBuffer(outputIndex, false)
                 }
             }
+            if (batch.isNotEmpty()) {
+                onBatch(batch.toList())
+            }
             codec.stop()
             codec.release()
-            extractor.release()
-            return frames
         }
-        extractor.release()
-        return emptyList()
     }
 
     private fun computeFFTMagnitudes(samples: ShortArray): List<Float> {
@@ -737,12 +753,15 @@ try {
                             _position.value = pos
                         }
                         val dur = _duration.value
-                        if (precomputedFrames.isNotEmpty() && dur > 0 && pos >= 0) {
-                            val frameIndex = ((pos.toFloat() / dur.toFloat()) * precomputedFrames.size).toInt()
-                                .coerceIn(0, precomputedFrames.size - 1)
-                            val frame = precomputedFrames[frameIndex]
-                            _fftData.value = frame
-                            _waveformData.value = WaveformSnapshot(frame, ++waveformSeq)
+                        synchronized(framesLock) {
+                            val frameCount = precomputedFrames.size
+                            if (frameCount > 0 && dur > 0 && pos >= 0) {
+                                val maxFrame = ((pos.toFloat() / dur.toFloat()) * frameCount).toInt()
+                                    .coerceIn(0, frameCount - 1)
+                                val frame = precomputedFrames[maxFrame]
+                                _fftData.value = frame
+                                _waveformData.value = WaveformSnapshot(frame, ++waveformSeq)
+                            }
                         }
                     } catch (_: Exception) {}
                 }

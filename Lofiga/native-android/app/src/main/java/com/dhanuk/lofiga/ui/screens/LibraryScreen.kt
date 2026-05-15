@@ -15,7 +15,7 @@ import androidx.compose.runtime.*
 
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -103,7 +103,7 @@ fun LibraryScreen(
 
         if (isLoading) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = MaterialTheme.colorScheme.onSurface)
+                CircularProgressIndicator(color = Purple500)
             }
         } else {
             LazyColumn(
@@ -130,14 +130,14 @@ color = MaterialTheme.colorScheme.onSurface,
                                 Surface(
                                     modifier = Modifier.size(140.dp),
                                     shape = CircleShape,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f),
-                                    border = BorderStroke(2.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f))
+                                    color = Purple500.copy(alpha = 0.1f),
+                                    border = BorderStroke(2.dp, Purple500.copy(alpha = 0.2f))
                                 ) {
                                     Box(contentAlignment = Alignment.Center) {
                                         Icon(
                                             Icons.Outlined.LibraryMusic,
                                             contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                                            tint = Purple500.copy(alpha = 0.6f),
                                             modifier = Modifier.size(64.dp)
                                         )
                                     }
@@ -238,7 +238,7 @@ private fun LibraryItem(
             }
             Row {
                 IconButton(onClick = onPlay) {
-                    Icon(Icons.Outlined.PlayCircle, contentDescription = "Play", tint = MaterialTheme.colorScheme.onSurface)
+                    Icon(Icons.Outlined.PlayCircle, contentDescription = "Play", tint = Purple500)
                 }
                 var showMenu by remember { mutableStateOf(false) }
                 Box {
@@ -268,12 +268,12 @@ private fun LibraryItem(
                             leadingIcon = { Icon(Icons.Outlined.Share, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)) }
                         )
                         DropdownMenuItem(
-                            text = { Text("Delete", color = MaterialTheme.colorScheme.onSurface) },
+                            text = { Text("Delete", color = Color(0xFFFF5252)) },
                             onClick = {
                                 showDeleteConfirm = true
                                 showMenu = false
                             },
-                            leadingIcon = { Icon(Icons.Outlined.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface) }
+                            leadingIcon = { Icon(Icons.Outlined.Delete, contentDescription = null, tint = Color(0xFFFF5252)) }
                         )
                     }
                 }

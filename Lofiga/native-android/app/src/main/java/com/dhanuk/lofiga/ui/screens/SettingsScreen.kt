@@ -11,7 +11,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -140,7 +140,7 @@ fun SettingsScreen(
                             Icon(
                                 Icons.Outlined.Bookmark,
                                 contentDescription = null,
-                                tint = colors.textPrimary,
+                                tint = Cyan400,
                                 modifier = Modifier.size(20.dp)
                             )
                             Spacer(Modifier.width(12.dp))
@@ -160,7 +160,7 @@ fun SettingsScreen(
                                 Icon(
                                     Icons.Outlined.Delete,
                                     contentDescription = "Delete",
-                                    tint = colors.textTertiary,
+                                    tint = Color(0xFFFF5252).copy(alpha = 0.7f),
                                     modifier = Modifier.size(18.dp)
                                 )
                             }
@@ -221,7 +221,7 @@ private fun FormatSelectionDialog(
                             selected = currentFormat == value,
                             onClick = { onSelect(value) },
                             colors = RadioButtonDefaults.colors(
-                                selectedColor = colors.textPrimary,
+                                selectedColor = Purple500,
                                 unselectedColor = colors.textTertiary
                             )
                         )
@@ -236,7 +236,7 @@ private fun FormatSelectionDialog(
         },
         confirmButton = {
             TextButton(onClick = onDismiss) {
-                Text("Done", color = colors.textPrimary)
+                Text("Done", color = Purple500)
             }
         }
     )
@@ -269,7 +269,7 @@ private fun BitrateSelectionDialog(
                             selected = currentBitrate == value,
                             onClick = { onSelect(value) },
                             colors = RadioButtonDefaults.colors(
-                                selectedColor = colors.textPrimary,
+                                selectedColor = Purple500,
                                 unselectedColor = colors.textTertiary
                             )
                         )
@@ -284,7 +284,7 @@ private fun BitrateSelectionDialog(
         },
         confirmButton = {
             TextButton(onClick = onDismiss) {
-                Text("Done", color = colors.textPrimary)
+                Text("Done", color = Purple500)
             }
         }
     )
@@ -343,8 +343,8 @@ private fun SettingItem(
                     checked = switchValue,
                     onCheckedChange = onSwitchChange,
                     colors = SwitchDefaults.colors(
-                        checkedThumbColor = colors.textPrimary,
-                        checkedTrackColor = colors.textPrimary.copy(alpha = 0.3f),
+                        checkedThumbColor = Purple500,
+                        checkedTrackColor = Purple500.copy(alpha = 0.3f),
                         uncheckedThumbColor = colors.textTertiary,
                         uncheckedTrackColor = colors.outline
                     )
