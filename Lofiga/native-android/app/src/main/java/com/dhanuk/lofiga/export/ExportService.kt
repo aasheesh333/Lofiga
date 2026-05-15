@@ -592,23 +592,26 @@ object ExportService {
         if (preset.rainVolume <= 0.01f && preset.vinylVolume <= 0.01f &&
             preset.windVolume <= 0.01f && preset.tapeVolume <= 0.01f) return pcm
 
-        // Pre-read all active atmosphere layers
-        val activeLayers = listOf("rain" to preset.rainVolume, "vinyl" to preset.vinylVolume,
+        data class AtmosLayer(val pcm: ShortArray, val volume: Float)
+
+        val activeLayers = mutableListOf<AtmosLayer>()
+        listOf("rain" to preset.rainVolume, "vinyl" to preset.vinylVolume,
             "wind" to preset.windVolume, "tape" to preset.tapeVolume)
             .filter { it.second > 0.01f }
-            .mapNotNull { (key, vol) ->
-                readAtmospherePcm(context, key, sampleRate, pcm.size)?.let { key to it to vol }
+            .forEach { (key, vol) ->
+                readAtmospherePcm(context, key, sampleRate, pcm.size)?.let { atmosPcm ->
+                    activeLayers.add(AtmosLayer(atmosPcm, vol))
+                }
             }
 
         if (activeLayers.isEmpty()) return pcm
 
-        // Single pass over all samples, mixing all atmospheres at once
         val output = ShortArray(pcm.size)
         for (i in pcm.indices) {
             var sample = pcm[i].toInt()
-            for ((_, atmosPcm, vol) in activeLayers) {
-                if (i < atmosPcm.size) {
-                    sample += (atmosPcm[i] * vol * 0.8f).toInt()
+            for (layer in activeLayers) {
+                if (i < layer.pcm.size) {
+                    sample += (layer.pcm[i] * layer.volume * 0.8f).toInt()
                 }
             }
             output[i] = sample.coerceIn(-32768, 32767).toShort()
