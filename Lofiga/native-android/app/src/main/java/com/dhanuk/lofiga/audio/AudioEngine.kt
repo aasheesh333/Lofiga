@@ -3,13 +3,15 @@ package com.dhanuk.lofiga.audio
 import android.content.Context
 import android.media.AudioAttributes
 import android.media.AudioManager
+import android.media.MediaCodec
+import android.media.MediaExtractor
+import android.media.MediaFormat
 import android.media.MediaPlayer
 import android.media.PlaybackParams
 import android.net.Uri
 import android.media.audiofx.BassBoost
 import android.media.audiofx.Equalizer
 import android.media.audiofx.PresetReverb
-import android.media.audiofx.Visualizer
 import com.dhanuk.lofiga.model.PresetValues
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -50,7 +52,7 @@ class AudioEngine(private val context: Context) {
     private var reverb: PresetReverb? = null
     private var bassBoost: BassBoost? = null
     private var equalizer: Equalizer? = null
-    private var visualizer: android.media.audiofx.Visualizer? = null
+    private var precomputedFrames: List<List<Float>> = emptyList()
 
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var positionJob: Job? = null
@@ -128,7 +130,6 @@ class AudioEngine(private val context: Context) {
         _isPlaying.value = false
         releaseMainPlayer()
         releaseEffects()
-        releaseVisualizer()
         _error.value = null
         _position.value = 0
         _duration.value = 0
@@ -152,7 +153,7 @@ try {
             val dur = mediaPlayer.duration.toLong()
             _duration.value = dur
             initEffects(mediaPlayer.audioSessionId)
-            initVisualizer(mediaPlayer.audioSessionId)
+            precomputeFFT(context, uri)
             android.util.Log.i("AudioEngine", "Track loaded, duration: ${dur}ms")
         }
         prepareAsync()
@@ -171,7 +172,6 @@ try {
         _isPlaying.value = false
         releaseMainPlayer()
         releaseEffects()
-        releaseVisualizer()
         _error.value = null
         _position.value = 0
         _duration.value = 0
@@ -195,7 +195,7 @@ try {
             val dur = mediaPlayer.duration.toLong()
             _duration.value = dur
             initEffects(mediaPlayer.audioSessionId)
-            initVisualizer(mediaPlayer.audioSessionId)
+            precomputeFFT(filePath)
             android.util.Log.i("AudioEngine", "File loaded, duration: ${dur}ms")
         }
         prepareAsync()
@@ -225,11 +225,6 @@ try {
         }
         try {
             if (!player.isPlaying) {
-                val sessionId = player.audioSessionId
-                android.util.Log.i("AudioEngine", "play() called, sessionId: $sessionId, visualizer: ${visualizer}")
-                if (sessionId > 0 && visualizer == null) {
-                    initVisualizer(sessionId)
-                }
                 player.start()
                 _isPlaying.value = true
                 
@@ -279,13 +274,8 @@ try {
                 positionJob?.cancel()
                 pauseAtmospheres()
             } else {
-                if (visualizer == null || !player.isPlaying) {
-                    val sessionId = player.audioSessionId
-                    if (sessionId > 0) {
-                        initVisualizer(sessionId)
-                    }
-                }
-                player.start()
+                if (!player.isPlaying) {
+                    player.start()
                 _isPlaying.value = true
                 startPositionPolling()
                 syncAtmospheres()
@@ -333,12 +323,15 @@ try {
     fun release() {
         positionJob?.cancel()
         scope.cancel()
-        releaseMainPlayer()
-        releaseAtmospherePlayers()
-        releaseEffects()
-        releaseVisualizer()
-    }
-
+                    releaseMainPlayer()
+                }
+            }
+        }
+        try {
+            if (!player.isPlaying) {
+                player.start()
+                _isPlaying.value = true
+                
     // --- Speed & Pitch (INDEPENDENT) ---
 
     fun setSpeedAndPitch(tempo: Float, semitones: Float) {
@@ -468,97 +461,171 @@ try {
         }
     }
 
-    // --- Visualizer (Real waveform data) ---
+    // --- Precomputed FFT Visualization ---
+
+
 
     private fun resetWaveformData() {
         _waveformData.value = WaveformSnapshot(List(32) { 0f }, ++waveformSeq)
         _fftData.value = List(32) { 0f }
+        precomputedFrames = emptyList()
     }
 
-    private fun initVisualizer(audioSessionId: Int) {
-        if (audioSessionId <= 0) {
-            android.util.Log.w("AudioEngine", "Invalid audio session ID: $audioSessionId, cannot init visualizer")
-            scheduleVisualizerRetry(audioSessionId)
-            return
-        }
-        try {
-            releaseVisualizer()
-            val maxCapture = android.media.audiofx.Visualizer.getCaptureSizeRange()
-            val captureSize = maxCapture[1].coerceAtMost(1024)
-            val captureRate = android.media.audiofx.Visualizer.getMaxCaptureRate()
-            android.util.Log.i("AudioEngine", "Creating Visualizer: sessionId=$audioSessionId, captureSize=$captureSize, rate=$captureRate")
-            
-            val v = android.media.audiofx.Visualizer(audioSessionId)
-            v.captureSize = captureSize
-            
-            v.setDataCaptureListener(
-                object : android.media.audiofx.Visualizer.OnDataCaptureListener {
-                    override fun onWaveFormDataCapture(
-                        visualizer: android.media.audiofx.Visualizer?,
-                        waveform: ByteArray?,
-                        samplingRate: Int
-                    ) {
-                    }
-
-                    override fun onFftDataCapture(
-                        visualizer: android.media.audiofx.Visualizer?,
-                        fft: ByteArray?,
-                        samplingRate: Int
-                    ) {
-                        if (fft == null || fft.size < 4) return
-                        val magnitudeCount = fft.size / 2
-                        val magnitudes = FloatArray(magnitudeCount) { i ->
-                            val real = fft[i * 2].toFloat() / 128f
-                            val imag = fft[i * 2 + 1].toFloat() / 128f
-                            kotlin.math.sqrt(real * real + imag * imag).coerceIn(0f, 1f)
-                        }
-                        val bands = 32
-                        val floats = (0 until bands).map { i ->
-                            val binStart = (magnitudeCount * i) / bands
-                            val binEnd = (magnitudeCount * (i + 1)) / bands
-                            var maxVal = 0f
-                            for (j in binStart until binEnd.coerceAtMost(magnitudeCount)) {
-                                if (magnitudes[j] > maxVal) maxVal = magnitudes[j]
-                            }
-                            maxVal
-                        }
-                        _fftData.value = floats
-                        _waveformData.value = WaveformSnapshot(floats, ++waveformSeq)
-                    }
-                },
-                captureRate,
-                false, // waveform disabled - we only need FFT
-                true   // FFT enabled
-            )
-            v.enabled = true
-            visualizer = v
-            android.util.Log.i("AudioEngine", "Visualizer ENABLED on session $audioSessionId")
+    private fun precomputeFFT(context: Context, uri: Uri): Boolean {
+        return try {
+            val extractor = MediaExtractor()
+            extractor.setDataSource(context, uri, null)
+            precomputedFrames = decodeAndComputeFFT(extractor)
+            extractor.release()
+            android.util.Log.i("AudioEngine", "Precomputed ${precomputedFrames.size} FFT frames")
+            true
         } catch (e: Exception) {
-            val errorMsg = e.message ?: "Unknown error"
-            android.util.Log.e("AudioEngine", "Visualizer FAILED: $errorMsg")
-            scheduleVisualizerRetry(audioSessionId)
+            android.util.Log.e("AudioEngine", "Failed to precompute FFT: ${e.message}")
+            false
         }
     }
 
-    private fun scheduleVisualizerRetry(audioSessionId: Int) {
-        scope.launch {
-            delay(500)
-            if (mainPlayer != null && mainPlayer!!.audioSessionId > 0) {
-                android.util.Log.i("AudioEngine", "Retrying visualizer init with session ${mainPlayer!!.audioSessionId}")
-                initVisualizer(mainPlayer!!.audioSessionId)
+    private fun precomputeFFT(filePath: String): Boolean {
+        return try {
+            val extractor = MediaExtractor()
+            extractor.setDataSource(filePath)
+            precomputedFrames = decodeAndComputeFFT(extractor)
+            extractor.release()
+            android.util.Log.i("AudioEngine", "Precomputed ${precomputedFrames.size} FFT frames")
+            true
+        } catch (e: Exception) {
+            android.util.Log.e("AudioEngine", "Failed to precompute FFT: ${e.message}")
+            false
+        }
+    }
+
+    private fun decodeAndComputeFFT(extractor: MediaExtractor): List<List<Float>> {
+        for (i in 0 until extractor.trackCount) {
+            val format = extractor.getTrackFormat(i)
+            val mime = format.getString(MediaFormat.KEY_MIME) ?: continue
+            if (!mime.startsWith("audio/")) continue
+
+            extractor.selectTrack(i)
+
+            val codec = MediaCodec.createDecoderByType(mime)
+            codec.configure(format, null, null, 0)
+            codec.start()
+
+            val bufferInfo = MediaCodec.BufferInfo()
+            val frames = mutableListOf<List<Float>>()
+            var sawInputEOS = false
+            var sawOutputEOS = false
+
+            while (!sawOutputEOS) {
+                if (!sawInputEOS) {
+                    val inputIndex = codec.dequeueInputBuffer(10000)
+                    if (inputIndex >= 0) {
+                        val inputBuffer = codec.getInputBuffer(inputIndex)!!
+                        val sampleSize = extractor.readSampleData(inputBuffer, 0)
+                        if (sampleSize < 0) {
+                            sawInputEOS = true
+                            codec.queueInputBuffer(inputIndex, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
+                        } else {
+                            codec.queueInputBuffer(inputIndex, 0, sampleSize, extractor.sampleTime, 0)
+                            extractor.advance()
+                        }
+                    }
+                }
+
+                val outputIndex = codec.dequeueOutputBuffer(bufferInfo, 10000)
+                if (outputIndex == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) continue
+                if (outputIndex >= 0) {
+                    if ((bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
+                        sawOutputEOS = true
+                    }
+                    val outputBuffer = codec.getOutputBuffer(outputIndex) ?: run {
+                        codec.releaseOutputBuffer(outputIndex, false)
+                        continue
+                    }
+                    val size = bufferInfo.size
+                    if (size > 0) {
+                        val shorts = ShortArray(size / 2)
+                        outputBuffer.rewind()
+                        outputBuffer.asShortBuffer().get(shorts)
+                        val windowSize = 1024
+                        val hopSize = windowSize / 2
+                        var start = 0
+                        while (start + windowSize <= shorts.size) {
+                            val window = shorts.sliceArray(start until start + windowSize)
+                            frames.add(computeFFTMagnitudes(window))
+                            start += hopSize
+                        }
+                    }
+                    codec.releaseOutputBuffer(outputIndex, false)
+                }
+            }
+            codec.stop()
+            codec.release()
+            extractor.release()
+            return frames
+        }
+        extractor.release()
+        return emptyList()
+    }
+
+    private fun computeFFTMagnitudes(samples: ShortArray): List<Float> {
+        val n = samples.size
+        val windowed = FloatArray(n) { i ->
+            samples[i].toFloat() * (0.5f - 0.5f * kotlin.math.cos(2.0 * Math.PI * i / (n - 1))).toFloat()
+        }
+        val fftSize = Integer.highestOneBit(n - 1) * 2
+        val real = FloatArray(fftSize) { if (it < n) windowed[it] else 0f }
+        val imag = FloatArray(fftSize)
+
+        var j = 0
+        for (i in 0 until fftSize) {
+            if (i < j) {
+                val temp = real[i]; real[i] = real[j]; real[j] = temp
+                val tempI = imag[i]; imag[i] = imag[j]; imag[j] = tempI
+            }
+            var m = fftSize / 2
+            while (m >= 1 && j >= m) {
+                j -= m
+                m /= 2
+            }
+            j += m
+        }
+
+        var step = 1
+        while (step < fftSize) {
+            val halfStep = step
+            step *= 2
+            val w = Math.PI / halfStep
+            for (k in 0 until halfStep) {
+                val cosW = kotlin.math.cos(k * w).toFloat()
+                val sinW = -kotlin.math.sin(k * w).toFloat()
+                var i = k
+                while (i < fftSize) {
+                    val ip = i + halfStep
+                    val tempReal = real[ip] * cosW - imag[ip] * sinW
+                    val tempImag = real[ip] * sinW + imag[ip] * cosW
+                    real[ip] = real[i] - tempReal
+                    imag[ip] = imag[i] - tempImag
+                    real[i] += tempReal
+                    imag[i] += tempImag
+                    i += step
+                }
             }
         }
-    }
 
-    private fun releaseVisualizer() {
-        try {
-            visualizer?.apply {
-                enabled = false
-                release()
+        val numBins = fftSize / 2
+        val bands = 32
+        val magnitudes = FloatArray(numBins) { i ->
+            kotlin.math.sqrt((real[i] * real[i] + imag[i] * imag[i]).toDouble()).toFloat() / (numBins * 0.5f)
+        }
+        return (0 until bands).map { band ->
+            val binStart = (numBins * band) / bands
+            val binEnd = (numBins * (band + 1)) / bands
+            var maxVal = 0f
+            for (k in binStart until binEnd.coerceAtMost(numBins)) {
+                if (magnitudes[k] > maxVal) maxVal = magnitudes[k]
             }
-            visualizer = null
-        } catch (e: Exception) {
-            e.printStackTrace()
+            maxVal.coerceIn(0f, 1f)
         }
     }
 
@@ -666,6 +733,14 @@ try {
                         val pos = player.currentPosition.toLong()
                         if (pos >= 0) {
                             _position.value = pos
+                        }
+                        val dur = _duration.value
+                        if (precomputedFrames.isNotEmpty() && dur > 0 && pos >= 0) {
+                            val frameIndex = ((pos.toFloat() / dur.toFloat()) * precomputedFrames.size).toInt()
+                                .coerceIn(0, precomputedFrames.size - 1)
+                            val frame = precomputedFrames[frameIndex]
+                            _fftData.value = frame
+                            _waveformData.value = WaveformSnapshot(frame, ++waveformSeq)
                         }
                     } catch (_: Exception) {}
                 }
