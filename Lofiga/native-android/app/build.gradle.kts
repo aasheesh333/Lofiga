@@ -28,24 +28,11 @@ android {
             keyAlias = "demo_key"
             keyPassword = "android"
         }
-        create("release") {
-            val keystorePath = System.getenv("KEYSTORE_PATH")
-            if (keystorePath != null && keystorePath.isNotEmpty()) {
-                storeFile = file(keystorePath)
-                storePassword = System.getenv("KEYSTORE_PASSWORD") ?: ""
-                keyAlias = System.getenv("KEY_ALIAS") ?: "lofiga"
-                keyPassword = System.getenv("KEY_PASSWORD") ?: ""
-            }
-        }
     }
 
     buildTypes {
         release {
-            signingConfig = if (System.getenv("KEYSTORE_PASSWORD") != null) {
-                signingConfigs.getByName("release")
-            } else {
-                signingConfigs.getByName("demo")
-            }
+            signingConfig = signingConfigs.getByName("demo")
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
