@@ -1,44 +1,44 @@
 <?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="108dp"
-    android:height="108dp"
-    android:viewportWidth="108"
-    android:viewportHeight="108">
-    <!-- Background circle -->
-    <path
-        android:fillColor="#FF191022"
-        android:pathData="M54,54m-40,0a40,40 0,1 1,80 0a40,40 0,1 1,-80 0"/>
-    <!-- Vinyl record -->
-    <path
-        android:fillColor="#FF121212"
-        android:pathData="M54,54m-30,0a30,30 0,1 1,60 0a30,30 0,1 1,-60 0"/>
-    <!-- Inner grooves -->
-    <path
-        android:fillColor="@android:color/transparent"
-        android:strokeColor="#FF1A1A1A"
-        android:strokeWidth="0.5"
-        android:pathData="M54,54m-25,0a25,25 0,1 1,50 0a25,25 0,1 1,-50 0"/>
-    <path
-        android:fillColor="@android:color/transparent"
-        android:strokeColor="#FF1A1A1A"
-        android:strokeWidth="0.5"
-        android:pathData="M54,54m-20,0a20,20 0,1 1,40 0a20,20 0,1 1,-40 0"/>
-    <path
-        android:fillColor="@android:color/transparent"
-        android:strokeColor="#FF1A1A1A"
-        android:strokeWidth="0.5"
-        android:pathData="M54,54m-15,0a15,15 0,1 1,30 0a15,15 0,1 1,-30 0"/>
-    <!-- Purple label -->
-    <path
-        android:fillColor="#FF993DF5"
-        android:pathData="M54,54m-12,0a12,12 0,1 1,24 0a12,12 0,1 1,-24 0"/>
-    <!-- Center hole -->
-    <path
-        android:fillColor="#FF191022"
-        android:pathData="M54,54m-3,0a3,3 0,1 1,6 0a3,3 0,1 1,-6 0"/>
-    <!-- Play triangle -->
-    <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M51,48l8,6l-8,6z"
-        android:strokeWidth="0"/>
+android:width="108dp"
+android:height="108dp"
+android:viewportWidth="108"
+android:viewportHeight="108">
+<!-- Background circle -->
+<path
+android:fillColor="#FFFFFFFF"
+android:pathData="M54,54m-40,0a40,40 0,1 1,80 0a40,40 0,1 1,-80 0"/>
+<!-- Vinyl record -->
+<path
+android:fillColor="#FF000000"
+android:pathData="M54,54m-30,0a30,30 0,1 1,60 0a30,30 0,1 1,-60 0"/>
+<!-- Inner grooves -->
+<path
+android:fillColor="@android:color/transparent"
+android:strokeColor="#FF000000"
+android:strokeWidth="0.5"
+android:pathData="M54,54m-25,0a25,25 0,1 1,50 0a25,25 0,1 1,-50 0"/>
+<path
+android:fillColor="@android:color/transparent"
+android:strokeColor="#FF000000"
+android:strokeWidth="0.5"
+android:pathData="M54,54m-20,0a20,20 0,1 1,40 0a20,20 0,1 1,-40 0"/>
+<path
+android:fillColor="@android:color/transparent"
+android:strokeColor="#FF000000"
+android:strokeWidth="0.5"
+android:pathData="M54,54m-15,0a15,15 0,1 1,30 0a15,15 0,1 1,-30 0"/>
+<!-- Black label -->
+<path
+android:fillColor="#FF000000"
+android:pathData="M54,54m-12,0a12,12 0,1 1,24 0a12,12 0,1 1,-24 0"/>
+<!-- Center hole -->
+<path
+android:fillColor="#FF000000"
+android:pathData="M54,54m-3,0a3,3 0,1 1,6 0a3,3 0,1 1,-6 0"/>
+<!-- Play triangle -->
+<path
+android:fillColor="#FFFFFFFF"
+android:pathData="M51,48l8,6l-8,6z"
+android:strokeWidth="0"/>
 </vector>

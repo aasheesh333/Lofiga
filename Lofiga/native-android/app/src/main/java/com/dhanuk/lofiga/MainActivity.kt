@@ -26,7 +26,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
+
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -41,11 +41,7 @@ import com.dhanuk.lofiga.ui.LofigaMainApp
 import com.dhanuk.lofiga.ui.MainViewModel
 import com.dhanuk.lofiga.ui.components.LofigaNavigationBar
 import com.dhanuk.lofiga.ui.screens.*
-import com.dhanuk.lofiga.ui.theme.DarkSurface
 import com.dhanuk.lofiga.ui.theme.LofigaTheme
-import com.dhanuk.lofiga.ui.theme.Purple500
-import com.dhanuk.lofiga.ui.theme.White38
-import com.dhanuk.lofiga.ui.theme.White60
 import com.dhanuk.lofiga.util.SettingsManager
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -53,125 +49,126 @@ import androidx.compose.runtime.LaunchedEffect
 
 class MainActivity : ComponentActivity() {
 
-    private var showPermissionRationale by mutableStateOf(false)
-    private var hasRequestedPermissions by mutableStateOf(false)
+private var showPermissionRationale by mutableStateOf(false)
+private var hasRequestedPermissions by mutableStateOf(false)
 
-    private val requestPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
-        val allGranted = permissions.values.all { it }
-        if (!allGranted && hasRequestedPermissions) {
-            // Permissions denied - show toast but don't annoy
-            Toast.makeText(this, "Some features may not work without storage access", Toast.LENGTH_LONG).show()
-        }
-    }
+private val requestPermissionLauncher = registerForActivityResult(
+ActivityResultContracts.RequestMultiplePermissions()
+) { permissions ->
+val allGranted = permissions.values.all { it }
+if (!allGranted && hasRequestedPermissions) {
+// Permissions denied - show toast but don't annoy
+Toast.makeText(this, "Some features may not work without storage access", Toast.LENGTH_LONG).show()
+}
+}
 
-    private fun requestAudioPermissions() {
-        val permissions = mutableListOf<String>()
+private fun requestAudioPermissions() {
+val permissions = mutableListOf<String>()
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_AUDIO)
-                != PackageManager.PERMISSION_GRANTED
-            ) {
-                permissions.add(Manifest.permission.READ_MEDIA_AUDIO)
-            }
-        } else {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE)
-                != PackageManager.PERMISSION_GRANTED
-            ) {
-                permissions.add(Manifest.permission.READ_EXTERNAL_STORAGE)
-            }
-        }
+if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_AUDIO)
+!= PackageManager.PERMISSION_GRANTED
+) {
+permissions.add(Manifest.permission.READ_MEDIA_AUDIO)
+}
+} else {
+if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE)
+!= PackageManager.PERMISSION_GRANTED
+) {
+permissions.add(Manifest.permission.READ_EXTERNAL_STORAGE)
+}
+}
 
-        if (permissions.isNotEmpty()) {
-            hasRequestedPermissions = true
-            requestPermissionLauncher.launch(permissions.toTypedArray())
-        }
-    }
+if (permissions.isNotEmpty()) {
+hasRequestedPermissions = true
+requestPermissionLauncher.launch(permissions.toTypedArray())
+}
+}
 
-    private fun checkAndRequestPermissions() {
-        val hasPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_AUDIO) == PackageManager.PERMISSION_GRANTED
-        } else {
-            ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
-        }
+private fun checkAndRequestPermissions() {
+val hasPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_AUDIO) == PackageManager.PERMISSION_GRANTED
+} else {
+ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
+}
 
-        if (!hasPermission) {
-            // Show rationale first time, then request
-            if (!hasRequestedPermissions) {
-                showPermissionRationale = true
-            } else {
-                // User denied before, just request again
-                requestAudioPermissions()
-            }
-        }
-    }
+if (!hasPermission) {
+// Show rationale first time, then request
+if (!hasRequestedPermissions) {
+showPermissionRationale = true
+} else {
+// User denied before, just request again
+requestAudioPermissions()
+}
+}
+}
 
-    fun proceedWithPermissions() {
-        showPermissionRationale = false
-        requestAudioPermissions()
-    }
+fun proceedWithPermissions() {
+showPermissionRationale = false
+requestAudioPermissions()
+}
 
-    fun skipPermissions() {
-        showPermissionRationale = false
-    }
+fun skipPermissions() {
+showPermissionRationale = false
+}
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        checkAndRequestPermissions()
+override fun onCreate(savedInstanceState: Bundle?) {
+super.onCreate(savedInstanceState)
+checkAndRequestPermissions()
 
-        setContent {
-            val viewModel: MainViewModel = viewModel()
-            val settings by viewModel.settingsManager.settingsFlow.collectAsState(initial = SettingsManager.AppSettings())
+setContent {
+val viewModel: MainViewModel = viewModel()
+val settings by viewModel.settingsManager.settingsFlow.collectAsState(initial = SettingsManager.AppSettings())
 
-            LofigaTheme(darkTheme = settings.isDarkMode) {
-                var onboardingComplete by remember { mutableStateOf(false) }
+LofigaTheme(darkTheme = settings.isDarkMode) {
+var onboardingComplete by remember { mutableStateOf(false) }
 
-                LaunchedEffect(onboardingComplete) {
-                    if (onboardingComplete) {
-                        viewModel.settingsManager.setHasSeenOnboarding(true)
-                    }
-                }
+LaunchedEffect(onboardingComplete) {
+if (onboardingComplete) {
+viewModel.settingsManager.setHasSeenOnboarding(true)
+}
+}
 
-                // Permission rationale dialog
-                if (showPermissionRationale) {
-                    PermissionRationaleDialog(
-                        onAccept = { proceedWithPermissions() },
-                        onSkip = { skipPermissions() }
-                    )
-                }
+// Permission rationale dialog
+if (showPermissionRationale) {
+PermissionRationaleDialog(
+onAccept = { proceedWithPermissions() },
+onSkip = { skipPermissions() }
+)
+}
 
-                OnboardingDialog(
-                    hasSeenOnboarding = settings.hasSeenOnboarding || onboardingComplete,
-                    onOnboardingComplete = {
-                        onboardingComplete = true
-                    },
-                    onSkip = {
-                        onboardingComplete = true
-                    }
-                ) {
-                    LofigaMainApp(viewModel = viewModel)
-                }
-            }
-        }
-    }
+OnboardingDialog(
+hasSeenOnboarding = settings.hasSeenOnboarding || onboardingComplete,
+onOnboardingComplete = {
+onboardingComplete = true
+},
+onSkip = {
+onboardingComplete = true
+}
+) {
+LofigaMainApp(viewModel = viewModel)
+}
+}
+}
+}
+}
 }
 
 @Composable
 fun OnboardingDialog(
-    hasSeenOnboarding: Boolean,
-    onOnboardingComplete: () -> Unit,
-    onSkip: () -> Unit,
-    content: @Composable () -> Unit
+hasSeenOnboarding: Boolean,
+onOnboardingComplete: () -> Unit,
+onSkip: () -> Unit,
+content: @Composable () -> Unit
 ) {
-    if (hasSeenOnboarding) {
-        content()
-    } else {
-        OnboardingScreen(
-            onGetStarted = onOnboardingComplete,
-            onSkip = onSkip
-        )
-    }
+if (hasSeenOnboarding) {
+content()
+} else {
+OnboardingScreen(
+onGetStarted = onOnboardingComplete,
+onSkip = onSkip
+)
+}
 }
 
 @Composable
@@ -181,6 +178,7 @@ fun OnboardingScreen(
 ) {
     var currentPage by remember { mutableStateOf(0) }
     var dontShowAgain by remember { mutableStateOf(false) }
+    val colors = MaterialTheme.colorScheme
 
     val pages = listOf(
         OnboardingPage(
@@ -211,14 +209,7 @@ fun OnboardingScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            Color(0xFF1A1A1A),
-                            Color(0xFF333333)
-                        )
-                    )
-                )
+                .background(colors.background)
         ) {
             Column(
                 modifier = Modifier
@@ -235,7 +226,7 @@ fun OnboardingScreen(
                     TextButton(onClick = onSkip) {
                         Text(
                             "Skip",
-                            color = Color.White.copy(alpha = 0.7f)
+                            color = colors.onSurface.copy(alpha = 0.7f)
                         )
                     }
                 }
@@ -254,8 +245,8 @@ fun OnboardingScreen(
                             .background(
                                 Brush.linearGradient(
                                     colors = listOf(
-                                        Color(0xFFBDBDBD),
-                                        Color(0xFFE0E0E0)
+                                        colors.primary,
+                                        colors.primary
                                     )
                                 )
                             ),
@@ -265,7 +256,7 @@ fun OnboardingScreen(
                             imageVector = pages[currentPage].icon,
                             contentDescription = null,
                             modifier = Modifier.size(60.dp),
-                            tint = Color.White
+                            tint = colors.onPrimary
                         )
                     }
 
@@ -276,7 +267,7 @@ fun OnboardingScreen(
                         text = pages[currentPage].title,
                         style = MaterialTheme.typography.headlineMedium,
                         fontWeight = FontWeight.Bold,
-                        color = Color.White,
+                        color = colors.onSurface,
                         textAlign = TextAlign.Center
                     )
 
@@ -286,7 +277,7 @@ fun OnboardingScreen(
                     Text(
                         text = pages[currentPage].description,
                         style = MaterialTheme.typography.bodyLarge,
-                        color = Color.White.copy(alpha = 0.8f),
+                        color = colors.onSurface.copy(alpha = 0.8f),
                         textAlign = TextAlign.Center,
                         modifier = Modifier.padding(horizontal = 24.dp)
                     )
@@ -304,9 +295,9 @@ fun OnboardingScreen(
                                     .clip(RoundedCornerShape(4.dp))
                                     .background(
                                         if (index == currentPage)
-                                            Color(0xFFBDBDBD)
+                                            colors.primary
                                         else
-                                            Color.White.copy(alpha = 0.3f)
+                                            colors.onSurface.copy(alpha = 0.3f)
                                     )
                             )
                         }
@@ -325,7 +316,7 @@ fun OnboardingScreen(
                     ) {
                         if (currentPage > 0) {
                             TextButton(onClick = { currentPage-- }) {
-                                Text("Back", color = Color.White.copy(alpha = 0.7f))
+                                Text("Back", color = colors.onSurface.copy(alpha = 0.7f))
                             }
                         } else {
                             Spacer(modifier = Modifier.width(1.dp))
@@ -340,14 +331,14 @@ fun OnboardingScreen(
                                 }
                             },
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFF757575)
+                                containerColor = colors.primary
                             ),
                             shape = RoundedCornerShape(24.dp),
                             modifier = Modifier.height(48.dp)
                         ) {
                             Text(
                                 if (currentPage < pages.size - 1) "Next" else "Get Started",
-                                color = Color.White,
+                                color = colors.onPrimary,
                                 fontWeight = FontWeight.Bold
                             )
                         }
@@ -359,11 +350,12 @@ fun OnboardingScreen(
         }
     }
 }
+}
 
 data class OnboardingPage(
-    val icon: ImageVector,
-    val title: String,
-    val description: String
+val icon: ImageVector,
+val title: String,
+val description: String
 )
 
 @Composable
@@ -371,13 +363,14 @@ fun PermissionRationaleDialog(
     onAccept: () -> Unit,
     onSkip: () -> Unit
 ) {
+    val colors = MaterialTheme.colorScheme
     AlertDialog(
         onDismissRequest = onSkip,
-        containerColor = DarkSurface,
+        containerColor = colors.surface,
         title = {
             Text(
                 "Music Access Needed",
-                color = Color.White,
+                color = colors.onSurface,
                 fontWeight = FontWeight.Bold
             )
         },
@@ -385,16 +378,16 @@ fun PermissionRationaleDialog(
             Column {
                 Text(
                     "Lofiga needs access to your music files to:",
-                    color = White60,
+                    color = colors.onSurface,
                     modifier = Modifier.padding(bottom = 12.dp)
                 )
-                Text("• Scan your songs library", color = White38)
-                Text("• Load songs for editing", color = White38)
-                Text("• Export your lofi mixes", color = White38)
+                Text("Scan your songs library", color = colors.onSurface)
+                Text("Load songs for editing", color = colors.onSurface)
+                Text("Export your lofi mixes", color = colors.onSurface)
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
                     "Your music stays on your device - we never upload or share your files.",
-                    color = White38,
+                    color = colors.onSurface,
                     style = MaterialTheme.typography.bodySmall
                 )
             }
@@ -402,15 +395,15 @@ fun PermissionRationaleDialog(
         confirmButton = {
             Button(
                 onClick = onAccept,
-                colors = ButtonDefaults.buttonColors(containerColor = Purple500),
+                colors = ButtonDefaults.buttonColors(containerColor = colors.primary),
                 shape = RoundedCornerShape(12.dp)
             ) {
-                Text("Allow Access")
+                Text("Allow Access", color = colors.onPrimary)
             }
         },
         dismissButton = {
             TextButton(onClick = onSkip) {
-                Text("Not Now", color = White38)
+                Text("Not Now", color = colors.onSurface)
             }
         }
     )

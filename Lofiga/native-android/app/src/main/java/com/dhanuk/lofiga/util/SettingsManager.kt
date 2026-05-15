@@ -30,7 +30,7 @@ companion object {
         val audioFormat: String = DEFAULT_FORMAT,
         val audioBitrate: String = DEFAULT_BITRATE,
         val exportPath: String = "",
-        val isDarkMode: Boolean = true,
+        val isDarkMode: Boolean = false,
         val hasSeenOnboarding: Boolean = false
     )
 
@@ -39,7 +39,7 @@ companion object {
             audioFormat = prefs[KEY_AUDIO_FORMAT] ?: DEFAULT_FORMAT,
             audioBitrate = prefs[KEY_AUDIO_BITRATE] ?: DEFAULT_BITRATE,
             exportPath = prefs[KEY_EXPORT_PATH] ?: "",
-            isDarkMode = prefs[KEY_DARK_MODE] ?: true,
+            isDarkMode = prefs[KEY_DARK_MODE] ?: false,
             hasSeenOnboarding = prefs[KEY_HAS_SEEN_ONBOARDING] ?: false
         )
     }

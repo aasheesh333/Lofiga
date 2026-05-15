@@ -144,14 +144,14 @@ fun PlayerScreen(
                     Surface(
                         modifier = Modifier.size(140.dp),
                         shape = CircleShape,
-                        color = Purple500.copy(alpha = 0.1f),
-                        border = BorderStroke(2.dp, Purple500.copy(alpha = 0.2f))
+                        color = colors.textPrimary.copy(alpha = 0.1f),
+                        border = BorderStroke(2.dp, colors.textPrimary.copy(alpha = 0.2f))
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Icon(
                                 Icons.Outlined.LibraryMusic,
                                 contentDescription = null,
-                                tint = Purple500.copy(alpha = 0.6f),
+                                tint = colors.textPrimary.copy(alpha = 0.6f),
                                 modifier = Modifier.size(64.dp)
                             )
                         }
@@ -183,7 +183,7 @@ fun PlayerScreen(
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(Icons.Outlined.Speed, contentDescription = null, tint = Purple400, modifier = Modifier.size(14.dp))
+                                Icon(Icons.Outlined.Speed, contentDescription = null, tint = colors.textPrimary, modifier = Modifier.size(14.dp))
                                 Spacer(Modifier.width(4.dp))
                                 Text("Tempo", color = colors.textSecondary, style = MaterialTheme.typography.labelSmall)
                             }
@@ -197,7 +197,7 @@ fun PlayerScreen(
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(Icons.Outlined.Forward30, contentDescription = null, tint = Purple400, modifier = Modifier.size(14.dp))
+                                Icon(Icons.Outlined.Forward30, contentDescription = null, tint = colors.textPrimary, modifier = Modifier.size(14.dp))
                                 Spacer(Modifier.width(4.dp))
                                 Text("Reverb", color = colors.textSecondary, style = MaterialTheme.typography.labelSmall)
                             }
@@ -211,7 +211,7 @@ fun PlayerScreen(
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(Icons.Outlined.Cloud, contentDescription = null, tint = Purple400, modifier = Modifier.size(14.dp))
+                                Icon(Icons.Outlined.Cloud, contentDescription = null, tint = colors.textPrimary, modifier = Modifier.size(14.dp))
                                 Spacer(Modifier.width(4.dp))
                                 Text("Atmosphere", color = colors.textSecondary, style = MaterialTheme.typography.labelSmall)
                             }
@@ -248,7 +248,7 @@ fun PlayerScreen(
                                 .clip(RoundedCornerShape(12.dp))
                                 .background(
                                     Brush.linearGradient(
-                                        listOf(Purple500.copy(alpha = 0.3f), Purple500.copy(alpha = 0.1f))
+                                        listOf(colors.textPrimary.copy(alpha = 0.3f), colors.textPrimary.copy(alpha = 0.1f))
                                     )
                                 ),
                             contentAlignment = Alignment.Center
@@ -256,7 +256,7 @@ fun PlayerScreen(
                             Icon(
                                 Icons.Outlined.MusicNote,
                                 contentDescription = null,
-                                tint = Purple500,
+                                tint = colors.textPrimary,
                                 modifier = Modifier.size(28.dp)
                             )
                         }
@@ -325,12 +325,12 @@ Canvas(modifier = Modifier.fillMaxWidth().height(150.dp)) {
         val barCount = fftData.size
         val barWidth = width / barCount
         for (i in 0 until barCount) {
-            val barHeight = fftData[i] * height * 0.8f
+            val barHeight = fftData[i] * height * 0.5f
             drawRect(
                 brush = Brush.verticalGradient(
                     listOf(
-                        Purple500.copy(alpha = 0.8f),
-                        Purple500.copy(alpha = 0.3f)
+                        colors.textPrimary.copy(alpha = 0.8f),
+                        colors.textPrimary.copy(alpha = 0.3f)
                     )
                 ),
                 topLeft = Offset(x = i * barWidth, y = height - barHeight),
@@ -349,7 +349,7 @@ Canvas(modifier = Modifier.fillMaxWidth().height(150.dp)) {
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Outlined.AutoAwesome, contentDescription = null, tint = Purple400, modifier = Modifier.size(18.dp))
+                                Icon(Icons.Outlined.AutoAwesome, contentDescription = null, tint = colors.textPrimary, modifier = Modifier.size(18.dp))
                                 Spacer(Modifier.width(6.dp))
                                 SectionHeader("PRESETS")
                                 // Quick save chip when custom preset is active
@@ -360,18 +360,18 @@ Canvas(modifier = Modifier.fillMaxWidth().height(150.dp)) {
                                         label = { Text("Save", style = MaterialTheme.typography.labelSmall) },
                                         leadingIcon = { Icon(Icons.Outlined.BookmarkAdd, contentDescription = null, modifier = Modifier.size(14.dp)) },
                                         colors = AssistChipDefaults.assistChipColors(
-                                            containerColor = Cyan400.copy(alpha = 0.15f),
-                                            labelColor = Cyan400,
-                                            leadingIconContentColor = Cyan400
+                                            containerColor = colors.textPrimary.copy(alpha = 0.15f),
+                                            labelColor = colors.textPrimary,
+                                            leadingIconContentColor = colors.textPrimary
                                         ),
-                                        border = BorderStroke(1.dp, Cyan400.copy(alpha = 0.3f))
+                                        border = BorderStroke(1.dp, colors.textPrimary.copy(alpha = 0.3f))
                                     )
                                 }
                             }
                             TextButton(onClick = { showAllPresets = !showAllPresets }) {
                                 Text(
                                     if (showAllPresets) "Less" else "All",
-                                    color = Purple400,
+                                    color = colors.textPrimary,
                                     style = MaterialTheme.typography.bodySmall
                                 )
                             }
@@ -393,14 +393,14 @@ Canvas(modifier = Modifier.fillMaxWidth().height(150.dp)) {
                                     onClick = { viewModel.applyPreset(preset) },
                                     label = { Text(preset.displayName, fontSize = MaterialTheme.typography.labelSmall.fontSize) },
                                     colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = Purple500.copy(alpha = 0.2f),
+                                        selectedContainerColor = colors.textPrimary.copy(alpha = 0.2f),
                                         containerColor = colors.surfaceHighlight,
-                                        selectedLabelColor = Purple400,
+                                        selectedLabelColor = colors.textPrimary,
                                         labelColor = colors.textSecondary
                                     ),
                                     border = FilterChipDefaults.filterChipBorder(
                                         borderColor = colors.outline,
-                                        selectedBorderColor = Purple500.copy(alpha = 0.5f),
+                                        selectedBorderColor = colors.textPrimary.copy(alpha = 0.5f),
                                         enabled = true,
                                         selected = currentPreset == preset
                                     )
@@ -414,14 +414,14 @@ Canvas(modifier = Modifier.fillMaxWidth().height(150.dp)) {
                                     onClick = { viewModel.applyCustomPreset(preset) },
                                     label = { Text(preset.name, fontSize = MaterialTheme.typography.labelSmall.fontSize) },
                                     colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = Cyan400.copy(alpha = 0.15f),
+                                        selectedContainerColor = colors.textPrimary.copy(alpha = 0.15f),
                                         containerColor = colors.surfaceHighlight,
-                                        selectedLabelColor = Cyan400,
+                                        selectedLabelColor = colors.textPrimary,
                                         labelColor = colors.textSecondary
                                     ),
                                     border = FilterChipDefaults.filterChipBorder(
                                         borderColor = colors.outline,
-                                        selectedBorderColor = Cyan400.copy(alpha = 0.5f),
+                                        selectedBorderColor = colors.textPrimary.copy(alpha = 0.5f),
                                         enabled = true,
                                         selected = isSelected
                                     )
@@ -446,7 +446,7 @@ Canvas(modifier = Modifier.fillMaxWidth().height(150.dp)) {
                                     .padding(horizontal = 16.dp, vertical = 12.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(Icons.Outlined.Tune, contentDescription = null, tint = Purple400, modifier = Modifier.size(18.dp))
+                                Icon(Icons.Outlined.Tune, contentDescription = null, tint = colors.textPrimary, modifier = Modifier.size(18.dp))
                                 Spacer(Modifier.width(8.dp))
                                 Text(
                                     text = "EFFECTS",
@@ -473,7 +473,7 @@ Canvas(modifier = Modifier.fillMaxWidth().height(150.dp)) {
                                         // Tempo Card
                                         EffectCard(
                                             modifier = Modifier.weight(1f),
-                                            icon = { Icon(Icons.Outlined.Speed, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp)) },
+                                            icon = { Icon(Icons.Outlined.Speed, contentDescription = null, tint = colors.surface, modifier = Modifier.size(18.dp)) },
                                             label = "Tempo",
                                             value = "${(currentValues.tempo * 100).toInt()}%",
                                             sliderValue = currentValues.tempo,
@@ -484,7 +484,7 @@ Canvas(modifier = Modifier.fillMaxWidth().height(150.dp)) {
                                         val pitchLabel = if (semitones >= 0) "+" + "%.1f".format(semitones) + " st" else "%.1f".format(semitones) + " st"
                                         EffectCard(
                                             modifier = Modifier.weight(1f),
-                                            icon = { Icon(Icons.Outlined.Tune, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp)) },
+                                            icon = { Icon(Icons.Outlined.Tune, contentDescription = null, tint = colors.surface, modifier = Modifier.size(18.dp)) },
                                             label = "Pitch",
                                             value = pitchLabel,
                                             sliderValue = (currentValues.pitch + 5f) / 10f,
@@ -499,7 +499,7 @@ Canvas(modifier = Modifier.fillMaxWidth().height(150.dp)) {
                                         // Reverb Card
                                         EffectCard(
                                             modifier = Modifier.weight(1f),
-                                            icon = { Icon(Icons.Outlined.Forward30, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp)) },
+                                            icon = { Icon(Icons.Outlined.Forward30, contentDescription = null, tint = colors.surface, modifier = Modifier.size(18.dp)) },
                                             label = "Reverb",
                                             value = "${(currentValues.reverb * 100).toInt()}%",
                                             sliderValue = currentValues.reverb,
@@ -508,7 +508,7 @@ Canvas(modifier = Modifier.fillMaxWidth().height(150.dp)) {
                                         // Delay Card
                                         EffectCard(
                                             modifier = Modifier.weight(1f),
-                                            icon = { Icon(Icons.Outlined.Timeline, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp)) },
+                                            icon = { Icon(Icons.Outlined.Timeline, contentDescription = null, tint = colors.surface, modifier = Modifier.size(18.dp)) },
                                             label = "Delay",
                                             value = "${(currentValues.delay * 100).toInt()}%",
                                             sliderValue = currentValues.delay,
@@ -523,7 +523,7 @@ Canvas(modifier = Modifier.fillMaxWidth().height(150.dp)) {
                                         // Bass Card
                                         EffectCard(
                                             modifier = Modifier.weight(1f),
-                                            icon = { Icon(Icons.Outlined.Equalizer, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp)) },
+                                            icon = { Icon(Icons.Outlined.Equalizer, contentDescription = null, tint = colors.surface, modifier = Modifier.size(18.dp)) },
                                             label = "Bass",
                                             value = "${(currentValues.bass * 100).toInt()}%",
                                             sliderValue = currentValues.bass,
@@ -532,7 +532,7 @@ Canvas(modifier = Modifier.fillMaxWidth().height(150.dp)) {
                                         // Treble Card
                                         EffectCard(
                                             modifier = Modifier.weight(1f),
-                                            icon = { Icon(Icons.Outlined.GraphicEq, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp)) },
+                                            icon = { Icon(Icons.Outlined.GraphicEq, contentDescription = null, tint = colors.surface, modifier = Modifier.size(18.dp)) },
                                             label = "Treble Cut",
                                             value = "${(currentValues.trebleCut * 100).toInt()}%",
                                             sliderValue = currentValues.trebleCut,
@@ -560,7 +560,7 @@ Canvas(modifier = Modifier.fillMaxWidth().height(150.dp)) {
                                     .padding(horizontal = 16.dp, vertical = 12.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(Icons.Outlined.Cloud, contentDescription = null, tint = Purple400, modifier = Modifier.size(18.dp))
+                                Icon(Icons.Outlined.Cloud, contentDescription = null, tint = colors.textPrimary, modifier = Modifier.size(18.dp))
                                 Spacer(Modifier.width(8.dp))
                                 Text(
                                     text = "ATMOSPHERE",
@@ -604,10 +604,10 @@ Canvas(modifier = Modifier.fillMaxWidth().height(150.dp)) {
                                         Surface(
                                             modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
                                             shape = RoundedCornerShape(12.dp),
-                                            color = if (isActive) Purple500.copy(alpha = 0.1f) else colors.surfaceHighlight,
+                                            color = if (isActive) colors.textPrimary.copy(alpha = 0.1f) else colors.surfaceHighlight,
                                             border = BorderStroke(
                                                 1.dp,
-                                                if (isActive) Purple500.copy(alpha = 0.3f) else colors.outline
+                                                if (isActive) colors.textPrimary.copy(alpha = 0.3f) else colors.outline
                                             )
                                         ) {
                                             Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
@@ -615,7 +615,7 @@ Canvas(modifier = Modifier.fillMaxWidth().height(150.dp)) {
                                                     Icon(
                                                         icon,
                                                         contentDescription = label,
-                                                        tint = if (isActive) Purple400 else colors.textTertiary,
+                                                        tint = if (isActive) colors.textPrimary else colors.textTertiary,
                                                         modifier = Modifier.size(18.dp)
                                                     )
                                                     Spacer(Modifier.width(8.dp))
@@ -629,7 +629,7 @@ Canvas(modifier = Modifier.fillMaxWidth().height(150.dp)) {
                                                     Text(
                                                         text = "${(volume * 100).toInt()}%",
                                                         style = MaterialTheme.typography.bodySmall,
-                                                        color = if (isActive) Purple400 else colors.textTertiary
+                                                        color = if (isActive) colors.textPrimary else colors.textTertiary
                                                     )
                                                 }
                                                 Slider(
@@ -637,8 +637,8 @@ Canvas(modifier = Modifier.fillMaxWidth().height(150.dp)) {
                                                     onValueChange = { viewModel.updateAtmosphere(key, it) },
                                                     modifier = Modifier.fillMaxWidth().height(24.dp),
                                                     colors = SliderDefaults.colors(
-                                                        thumbColor = Purple500,
-                                                        activeTrackColor = Purple500,
+                                                        thumbColor = colors.textPrimary,
+                                                        activeTrackColor = colors.textPrimary,
                                                         inactiveTrackColor = colors.outline
                                                     )
                                                 )
@@ -660,24 +660,24 @@ Canvas(modifier = Modifier.fillMaxWidth().height(150.dp)) {
                             .padding(horizontal = 4.dp)
                             .height(56.dp),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = Purple500,
-                            disabledContainerColor = Purple500.copy(alpha = 0.3f)
+                            containerColor = colors.textPrimary,
+                            disabledContainerColor = colors.textPrimary.copy(alpha = 0.3f)
                         ),
                         shape = RoundedCornerShape(16.dp),
                         enabled = !isExporting
                     ) {
                         if (isExporting) {
                             CircularProgressIndicator(
-                                color = Color.White,
+                                color = colors.surface,
                                 modifier = Modifier.size(20.dp),
                                 strokeWidth = 2.dp
                             )
                             Spacer(Modifier.width(8.dp))
-                            Text("Exporting...", color = Color.White)
+                            Text("Exporting...", color = colors.surface)
                         } else {
-                            Icon(Icons.Filled.FileDownload, contentDescription = null, tint = Color.White)
+                            Icon(Icons.Filled.FileDownload, contentDescription = null, tint = colors.surface)
                             Spacer(Modifier.width(8.dp))
-                            Text("Export Lofi Mix", color = Color.White, fontWeight = FontWeight.Bold)
+                            Text("Export Lofi Mix", color = colors.surface, fontWeight = FontWeight.Bold)
                         }
                     }
 
@@ -748,8 +748,8 @@ Canvas(modifier = Modifier.fillMaxWidth().height(150.dp)) {
                                 valueRange = 0f..if (duration > 0) duration.toFloat() else 1f,
                                 modifier = Modifier.weight(1f).height(24.dp),
                                 colors = SliderDefaults.colors(
-                                    thumbColor = Purple500,
-                                    activeTrackColor = Purple500,
+                                    thumbColor = colors.textPrimary,
+                                    activeTrackColor = colors.textPrimary,
                                     inactiveTrackColor = colors.outline
                                 )
                             )
@@ -787,7 +787,7 @@ Canvas(modifier = Modifier.fillMaxWidth().height(150.dp)) {
                             Surface(
                                 modifier = Modifier.size(64.dp),
                                 shape = CircleShape,
-                                color = Purple500
+                                color = colors.textPrimary
                             ) {
                                 IconButton(
                                     onClick = { viewModel.audioEngine.togglePlayPause() },
@@ -796,7 +796,7 @@ Canvas(modifier = Modifier.fillMaxWidth().height(150.dp)) {
                                     Icon(
                                         if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
                                         contentDescription = if (isPlaying) "Pause" else "Play",
-                                        tint = Color.White,
+                                        tint = colors.surface,
                                         modifier = Modifier.size(36.dp)
                                     )
                                 }
@@ -826,7 +826,7 @@ Canvas(modifier = Modifier.fillMaxWidth().height(150.dp)) {
                                 Icon(
                                     if (isLooping) Icons.Filled.RepeatOne else Icons.Outlined.Repeat,
                                     contentDescription = "Loop",
-                                    tint = if (isLooping) Purple500 else colors.textTertiary,
+                                    tint = if (isLooping) colors.textPrimary else colors.textTertiary,
                                     modifier = Modifier.size(22.dp)
                                 )
                             }
@@ -853,7 +853,7 @@ Canvas(modifier = Modifier.fillMaxWidth().height(150.dp)) {
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             CircularProgressIndicator(
-                                color = Purple500,
+                                color = colors.textPrimary,
                                 modifier = Modifier.size(48.dp),
                                 strokeWidth = 4.dp
                             )
@@ -867,7 +867,7 @@ Canvas(modifier = Modifier.fillMaxWidth().height(150.dp)) {
                             Spacer(Modifier.height(12.dp))
                             Text(
                                 "${(exportProgress * 100).toInt()}% Complete",
-                                color = Purple400,
+                                color = colors.textPrimary,
                                 style = MaterialTheme.typography.bodyLarge,
                                 fontWeight = FontWeight.Bold
                             )
@@ -875,7 +875,7 @@ Canvas(modifier = Modifier.fillMaxWidth().height(150.dp)) {
                             LinearProgressIndicator(
                                 progress = { exportProgress },
                                 modifier = Modifier.fillMaxWidth(0.8f).height(6.dp),
-                                color = Purple500,
+                                color = colors.textPrimary,
                                 trackColor = colors.outline,
                             )
                             Spacer(Modifier.height(24.dp))
@@ -909,7 +909,7 @@ Canvas(modifier = Modifier.fillMaxWidth().height(150.dp)) {
                     Icon(
                         Icons.Outlined.BookmarkAdd,
                         contentDescription = null,
-                        tint = Purple400,
+                        tint = colors.textPrimary,
                         modifier = Modifier.size(40.dp)
                     )
                     Spacer(Modifier.height(12.dp))
@@ -935,12 +935,12 @@ Canvas(modifier = Modifier.fillMaxWidth().height(150.dp)) {
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedTextColor = colors.textPrimary,
                             unfocusedTextColor = colors.textPrimary,
-                            cursorColor = Purple500,
-                            focusedBorderColor = Purple500,
+                            cursorColor = colors.textPrimary,
+                            focusedBorderColor = colors.textPrimary,
                             unfocusedBorderColor = colors.outline,
                             focusedContainerColor = colors.surfaceHighlight,
                             unfocusedContainerColor = colors.surfaceHighlight,
-                            focusedLabelColor = Purple400,
+                            focusedLabelColor = colors.textPrimary,
                             unfocusedLabelColor = colors.textTertiary
                         ),
                         shape = RoundedCornerShape(12.dp)
@@ -956,8 +956,8 @@ Canvas(modifier = Modifier.fillMaxWidth().height(150.dp)) {
                         enabled = presetName.isNotBlank(),
                         modifier = Modifier.fillMaxWidth().height(52.dp),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = Purple500,
-                            disabledContainerColor = Purple500.copy(alpha = 0.3f)
+                            containerColor = colors.textPrimary,
+                            disabledContainerColor = colors.textPrimary.copy(alpha = 0.3f)
                         ),
                         shape = RoundedCornerShape(14.dp)
                     ) {
