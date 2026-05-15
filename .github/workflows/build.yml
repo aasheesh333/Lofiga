@@ -37,7 +37,9 @@ jobs:
             -dname "CN=Lofiga,O=Lofiga,C=US"
 
       - name: Make Gradlew Executable
-        run: chmod +x Lofiga/native-android/gradlew
+        run: |
+          chmod +x Lofiga/native-android/gradlew
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > Lofiga/native-android/local.properties
 
       - name: Build APK (Demo Signed)
         run: |
