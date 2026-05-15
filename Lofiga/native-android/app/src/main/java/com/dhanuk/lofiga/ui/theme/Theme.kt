@@ -13,21 +13,21 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-// Lofiga Brand Colors
-val Purple500 = Color(0xFF993DF5)
-val Purple400 = Color(0xFFB060F7)
-val Purple700 = Color(0xFF7C2FD4)
-val Cyan400 = Color(0xFF3DF5E6)
-val Cyan200 = Color(0xFF80F8EF)
-val DarkBg = Color(0xFF191022)
-val DarkSurface = Color(0xFF231B2E)
-val DarkSurfaceHighlight = Color(0xFF2D243A)
+// Grayscale color constants (replacing the old purple/cyan palette)
+val Purple500 = Color(0xFFBDBDBD)
+val Purple400 = Color(0xFF9E9E9E)
+val Purple700 = Color(0xFF757575)
+val Cyan400 = Color(0xFFE0E0E0)
+val Cyan200 = Color(0xFFF5F5F5)
+val DarkBg = Color(0xFF121212)
+val DarkSurface = Color(0xFF1E1E1E)
+val DarkSurfaceHighlight = Color(0xFF2C2C2C)
 val White12 = Color(0x1FFFFFFF)
 val White38 = Color(0x61FFFFFF)
 val White60 = Color(0x99FFFFFF)
 
 // Light theme colors
-val LightBg = Color(0xFFF5F0FA)
+val LightBg = Color(0xFFF5F5F5)
 val LightSurface = Color(0xFFFFFFFF)
 
 data class AppColors(
@@ -53,24 +53,24 @@ val LocalAppColors = staticCompositionLocalOf {
 }
 
 private val LightAppColors = AppColors(
-    surface = Color(0xFFF5F0FA),
-    surfaceHighlight = Color(0xFFEEE8F4),
-    bg = Color(0xFFFDFCFE),
+    surface = Color.White,
+    surfaceHighlight = Color(0xFFF0F0F0),
+    bg = LightBg,
     textPrimary = Color(0xFF1C1B1F),
-    textSecondary = Color(0xFF49454F),
-    textTertiary = Color(0xFF6B6770),
-    outline = Color(0xFFCAC4D0),
+    textSecondary = Color(0xFF616161),
+    textTertiary = Color(0xFF9E9E9E),
+    outline = Color(0xFFCCCCCC),
 )
 
 private val LofigaDarkColorScheme = darkColorScheme(
-    primary = Purple500,
-    secondary = Cyan400,
-    tertiary = Purple400,
+    primary = Color(0xFFE0E0E0),
+    secondary = Color(0xFF9E9E9E),
+    tertiary = Color(0xFFBDBDBD),
     background = DarkBg,
     surface = DarkSurface,
     surfaceVariant = DarkSurfaceHighlight,
-    onPrimary = Color.White,
-    onSecondary = Color.Black,
+    onPrimary = Color(0xFF121212),
+    onSecondary = Color(0xFF121212),
     onBackground = Color.White,
     onSurface = Color.White,
     onSurfaceVariant = White60,
@@ -78,18 +78,18 @@ private val LofigaDarkColorScheme = darkColorScheme(
 )
 
 private val LofigaLightColorScheme = lightColorScheme(
-    primary = Purple500,
-    secondary = Cyan400,
-    tertiary = Purple700,
+    primary = Color(0xFF616161),
+    secondary = Color(0xFF9E9E9E),
+    tertiary = Color(0xFF757575),
     background = LightBg,
     surface = LightSurface,
-    surfaceVariant = Color(0xFFF0EAF5),
+    surfaceVariant = Color(0xFFEEEEEE),
     onPrimary = Color.White,
-    onSecondary = Color.Black,
+    onSecondary = Color.White,
     onBackground = Color(0xFF1C1B1F),
     onSurface = Color(0xFF1C1B1F),
-    onSurfaceVariant = Color(0xFF49454F),
-    outline = Color(0xFFCAC4D0)
+    onSurfaceVariant = Color(0xFF616161),
+    outline = Color(0xFFCCCCCC)
 )
 
 val LofigaShapes = Shapes(

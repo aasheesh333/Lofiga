@@ -214,8 +214,8 @@ fun OnboardingScreen(
                 .background(
                     Brush.verticalGradient(
                         colors = listOf(
-                            Color(0xFF191022),
-                            Color(0xFF2D243A)
+                            Color(0xFF1A1A1A),
+                            Color(0xFF333333)
                         )
                     )
                 )
@@ -254,8 +254,8 @@ fun OnboardingScreen(
                             .background(
                                 Brush.linearGradient(
                                     colors = listOf(
-                                        Color(0xFF993DF5),
-                                        Color(0xFF3DF5E6)
+                                        Color(0xFFBDBDBD),
+                                        Color(0xFFE0E0E0)
                                     )
                                 )
                             ),
@@ -304,7 +304,7 @@ fun OnboardingScreen(
                                     .clip(RoundedCornerShape(4.dp))
                                     .background(
                                         if (index == currentPage)
-                                            Color(0xFF993DF5)
+                                            Color(0xFFBDBDBD)
                                         else
                                             Color.White.copy(alpha = 0.3f)
                                     )
@@ -340,7 +340,7 @@ fun OnboardingScreen(
                                 }
                             },
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFF993DF5)
+                                containerColor = Color(0xFF757575)
                             ),
                             shape = RoundedCornerShape(24.dp),
                             modifier = Modifier.height(48.dp)

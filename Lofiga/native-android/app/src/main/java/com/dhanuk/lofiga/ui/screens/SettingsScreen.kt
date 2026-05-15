@@ -160,7 +160,7 @@ fun SettingsScreen(
                                 Icon(
                                     Icons.Outlined.Delete,
                                     contentDescription = "Delete",
-                                    tint = Color(0xFFFF5252).copy(alpha = 0.7f),
+                                    tint = Color(0xFF757575).copy(alpha = 0.7f),
                                     modifier = Modifier.size(18.dp)
                                 )
                             }

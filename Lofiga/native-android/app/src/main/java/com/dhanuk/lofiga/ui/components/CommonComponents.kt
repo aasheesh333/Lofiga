@@ -254,12 +254,12 @@ fun gradientForTitle(title: String): List<Color> {
     val pairs = listOf(
         Purple500 to Cyan400,
         Purple700 to Purple400,
-        Color(0xFFE040FB) to Color(0xFF7C4DFF),
-        Color(0xFF00E5FF) to Color(0xFF1DE9B6),
-        Color(0xFFFF4081) to Color(0xFF7C4DFF),
-        Color(0xFFFFAB00) to Color(0xFFFF6D00),
-        Color(0xFF00BCD4) to Color(0xFF8BC34A),
-        Color(0xFF7C4DFF) to Color(0xFF448AFF)
+        Color(0xFFE0E0E0) to Color(0xFFBDBDBD),
+        Color(0xFFD0D0D0) to Color(0xFF9E9E9E),
+        Color(0xFFCCCCCC) to Color(0xFF888888),
+        Color(0xFFAAAAAA) to Color(0xFF666666),
+        Color(0xFFBBBBBB) to Color(0xFF777777),
+        Color(0xFF999999) to Color(0xFF555555)
     )
     val hash = title.hashCode().let { if (it == Int.MIN_VALUE) 0 else kotlin.math.abs(it) }
     return listOf(pairs[hash % pairs.size].first, pairs[hash % pairs.size].second)
@@ -373,7 +373,7 @@ fun DeleteConfirmDialog(
             Icon(
                 Icons.Outlined.Delete,
                 contentDescription = null,
-                tint = Color(0xFFFF5252),
+                tint = Color(0xFF757575),
                 modifier = Modifier.size(32.dp)
             )
         },
@@ -385,7 +385,7 @@ fun DeleteConfirmDialog(
         },
         confirmButton = {
             TextButton(onClick = onConfirm) {
-                Text("Delete", color = Color(0xFFFF5252), fontWeight = FontWeight.Bold)
+                Text("Delete", color = Color(0xFF757575), fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {

@@ -268,12 +268,12 @@ private fun LibraryItem(
                             leadingIcon = { Icon(Icons.Outlined.Share, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)) }
                         )
                         DropdownMenuItem(
-                            text = { Text("Delete", color = Color(0xFFFF5252)) },
+                            text = { Text("Delete", color = Color(0xFF757575)) },
                             onClick = {
                                 showDeleteConfirm = true
                                 showMenu = false
                             },
-                            leadingIcon = { Icon(Icons.Outlined.Delete, contentDescription = null, tint = Color(0xFFFF5252)) }
+                            leadingIcon = { Icon(Icons.Outlined.Delete, contentDescription = null, tint = Color(0xFF757575)) }
                         )
                     }
                 }
