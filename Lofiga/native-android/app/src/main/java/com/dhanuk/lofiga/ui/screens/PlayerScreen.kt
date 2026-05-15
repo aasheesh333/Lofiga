@@ -27,7 +27,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.core.content.FileProvider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import com.dhanuk.lofiga.model.CustomPreset
@@ -332,12 +333,8 @@ Canvas(modifier = Modifier.fillMaxWidth().height(150.dp)) {
                         Purple500.copy(alpha = 0.3f)
                     )
                 ),
-                rect = Rect(
-                    left = i * barWidth,
-                    top = height - barHeight,
-                    right = (i + 1) * barWidth,
-                    bottom = height
-                )
+                topLeft = Offset(x = i * barWidth, y = height - barHeight),
+                size = Size(width = barWidth, height = barHeight)
             )
         }
     }
