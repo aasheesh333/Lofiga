@@ -3,8 +3,6 @@ plugins {
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.google.devtools.ksp") version "2.2.20-2.0.2"
-    id("com.google.gms.google-services")
-    id("com.onesignal.androidsdk.onesignal-gradle-plugin")
 }
 
 android {
@@ -20,7 +18,7 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        manifestPlaceholders["onesignal_app_id"] = ""
+        buildConfigField("String", "ONESIGNAL_APP_ID", "\"\"")
     }
 
     signingConfigs {
@@ -89,7 +87,6 @@ android {
             dimension = "environment"
             applicationIdSuffix = ".dev"
             versionNameSuffix = "-dev"
-            manifestPlaceholders["onesignal_app_id"] = "placeholder-dev-id"
             manifestPlaceholders["ADMOB_APP_ID"] = "ca-app-pub-3940256099942544~3347511713"
             buildConfigField("String", "ONESIGNAL_APP_ID", "\"placeholder-dev-id\"")
             buildConfigField("String", "ADMOB_APP_ID", "\"ca-app-pub-3940256099942544~3347511713\"")
@@ -99,7 +96,6 @@ android {
         }
         create("prod") {
             dimension = "environment"
-            manifestPlaceholders["onesignal_app_id"] = System.getenv("ONESIGNAL_APP_ID") ?: ""
             manifestPlaceholders["ADMOB_APP_ID"] = System.getenv("ADMOB_APP_ID") ?: "ca-app-pub-3940256099942544~3347511713"
             buildConfigField("String", "ONESIGNAL_APP_ID", "\"${System.getenv("ONESIGNAL_APP_ID") ?: ""}\"")
             buildConfigField("String", "ADMOB_APP_ID", "\"${System.getenv("ADMOB_APP_ID") ?: "ca-app-pub-3940256099942544~3347511713"}\"")
@@ -142,8 +138,6 @@ dependencies {
 
     implementation("com.google.android.gms:play-services-ads:24.2.0")
     implementation("com.google.android.ump:user-messaging-platform:3.1.0")
-
-    implementation("com.onesignal:OneSignal:[5.0.0, 5.99.99]")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 }

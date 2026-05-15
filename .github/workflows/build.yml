@@ -25,7 +25,6 @@ jobs:
       ONESIGNAL_APP_ID: ${{ secrets.ONESIGNAL_APP_ID }}
       VERSION_CODE: ${{ secrets.VERSION_CODE }}
       VERSION_NAME: ${{ secrets.VERSION_NAME }}
-      PACKAGE_NAME: ${{ secrets.PACKAGE_NAME }}
       KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
       KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
 
@@ -50,6 +49,7 @@ jobs:
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > $HOME/release.keystore
           echo "KEYSTORE_PATH=$HOME/release.keystore" >> $GITHUB_ENV
+          echo "KEY_ALIAS=lofiga" >> $GITHUB_ENV
 
       - name: Make Gradlew Executable
         run: |

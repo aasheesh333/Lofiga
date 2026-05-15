@@ -65,14 +65,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private val notificationPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        if (!granted) {
-            Toast.makeText(this, "Notification permission denied", Toast.LENGTH_SHORT).show()
-        }
-    }
-
     private fun requestAudioPermissions() {
         val permissions = mutableListOf<String>()
 
@@ -93,12 +85,6 @@ class MainActivity : ComponentActivity() {
         if (permissions.isNotEmpty()) {
             hasRequestedPermissions = true
             requestPermissionLauncher.launch(permissions.toTypedArray())
-        }
-    }
-
-    private fun requestNotificationPermission() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
     }
 
@@ -130,7 +116,6 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         checkAndRequestPermissions()
-        requestNotificationPermission()
 
         setContent {
             val viewModel: MainViewModel = viewModel()

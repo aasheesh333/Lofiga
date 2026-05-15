@@ -16,7 +16,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.dhanuk.lofiga.ads.AdManager
 import com.dhanuk.lofiga.ui.MainViewModel
 import com.dhanuk.lofiga.ui.components.*
 import com.dhanuk.lofiga.ui.theme.*
@@ -34,12 +33,9 @@ fun SettingsScreen(
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val colors = LocalAppColors.current
-    val isAdFree by AdManager.isAdFree.collectAsState()
 
     var showFormatDialog by remember { mutableStateOf(false) }
     var showBitrateDialog by remember { mutableStateOf(false) }
-    var showRemoveAdsDialog by remember { mutableStateOf(false) }
-    var isWatchingAd by remember { mutableStateOf(false) }
 
     Box(modifier = modifier.fillMaxSize()) {
         AmbientBackground()
@@ -83,52 +79,6 @@ fun SettingsScreen(
                     scope.launch { viewModel.settingsManager.updateDarkMode(dark) }
                 }
             )
-
-            if (!isAdFree) {
-                SettingItem(
-                    title = "Remove Ads",
-                    subtitle = "Watch a short ad to go ad-free for this session",
-                    icon = Icons.Outlined.Block,
-                    onClick = { showRemoveAdsDialog = true }
-                )
-            } else {
-                Surface(
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                    shape = RoundedCornerShape(16.dp),
-                    color = colors.textPrimary.copy(alpha = 0.1f),
-                    border = ButtonDefaults.outlinedButtonBorder.copy(
-                        brush = androidx.compose.ui.graphics.Brush.linearGradient(
-                            listOf(colors.textPrimary.copy(alpha = 0.3f), colors.textPrimary.copy(alpha = 0.3f))
-                        )
-                    )
-                ) {
-                    Row(
-                        modifier = Modifier.padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier.size(40.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(Icons.Outlined.CheckCircle, contentDescription = null, tint = colors.textPrimary, modifier = Modifier.size(20.dp))
-                        }
-                        Spacer(Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                "Ads Removed",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.W600,
-                                color = colors.textPrimary
-                            )
-                            Text(
-                                "Enjoy ad-free for this session",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = colors.textTertiary
-                            )
-                        }
-                    }
-                }
-            }
 
             Spacer(Modifier.height(32.dp))
 
@@ -240,57 +190,6 @@ fun SettingsScreen(
                 showBitrateDialog = false
             },
             onDismiss = { showBitrateDialog = false }
-        )
-    }
-
-    if (showRemoveAdsDialog && !isAdFree) {
-        AlertDialog(
-            containerColor = colors.surface,
-            onDismissRequest = { showRemoveAdsDialog = false },
-            title = { Text("Remove Ads", color = colors.textPrimary) },
-            text = {
-                Column {
-                    Text(
-                        "Watch a short rewarded ad to enjoy an ad-free experience for this session.",
-                        color = colors.textSecondary,
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        "Banner ads will be hidden and interstitial ads won't show until you restart the app.",
-                        color = colors.textTertiary,
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        isWatchingAd = true
-                        showRemoveAdsDialog = false
-                        AdManager.showRewarded(
-                            context = context,
-                            onRewarded = {
-                                AdManager.setAdFree(true)
-                                isWatchingAd = false
-                            },
-                            onDismissed = {
-                                isWatchingAd = false
-                            }
-                        )
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = Purple500)
-                ) {
-                    Icon(Icons.Outlined.PlayCircle, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Watch Ad")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showRemoveAdsDialog = false }) {
-                    Text("Maybe Later", color = colors.textTertiary)
-                }
-            }
         )
     }
 }
