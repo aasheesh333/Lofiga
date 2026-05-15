@@ -152,7 +152,6 @@ LofigaMainApp(viewModel = viewModel)
 }
 }
 }
-}
 
 @Composable
 fun OnboardingDialog(
@@ -349,7 +348,6 @@ fun OnboardingScreen(
             }
         }
     }
-}
 }
 
 data class OnboardingPage(

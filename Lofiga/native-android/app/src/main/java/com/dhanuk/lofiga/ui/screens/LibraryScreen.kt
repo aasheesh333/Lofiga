@@ -278,5 +278,3 @@ leadingIcon = { Icon(Icons.Outlined.Delete, contentDescription = null, tint = Ma
 }
 }
 }
-}
-}
