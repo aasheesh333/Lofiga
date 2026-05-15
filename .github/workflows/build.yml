@@ -5,6 +5,7 @@ on:
     branches:
       - "main"
       - "master"
+      - "native-android-rewrite"
     tags:
       - "v*"
   pull_request:
