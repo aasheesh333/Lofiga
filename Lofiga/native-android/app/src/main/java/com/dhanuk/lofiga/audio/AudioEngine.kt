@@ -274,8 +274,7 @@ try {
                 positionJob?.cancel()
                 pauseAtmospheres()
             } else {
-                if (!player.isPlaying) {
-                    player.start()
+                player.start()
                 _isPlaying.value = true
                 startPositionPolling()
                 syncAtmospheres()
@@ -285,6 +284,7 @@ try {
             e.printStackTrace()
         }
     }
+
 
     fun seekTo(millis: Long) {
         try {
