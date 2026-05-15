@@ -319,25 +319,25 @@ fun PlayerScreen(
                     Spacer(Modifier.height(4.dp))
 
                     // --- Waveform Visualizer ---
-Canvas(modifier = Modifier.fillMaxWidth().height(150.dp)) {
-        val width = size.width
-        val height = size.height
-        val barCount = fftData.size
-        val barWidth = width / barCount
-        for (i in 0 until barCount) {
-            val barHeight = fftData[i] * height * 0.5f
-            drawRect(
-                brush = Brush.verticalGradient(
-                    listOf(
-                        colors.textPrimary.copy(alpha = 0.8f),
-                        colors.textPrimary.copy(alpha = 0.3f)
-                    )
-                ),
-                topLeft = Offset(x = i * barWidth, y = height - barHeight),
-                size = Size(width = barWidth, height = barHeight)
-            )
-        }
-    }
+                    Canvas(modifier = Modifier.fillMaxWidth().height(100.dp)) {
+                        val width = size.width
+                        val height = size.height
+                        val barCount = fftData.size
+                        val barWidth = width / barCount
+                        for (i in 0 until barCount) {
+                            val barHeight = fftData[i] * height * 0.5f
+                            drawRect(
+                                brush = Brush.verticalGradient(
+                                    listOf(
+                                        colors.textPrimary.copy(alpha = 0.8f),
+                                        colors.textPrimary.copy(alpha = 0.3f)
+                                    )
+                                ),
+                                topLeft = Offset(x = i * barWidth, y = height - barHeight),
+                                size = Size(width = barWidth, height = barHeight)
+                            )
+                        }
+                    }
 
                     Spacer(Modifier.height(16.dp))
 

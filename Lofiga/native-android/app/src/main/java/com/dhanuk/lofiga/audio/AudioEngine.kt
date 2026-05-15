@@ -59,6 +59,7 @@ class AudioEngine(private val context: Context) {
     private var positionJob: Job? = null
     private var fftJob: Job? = null
     private var wasPlayingBeforeFocusLoss = false
+    private var autoPlayOnPrepared = false
 
     private val audioFocusRequest = AudioManager.OnAudioFocusChangeListener { focusChange ->
         when (focusChange) {
@@ -128,7 +129,7 @@ class AudioEngine(private val context: Context) {
         audioManager.abandonAudioFocus(audioFocusRequest)
     }
 
-    fun loadTrack(uri: Uri): Boolean {
+    fun loadTrack(uri: Uri, autoPlay: Boolean = false): Boolean {
         _isPlaying.value = false
         releaseMainPlayer()
         releaseEffects()
@@ -137,6 +138,7 @@ class AudioEngine(private val context: Context) {
         _duration.value = 0
         resetWaveformData()
         fftJob?.cancel()
+        autoPlayOnPrepared = autoPlay
 
         if (!requestAudioFocus()) {
             _error.value = "Cannot get audio focus"
@@ -159,6 +161,18 @@ try {
             fftJob = scope.launch(Dispatchers.IO) {
                 precomputeFFT(context, uri)
             }
+            if (autoPlayOnPrepared) {
+                try {
+                    mediaPlayer.start()
+                    _isPlaying.value = true
+                    _position.value = mediaPlayer.currentPosition.toLong()
+                    startPositionPolling()
+                    syncAtmospheres()
+                    android.util.Log.i("AudioEngine", "Auto-play started, position: ${_position.value}")
+                } catch (e: Exception) {
+                    android.util.Log.e("AudioEngine", "Auto-play failed: ${e.message}")
+                }
+            }
             android.util.Log.i("AudioEngine", "Track loaded, duration: ${dur}ms")
         }
         prepareAsync()
@@ -173,7 +187,7 @@ try {
         }
     }
 
-    fun loadTrackFromFile(filePath: String): Boolean {
+    fun loadTrackFromFile(filePath: String, autoPlay: Boolean = false): Boolean {
         _isPlaying.value = false
         releaseMainPlayer()
         releaseEffects()
@@ -182,6 +196,7 @@ try {
         _duration.value = 0
         resetWaveformData()
         fftJob?.cancel()
+        autoPlayOnPrepared = autoPlay
 
         if (!requestAudioFocus()) {
             _error.value = "Cannot get audio focus"
@@ -203,6 +218,18 @@ try {
             initEffects(mediaPlayer.audioSessionId)
             fftJob = scope.launch(Dispatchers.IO) {
                 precomputeFFT(filePath)
+            }
+            if (autoPlayOnPrepared) {
+                try {
+                    mediaPlayer.start()
+                    _isPlaying.value = true
+                    _position.value = mediaPlayer.currentPosition.toLong()
+                    startPositionPolling()
+                    syncAtmospheres()
+                    android.util.Log.i("AudioEngine", "Auto-play started, position: ${_position.value}")
+                } catch (e: Exception) {
+                    android.util.Log.e("AudioEngine", "Auto-play failed: ${e.message}")
+                }
             }
             android.util.Log.i("AudioEngine", "File loaded, duration: ${dur}ms")
         }
@@ -570,7 +597,7 @@ try {
                             batch.add(computeFFTMagnitudes(window))
                             start += hopSize
                         }
-                        if (batch.size >= 500) {
+                        if (batch.size >= 50) {
                             onBatch(batch.toList())
                             batch.clear()
                         }

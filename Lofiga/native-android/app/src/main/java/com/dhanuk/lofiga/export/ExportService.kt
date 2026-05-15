@@ -185,6 +185,24 @@ object ExportService {
             }
         }
 
+        // Drain remaining output buffers after EOS
+        while (!isCancelled.get()) {
+            val bufInfo = MediaCodec.BufferInfo()
+            val outIdx = encoder.dequeueOutputBuffer(bufInfo, 5000)
+            if (outIdx < 0) break
+            if (bufInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG != 0) {
+                bufInfo.size = 0
+            }
+            if (bufInfo.size > 0 && muxerStarted) {
+                val outBuf = encoder.getOutputBuffer(outIdx)!!
+                outBuf.position(bufInfo.offset)
+                outBuf.limit(bufInfo.offset + bufInfo.size)
+                muxer.writeSampleData(trackIndex, outBuf, bufInfo)
+            }
+            encoder.releaseOutputBuffer(outIdx, false)
+            if (bufInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) break
+        }
+
         if (muxerStarted) try { muxer.stop() } catch (_: Exception) {}
         try { muxer.release() } catch (_: Exception) {}
         try { encoder.stop(); encoder.release() } catch (_: Exception) {}
@@ -287,7 +305,8 @@ object ExportService {
                             decoder.queueInputBuffer(inIdx, 0, sampleSize, extractor.sampleTime, 0)
                             totalInputBytes += sampleSize
                             if (inputDuration > 0) {
-                                onProgress?.invoke((totalInputBytes.toFloat() / inputDuration).coerceIn(0f, 0.3f))
+                                val progress = (totalInputBytes.toFloat() / (inputDuration * 1000)).coerceIn(0f, 0.3f)
+                                onProgress?.invoke(progress)
                             }
                         }
                     }
@@ -572,21 +591,28 @@ object ExportService {
     private fun mixAtmosphereLayers(context: Context, pcm: ShortArray, sampleRate: Int, channels: Int, preset: PresetValues): ShortArray {
         if (preset.rainVolume <= 0.01f && preset.vinylVolume <= 0.01f &&
             preset.windVolume <= 0.01f && preset.tapeVolume <= 0.01f) return pcm
-        val output = pcm.copyOf()
-        listOf("rain" to preset.rainVolume, "vinyl" to preset.vinylVolume,
+
+        // Pre-read all active atmosphere layers
+        val activeLayers = listOf("rain" to preset.rainVolume, "vinyl" to preset.vinylVolume,
             "wind" to preset.windVolume, "tape" to preset.tapeVolume)
             .filter { it.second > 0.01f }
-            .forEach { (key, vol) ->
-                val atmosPcm = readAtmospherePcm(context, key, sampleRate, output.size)
-                if (atmosPcm != null) {
-                    for (i in output.indices) {
-                        if (i < atmosPcm.size) {
-                            output[i] = (output[i] + atmosPcm[i] * vol * 0.8f).toInt()
-                                .coerceIn(-32768, 32767).toShort()
-                        }
-                    }
+            .mapNotNull { (key, vol) ->
+                readAtmospherePcm(context, key, sampleRate, pcm.size)?.let { key to it to vol }
+            }
+
+        if (activeLayers.isEmpty()) return pcm
+
+        // Single pass over all samples, mixing all atmospheres at once
+        val output = ShortArray(pcm.size)
+        for (i in pcm.indices) {
+            var sample = pcm[i].toInt()
+            for ((_, atmosPcm, vol) in activeLayers) {
+                if (i < atmosPcm.size) {
+                    sample += (atmosPcm[i] * vol * 0.8f).toInt()
                 }
             }
+            output[i] = sample.coerceIn(-32768, 32767).toShort()
+        }
         return output
     }
 

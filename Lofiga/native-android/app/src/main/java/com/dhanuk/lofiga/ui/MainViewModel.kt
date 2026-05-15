@@ -110,12 +110,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) { 
     // --- Track Loading ---
 
     fun loadTrack(track: AudioTrack) {
-        val success = track.uri?.let { audioEngine.loadTrack(it) } ?: false
+        val success = track.uri?.let { audioEngine.loadTrack(it, autoPlay = true) } ?: false
         if (success) {
             _currentTrack.value = track
             _currentTrackIndex.value = filteredSongs.value.indexOf(track)
             applyPreset(LofiPreset.LofiSlow)
-            audioEngine.play()
         } else {
             _snackbarMessage.tryEmit(audioEngine.error.value ?: "Failed to load track")
         }
@@ -126,11 +125,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) { 
             title = fileName,
             dataPath = filePath
         )
-        val success = audioEngine.loadTrackFromFile(filePath)
+        val success = audioEngine.loadTrackFromFile(filePath, autoPlay = true)
         if (success) {
             applyPreset(LofiPreset.LofiSlow)
-            // Auto-start playback after loading file
-            audioEngine.play()
             return true
         } else {
             _snackbarMessage.tryEmit(audioEngine.error.value ?: "Failed to load track")
@@ -289,7 +286,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) { 
             dataPath = config.filePath
         )
 
-        val success = audioEngine.loadTrackFromFile(config.filePath)
+        val success = audioEngine.loadTrackFromFile(config.filePath, autoPlay = true)
         if (!success) {
             _snackbarMessage.tryEmit(audioEngine.error.value ?: "Failed to load file")
             return false
