@@ -139,39 +139,27 @@ class AudioEngine(private val context: Context) {
             return false
         }
 
-        try {
-            val player = MediaPlayer().apply {
-                setDataSource(context, uri)
-                setAudioAttributes(
-                    AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_MEDIA)
-                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                        .build()
-                )
-                prepare()
-                var dur = duration.toLong()
-                if (dur == 0L) {
-                    android.util.Log.w("AudioEngine", "Duration is 0 after prepare, waiting...")
-                    Thread.sleep(100)
-                    dur = duration.toLong()
-                }
-                _duration.value = dur
-                android.util.Log.i("AudioEngine", "Track loaded, duration: ${dur}ms")
-                setOnCompletionListener {
-                    if (!_isLooping.value) {
-                        _isPlaying.value = false
-                        positionJob?.cancel()
-                        pauseAtmospheres()
-                    } else {
-                        start()
-                    }
-                }
-            }
-            mainPlayer = player
-            initEffects(player.audioSessionId)
-            initVisualizer(player.audioSessionId)
-            return true
-        } catch (e: Exception) {
+try {
+    val player = MediaPlayer().apply {
+        setDataSource(context, uri)
+        setAudioAttributes(
+            AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_MEDIA)
+                .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                .build()
+        )
+        setOnPreparedListener { mediaPlayer ->
+            val dur = mediaPlayer.duration.toLong()
+            _duration.value = dur
+            initEffects(mediaPlayer.audioSessionId)
+            initVisualizer(mediaPlayer.audioSessionId)
+            android.util.Log.i("AudioEngine", "Track loaded, duration: ${dur}ms")
+        }
+        prepareAsync()
+    }
+    mainPlayer = player
+    return true
+} catch (e: Exception) {
             _error.value = "Failed to load track: ${e.message}"
             abandonAudioFocus()
             e.printStackTrace()
@@ -194,39 +182,27 @@ class AudioEngine(private val context: Context) {
             return false
         }
 
-        try {
-            val player = MediaPlayer().apply {
-                setDataSource(filePath)
-                setAudioAttributes(
-                    AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_MEDIA)
-                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                        .build()
-                )
-                prepare()
-                var dur = duration.toLong()
-                if (dur == 0L) {
-                    android.util.Log.w("AudioEngine", "Duration is 0 after prepare, waiting...")
-                    Thread.sleep(100)
-                    dur = duration.toLong()
-                }
-                _duration.value = dur
-                android.util.Log.i("AudioEngine", "File loaded, duration: ${dur}ms")
-                setOnCompletionListener {
-                    if (!_isLooping.value) {
-                        _isPlaying.value = false
-                        positionJob?.cancel()
-                        pauseAtmospheres()
-                    } else {
-                        start()
-                    }
-                }
-            }
-            mainPlayer = player
-            initEffects(player.audioSessionId)
-            initVisualizer(player.audioSessionId)
-            return true
-        } catch (e: Exception) {
+try {
+    val player = MediaPlayer().apply {
+        setDataSource(filePath)
+        setAudioAttributes(
+            AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_MEDIA)
+                .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                .build()
+        )
+        setOnPreparedListener { mediaPlayer ->
+            val dur = mediaPlayer.duration.toLong()
+            _duration.value = dur
+            initEffects(mediaPlayer.audioSessionId)
+            initVisualizer(mediaPlayer.audioSessionId)
+            android.util.Log.i("AudioEngine", "File loaded, duration: ${dur}ms")
+        }
+        prepareAsync()
+    }
+    mainPlayer = player
+    return true
+} catch (e: Exception) {
             _error.value = "Failed to load file: ${e.message}"
             _duration.value = 0
             abandonAudioFocus()

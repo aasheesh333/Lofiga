@@ -47,28 +47,7 @@ fun AmbientBackground(modifier: Modifier = Modifier) {
     }
 }
 
-@Composable
-fun WaveformVisualizer(
-    modifier: Modifier = Modifier,
-    isPlaying: Boolean = false,
-    waveformData: List<Float> = emptyList()
-) {
-    AndroidView(
-        factory = { context ->
-            com.dhanuk.lofiga.view.WaveformView(context).apply {
-                barCount = 32
-            }
-        },
-        update = { view ->
-            val hasData = waveformData.isNotEmpty() && waveformData.any { it > 0.01f }
-            if (isPlaying && hasData) {
-                view.setAmplitudeData(waveformData)
-            } else {
-                view.setIdle()
-            }
-        },
-        modifier = modifier
-    )
+
 }
 
 @Composable
