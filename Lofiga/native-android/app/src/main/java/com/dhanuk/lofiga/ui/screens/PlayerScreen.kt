@@ -317,7 +317,7 @@ fun PlayerScreen(
 
                     // --- Waveform Visualizer ---
 Canvas(modifier = Modifier.fillMaxWidth().height(150.dp)) {
-    val width = size.width
+val width = size.width
     val height = size.height
     val barCount = fftData.size
     val barWidth = width / barCount
