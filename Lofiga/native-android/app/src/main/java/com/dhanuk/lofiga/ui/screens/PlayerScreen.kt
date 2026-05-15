@@ -319,8 +319,8 @@ fun PlayerScreen(
 
                     Spacer(Modifier.height(4.dp))
 
-                    // --- Waveform Visualizer ---
-                    Canvas(modifier = Modifier.fillMaxWidth().height(100.dp)) {
+                    // --- Waveform Visualizer (moved up, smaller) ---
+                    Canvas(modifier = Modifier.fillMaxWidth().height(72.dp)) {
                         val width = size.width
                         val height = size.height
                         val barCount = fftData.size
@@ -340,7 +340,7 @@ fun PlayerScreen(
                         }
                     }
 
-                    Spacer(Modifier.height(16.dp))
+                    Spacer(Modifier.height(10.dp))
 
                     // --- Presets Section ---
                     Column(modifier = Modifier.padding(horizontal = 4.dp)) {
@@ -431,7 +431,7 @@ fun PlayerScreen(
                         }
                     }
 
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(Modifier.height(8.dp))
 
                     // --- Effects Section (Card-based layout) ---
                     Surface(
@@ -545,7 +545,7 @@ fun PlayerScreen(
                         }
                     }
 
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(Modifier.height(8.dp))
 
                     // --- Atmosphere Section ---
                     Surface(
@@ -651,7 +651,7 @@ fun PlayerScreen(
                         }
                     }
 
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(Modifier.height(8.dp))
 
                     // --- Export Button ---
                     Button(
@@ -711,7 +711,7 @@ fun PlayerScreen(
                     }
 
                     // Bottom spacer to ensure content isn't hidden behind fixed controls
-                    Spacer(Modifier.height(120.dp))
+                    Spacer(Modifier.height(100.dp))
                 }
 
                 // ========================

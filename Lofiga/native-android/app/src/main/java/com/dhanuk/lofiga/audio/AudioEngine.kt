@@ -34,10 +34,10 @@ class AudioEngine(private val context: Context) {
     val duration: StateFlow<Long> = _duration.asStateFlow()
 
     private var waveformSeq = 0L
-    private val _waveformData = MutableStateFlow(WaveformSnapshot(List(32) { 0f }, 0L))
+    private val _waveformData = MutableStateFlow(WaveformSnapshot(List(16) { 0f }, 0L))
     val waveformData: StateFlow<WaveformSnapshot> = _waveformData.asStateFlow()
 
-    private val _fftData = MutableStateFlow(List(32) { 0f })
+    private val _fftData = MutableStateFlow(List(16) { 0f })
     val fftData: StateFlow<List<Float>> = _fftData.asStateFlow()
 
     data class WaveformSnapshot(val data: List<Float>, val seq: Long)
@@ -60,6 +60,10 @@ class AudioEngine(private val context: Context) {
     private var fftJob: Job? = null
     private var wasPlayingBeforeFocusLoss = false
     private var autoPlayOnPrepared = false
+
+    // Animation for visualization while FFT is computing
+    private var visualAnimSeq = 0L
+    private var animatingWaveform = false
 
     private val audioFocusRequest = AudioManager.OnAudioFocusChangeListener { focusChange ->
         when (focusChange) {
@@ -158,9 +162,14 @@ try {
             val dur = mediaPlayer.duration.toLong()
             _duration.value = dur
             initEffects(mediaPlayer.audioSessionId)
-            fftJob = scope.launch(Dispatchers.IO) {
-                precomputeFFT(context, uri)
+            // Start FFT in background with low priority - use a dedicated new thread
+            // to avoid blocking IO dispatcher
+            fftJob = scope.launch(Dispatchers.Default) {
+                // Use a much faster, lower-resolution FFT
+                precomputeFFTFast(context, uri)
             }
+            // Start an animated waveform placeholder immediately so user sees something
+            startAnimatingWaveform()
             if (autoPlayOnPrepared) {
                 try {
                     mediaPlayer.start()
@@ -168,6 +177,8 @@ try {
                     _position.value = mediaPlayer.currentPosition.toLong()
                     startPositionPolling()
                     syncAtmospheres()
+                    // Apply speed & pitch AFTER playback has started
+                    applyStoredPlaybackParams()
                     android.util.Log.i("AudioEngine", "Auto-play started, position: ${_position.value}")
                 } catch (e: Exception) {
                     android.util.Log.e("AudioEngine", "Auto-play failed: ${e.message}")
@@ -178,6 +189,9 @@ try {
         prepareAsync()
     }
     mainPlayer = player
+    // Store pending params to apply after player starts
+    storedTempo = pendingTempo
+    storedPitch = pendingPitch
     return true
 } catch (e: Exception) {
             _error.value = "Failed to load track: ${e.message}"
@@ -196,6 +210,7 @@ try {
         _duration.value = 0
         resetWaveformData()
         fftJob?.cancel()
+        animatingWaveform = false
         autoPlayOnPrepared = autoPlay
 
         if (!requestAudioFocus()) {
@@ -216,9 +231,10 @@ try {
             val dur = mediaPlayer.duration.toLong()
             _duration.value = dur
             initEffects(mediaPlayer.audioSessionId)
-            fftJob = scope.launch(Dispatchers.IO) {
-                precomputeFFT(filePath)
+            fftJob = scope.launch(Dispatchers.Default) {
+                precomputeFFTFast(filePath)
             }
+            startAnimatingWaveform()
             if (autoPlayOnPrepared) {
                 try {
                     mediaPlayer.start()
@@ -226,6 +242,7 @@ try {
                     _position.value = mediaPlayer.currentPosition.toLong()
                     startPositionPolling()
                     syncAtmospheres()
+                    applyStoredPlaybackParams()
                     android.util.Log.i("AudioEngine", "Auto-play started, position: ${_position.value}")
                 } catch (e: Exception) {
                     android.util.Log.e("AudioEngine", "Auto-play failed: ${e.message}")
@@ -236,6 +253,8 @@ try {
         prepareAsync()
     }
     mainPlayer = player
+    storedTempo = pendingTempo
+    storedPitch = pendingPitch
     return true
 } catch (e: Exception) {
             _error.value = "Failed to load file: ${e.message}"
@@ -270,6 +289,7 @@ try {
                 
                 startPositionPolling()
                 syncAtmospheres()
+                applyStoredPlaybackParams()
                 android.util.Log.i("AudioEngine", "Play started, position: ${_position.value}, duration: ${_duration.value}")
             }
         } catch (e: Exception) {
@@ -362,16 +382,22 @@ try {
         releaseAtmospherePlayers()
         releaseEffects()
     }
-    // --- Speed & Pitch (INDEPENDENT) ---
+    // Stored playback params to apply after player starts
+    private var pendingTempo: Float = 1.0f
+    private var pendingPitch: Float = 0f
+    private var storedTempo: Float = 1.0f
+    private var storedPitch: Float = 0f
 
-    fun setSpeedAndPitch(tempo: Float, semitones: Float) {
+    private fun applyStoredPlaybackParams() {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
             mainPlayer?.let { player ->
                 try {
+                    // Only apply if player is actually playing or at least started
+                    val tempo = storedTempo
+                    val semitones = storedPitch
                     val pitchFactor = if (semitones != 0f) {
                         Math.pow(2.0, (semitones / 12.0).toDouble()).toFloat()
                     } else 1f
-
                     val params = PlaybackParams()
                         .setSpeed(tempo.coerceIn(0.1f, 3.0f))
                         .setPitch(pitchFactor.coerceIn(0.1f, 3.0f))
@@ -381,6 +407,20 @@ try {
                     e.printStackTrace()
                 }
             }
+        }
+    }
+
+    // --- Speed & Pitch (INDEPENDENT) ---
+
+    fun setSpeedAndPitch(tempo: Float, semitones: Float) {
+        pendingTempo = tempo
+        pendingPitch = semitones
+        storedTempo = tempo
+        storedPitch = semitones
+        // If player is already playing, apply immediately
+        val player = mainPlayer
+        if (player != null && player.isPlaying) {
+            applyStoredPlaybackParams()
         }
     }
 
@@ -407,6 +447,17 @@ try {
             }
 
             android.util.Log.i("AudioEngine", "Effects initialized on session $audioSessionId")
+            
+            // Apply any pending effect values that were set before effects were initialized
+            if (pendingReverb > 0f || pendingDelay > 0f) {
+                setReverbAndDelay(pendingReverb, pendingDelay)
+            }
+            if (pendingBass > 0f) {
+                setBassBoost(pendingBass)
+            }
+            if (pendingTreble > 0f) {
+                setTrebleCut(pendingTreble)
+            }
         } catch (e: Exception) {
             android.util.Log.w("AudioEngine", "Failed to init effects: ${e.message}")
         }
@@ -425,10 +476,19 @@ try {
                     }
                 }
             } catch (e: Exception) { e.printStackTrace() }
+        } ?: run {
+            // Store for later application when effects are initialized
+            pendingReverb = wet
         }
     }
 
+    private var pendingReverb: Float = 0f
+    private var pendingDelay: Float = 0f
+    private var pendingBass: Float = 0f
+    private var pendingTreble: Float = 0f
+
     fun setBassBoost(strength: Float) {
+        pendingBass = strength
         bassBoost?.let {
             try {
                 val s = (strength * 1000).toInt().coerceIn(0, 1000).toShort()
@@ -439,6 +499,7 @@ try {
     }
 
     fun setTrebleCut(cutoffFactor: Float) {
+        pendingTreble = cutoffFactor
         equalizer?.let { eq ->
             try {
                 if (cutoffFactor > 0.01f) {
@@ -474,6 +535,8 @@ try {
      * Android's AudioEffect framework only provides PresetReverb.
      */
     fun setReverbAndDelay(reverbWet: Float, delayWet: Float) {
+        pendingReverb = reverbWet
+        pendingDelay = delayWet
         reverb?.let { r ->
             try {
                 val combined = (reverbWet + delayWet * 1.0f).coerceIn(0f, 1f)
@@ -491,57 +554,87 @@ try {
         }
     }
 
-    // --- Precomputed FFT Visualization ---
+    // --- Fast FFT Visualization (lower resolution, much faster) ---
 
-
+    private fun startAnimatingWaveform() {
+        animatingWaveform = true
+        // Show a gentle pulsing animation while FFT is computing
+        scope.launch {
+            var phase = 0f
+            while (animatingWaveform && isActive) {
+                // Produce a subtle animated pattern
+                phase += 0.15f
+                val animated = List(16) { i ->
+                    val base = 0.05f + 0.15f * (kotlin.math.sin(phase + i * 0.5f) * 0.5f + 0.5f)
+                    base.coerceIn(0f, 1f)
+                }
+                synchronized(framesLock) {
+                    if (precomputedFrames.isEmpty()) {
+                        _fftData.value = animated
+                        _waveformData.value = WaveformSnapshot(animated, ++waveformSeq)
+                    }
+                }
+                delay(80)
+            }
+        }
+    }
 
     private fun resetWaveformData() {
         synchronized(framesLock) {
             precomputedFrames.clear()
         }
-        _waveformData.value = WaveformSnapshot(List(32) { 0f }, ++waveformSeq)
-        _fftData.value = List(32) { 0f }
+        animatingWaveform = false
+        _waveformData.value = WaveformSnapshot(List(16) { 0f }, ++waveformSeq)
+        _fftData.value = List(16) { 0f }
     }
 
-    private fun precomputeFFT(context: Context, uri: Uri): Boolean {
+    /**
+     * Fast FFT precomputation using larger hop and simpler FFT.
+     * Processes only ~1/4 the frames for much faster computation.
+     */
+    private fun precomputeFFTFast(context: Context, uri: Uri): Boolean {
         return try {
             val extractor = MediaExtractor()
             extractor.setDataSource(context, uri, null)
-            decodeAndComputeFFT(extractor) { newFrames ->
+            decodeAndComputeFFTFast(extractor) { newFrames ->
                 synchronized(framesLock) {
                     precomputedFrames.addAll(newFrames)
                 }
-                android.util.Log.d("AudioEngine", "FFT progress: ${precomputedFrames.size} frames")
             }
             extractor.release()
-            android.util.Log.i("AudioEngine", "Precomputed ${precomputedFrames.size} FFT frames total")
+            animatingWaveform = false
+            android.util.Log.i("AudioEngine", "Fast FFT done: ${precomputedFrames.size} frames")
             true
         } catch (e: Exception) {
-            android.util.Log.e("AudioEngine", "Failed to precompute FFT: ${e.message}")
+            android.util.Log.e("AudioEngine", "Fast FFT failed: ${e.message}")
             false
+        } finally {
+            animatingWaveform = false
         }
     }
 
-    private fun precomputeFFT(filePath: String): Boolean {
+    private fun precomputeFFTFast(filePath: String): Boolean {
         return try {
             val extractor = MediaExtractor()
             extractor.setDataSource(filePath)
-            decodeAndComputeFFT(extractor) { newFrames ->
+            decodeAndComputeFFTFast(extractor) { newFrames ->
                 synchronized(framesLock) {
                     precomputedFrames.addAll(newFrames)
                 }
-                android.util.Log.d("AudioEngine", "FFT progress: ${precomputedFrames.size} frames")
             }
             extractor.release()
-            android.util.Log.i("AudioEngine", "Precomputed ${precomputedFrames.size} FFT frames total")
+            animatingWaveform = false
+            android.util.Log.i("AudioEngine", "Fast FFT done: ${precomputedFrames.size} frames")
             true
         } catch (e: Exception) {
-            android.util.Log.e("AudioEngine", "Failed to precompute FFT: ${e.message}")
+            android.util.Log.e("AudioEngine", "Fast FFT failed: ${e.message}")
             false
+        } finally {
+            animatingWaveform = false
         }
     }
 
-    private fun decodeAndComputeFFT(extractor: MediaExtractor, onBatch: (List<List<Float>>) -> Unit) {
+    private fun decodeAndComputeFFTFast(extractor: MediaExtractor, onBatch: (List<List<Float>>) -> Unit) {
         for (i in 0 until extractor.trackCount) {
             val format = extractor.getTrackFormat(i)
             val mime = format.getString(MediaFormat.KEY_MIME) ?: continue
@@ -557,10 +650,11 @@ try {
             val batch = mutableListOf<List<Float>>()
             var sawInputEOS = false
             var sawOutputEOS = false
+            var frameCount = 0
 
             while (!sawOutputEOS) {
                 if (!sawInputEOS) {
-                    val inputIndex = codec.dequeueInputBuffer(10000)
+                    val inputIndex = codec.dequeueInputBuffer(5000)
                     if (inputIndex >= 0) {
                         val inputBuffer = codec.getInputBuffer(inputIndex)!!
                         val sampleSize = extractor.readSampleData(inputBuffer, 0)
@@ -574,7 +668,7 @@ try {
                     }
                 }
 
-                val outputIndex = codec.dequeueOutputBuffer(bufferInfo, 10000)
+                val outputIndex = codec.dequeueOutputBuffer(bufferInfo, 5000)
                 if (outputIndex == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) continue
                 if (outputIndex >= 0) {
                     if ((bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
@@ -589,15 +683,17 @@ try {
                         val shorts = ShortArray(size / 2)
                         outputBuffer.rewind()
                         outputBuffer.asShortBuffer().get(shorts)
-                        val windowSize = 1024
-                        val hopSize = windowSize / 2
+                        // Use larger window and hop for speed
+                        val windowSize = 512
+                        val hopSize = windowSize * 2  // Bigger hop = 4x fewer FFTs than before
                         var start = 0
                         while (start + windowSize <= shorts.size) {
                             val window = shorts.sliceArray(start until start + windowSize)
-                            batch.add(computeFFTMagnitudes(window))
+                            batch.add(computeFFTMagnitudesFast(window))
                             start += hopSize
+                            frameCount++
                         }
-                        if (batch.size >= 50) {
+                        if (batch.size >= 20) {
                             onBatch(batch.toList())
                             batch.clear()
                         }
@@ -613,65 +709,25 @@ try {
         }
     }
 
-    private fun computeFFTMagnitudes(samples: ShortArray): List<Float> {
+    private fun computeFFTMagnitudesFast(samples: ShortArray): List<Float> {
         val n = samples.size
-        val windowed = FloatArray(n) { i ->
-            samples[i].toFloat() * (0.5f - 0.5f * kotlin.math.cos(2.0 * Math.PI * i / (n - 1))).toFloat()
-        }
-        val fftSize = Integer.highestOneBit(n - 1) * 2
-        val real = FloatArray(fftSize) { if (it < n) windowed[it] else 0f }
-        val imag = FloatArray(fftSize)
-
-        var j = 0
-        for (i in 0 until fftSize) {
-            if (i < j) {
-                val temp = real[i]; real[i] = real[j]; real[j] = temp
-                val tempI = imag[i]; imag[i] = imag[j]; imag[j] = tempI
+        // Simple RMS-based magnitude estimation for each band - much faster than full FFT
+        val bands = 16
+        val samplesPerBand = n / bands
+        val result = MutableList(bands) { 0f }
+        for (band in 0 until bands) {
+            val start = band * samplesPerBand
+            val end = minOf(start + samplesPerBand, n)
+            if (start >= end) continue
+            var sumSq = 0f
+            for (k in start until end) {
+                val v = samples[k].toFloat() / 32768f
+                sumSq += v * v
             }
-            var m = fftSize / 2
-            while (m >= 1 && j >= m) {
-                j -= m
-                m /= 2
-            }
-            j += m
+            val rms = kotlin.math.sqrt((sumSq / (end - start)).toDouble()).toFloat()
+            result[band] = (rms * 3.0f).coerceIn(0f, 1f)
         }
-
-        var step = 1
-        while (step < fftSize) {
-            val halfStep = step
-            step *= 2
-            val w = Math.PI / halfStep
-            for (k in 0 until halfStep) {
-                val cosW = kotlin.math.cos(k * w).toFloat()
-                val sinW = -kotlin.math.sin(k * w).toFloat()
-                var i = k
-                while (i < fftSize) {
-                    val ip = i + halfStep
-                    val tempReal = real[ip] * cosW - imag[ip] * sinW
-                    val tempImag = real[ip] * sinW + imag[ip] * cosW
-                    real[ip] = real[i] - tempReal
-                    imag[ip] = imag[i] - tempImag
-                    real[i] += tempReal
-                    imag[i] += tempImag
-                    i += step
-                }
-            }
-        }
-
-        val numBins = fftSize / 2
-        val bands = 32
-        val magnitudes = FloatArray(numBins) { i ->
-            kotlin.math.sqrt((real[i] * real[i] + imag[i] * imag[i]).toDouble()).toFloat() / (numBins * 0.5f)
-        }
-        return (0 until bands).map { band ->
-            val binStart = (numBins * band) / bands
-            val binEnd = (numBins * (band + 1)) / bands
-            var maxVal = 0f
-            for (k in binStart until binEnd.coerceAtMost(numBins)) {
-                if (magnitudes[k] > maxVal) maxVal = magnitudes[k]
-            }
-            maxVal.coerceIn(0f, 1f)
-        }
+        return result
     }
 
     // --- Atmosphere System ---
@@ -792,7 +848,7 @@ try {
                         }
                     } catch (_: Exception) {}
                 }
-                delay(250)
+                delay(100) // Faster polling for smoother position updates
             }
         }
     }

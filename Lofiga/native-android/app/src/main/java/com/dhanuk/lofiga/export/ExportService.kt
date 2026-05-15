@@ -24,6 +24,7 @@ object ExportService {
     private const val MAX_PCM_SAMPLES = 20_000_000
 
     // Cache for atmosphere PCM data to avoid re-reading WAV files on every export
+    // Key format: "{name}_{sampleRate}" e.g. "rain_44100"
     private val atmospherePcmCache = mutableMapOf<String, ShortArray?>()
 
     suspend fun exportTrack(
@@ -458,6 +459,7 @@ object ExportService {
     private fun applyPresetEffects(pcm: ShortArray, sampleRate: Int, channels: Int, preset: PresetValues): ShortArray {
         var result = pcm
         // Speed/pitch changes array length - must be separate
+        // Use simpler algorithm for faster export
         if (preset.tempo != 1.0f || preset.pitch != 0f) {
             result = applySpeedPitch(result, preset.tempo, preset.pitch, channels)
         }
@@ -466,6 +468,35 @@ object ExportService {
             result = applyCombinedEffects(result, preset.delay, preset.reverb, preset.bass, preset.trebleCut, sampleRate, channels)
         }
         return result
+    }
+
+    /**
+     * Simplified speed/pitch for export using linear interpolation.
+     * Optimized for speed by reducing allocations.
+     */
+    private fun applySpeedPitch(pcm: ShortArray, tempo: Float, semitones: Float, channels: Int): ShortArray {
+        if (tempo == 1.0f && semitones == 0f) return pcm
+        val pitchFactor = Math.pow(2.0, (semitones / 12.0)).toFloat()
+        val ratio = 1.0f / (tempo.coerceIn(0.25f, 2.0f) * pitchFactor.coerceIn(0.25f, 4.0f))
+        val inFrames = pcm.size / channels
+        val outFrames = (inFrames * ratio).toInt().coerceIn(1, inFrames * 2)
+        if (outFrames == inFrames) return pcm
+        val output = ShortArray(outFrames * channels)
+        val step = 1f / ratio
+        for (frame in 0 until outFrames) {
+            val srcPos = frame * step
+            val srcFrame = srcPos.toInt().coerceIn(0, inFrames - 2)
+            val frac = srcPos - srcFrame
+            val baseIn = srcFrame * channels
+            val baseOut = frame * channels
+            for (ch in 0 until channels) {
+                val cur = pcm[baseIn + ch].toInt()
+                val next = pcm[baseIn + channels + ch].toInt()
+                val sample = (cur * (1f - frac) + next * frac).toInt()
+                output[baseOut + ch] = sample.coerceIn(-32768, 32767).toShort()
+            }
+        }
+        return output
     }
 
     /**
@@ -562,28 +593,7 @@ object ExportService {
         return output
     }
 
-    private fun applySpeedPitch(pcm: ShortArray, tempo: Float, semitones: Float, channels: Int): ShortArray {
-        if (tempo == 1.0f && semitones == 0f) return pcm
-        val pitchFactor = Math.pow(2.0, (semitones / 12.0)).toFloat()
-        val ratio = 1.0f / (tempo.coerceIn(0.25f, 2.0f) * pitchFactor.coerceIn(0.25f, 4.0f))
-        val inFrames = pcm.size / channels
-        val outFrames = (inFrames * ratio).toInt().coerceIn(1, pcm.size)
-        val output = ShortArray(outFrames * channels)
-        for (frame in 0 until outFrames) {
-            val srcPos = frame / ratio
-            val srcFrame = srcPos.toInt().coerceIn(0, inFrames - 2)
-            val frac = (srcPos - srcFrame).toFloat().coerceIn(0f, 1f)
-            val baseIn = srcFrame * channels
-            val baseOut = frame * channels
-            for (ch in 0 until channels) {
-                val cur = pcm[baseIn + ch]
-                val next = pcm[baseIn + channels + ch]
-                val sample = (cur * (1 - frac) + next * frac).toInt()
-                output[baseOut + ch] = sample.coerceIn(-32768, 32767).toShort()
-            }
-        }
-        return output
-    }
+
 
     // Previous individual effect functions (applyReverb, applyDelay, applyBassBoost, applyTrebleCut)
     // have been replaced by the combined single-pass applyCombinedEffects for better performance.
@@ -606,35 +616,41 @@ object ExportService {
 
         if (activeLayers.isEmpty()) return pcm
 
-        val output = ShortArray(pcm.size)
+        // Convert to int array for mixing to avoid overflow, then clip back
+        val output = IntArray(pcm.size)
+        // First copy original PCM to output
         for (i in pcm.indices) {
-            var sample = pcm[i].toInt()
-            for (layer in activeLayers) {
-                if (i < layer.pcm.size) {
-                    sample += (layer.pcm[i] * layer.volume * 0.8f).toInt()
-                }
-            }
-            output[i] = sample.coerceIn(-32768, 32767).toShort()
+            output[i] = pcm[i].toInt()
         }
-        return output
+        // Mix each atmosphere layer
+        for (layer in activeLayers) {
+            val vol = (layer.volume * 0.8f * 32768f).toInt()
+            val limit = minOf(pcm.size, layer.pcm.size)
+            for (i in 0 until limit) {
+                output[i] += (layer.pcm[i].toInt() * vol) shr 15
+            }
+        }
+        // Clip and convert back to shorts
+        val result = ShortArray(pcm.size)
+        for (i in output.indices) {
+            result[i] = output[i].coerceIn(-32768, 32767).toShort()
+        }
+        return result
     }
 
     private fun readAtmospherePcm(context: Context, key: String, targetRate: Int, targetLength: Int): ShortArray? {
         val assetPath = getAtmosphereAssetPath(key) ?: return null
 
-        // Check cache first
-        val cached = atmospherePcmCache[key]
+        // Check cache first - use a common base for all requests to minimize cache misses
+        val cacheKey = "${key}_${targetRate}"
+        val cached = atmospherePcmCache[cacheKey]
         if (cached != null) {
-            // Resample if needed and create properly sized array
-            val pcmAtTargetRate = if (targetRate != 44100) {
-                resamplePcm(cached, 44100, targetRate, 2)
-            } else cached
             val result = ShortArray(targetLength)
             var pos = 0
-            val copySize = pcmAtTargetRate.size
+            val copySize = cached.size
             while (pos < targetLength) {
                 val len = minOf(copySize, targetLength - pos)
-                System.arraycopy(pcmAtTargetRate, 0, result, pos, len)
+                System.arraycopy(cached, 0, result, pos, len)
                 pos += len
             }
             return result
@@ -700,10 +716,8 @@ object ExportService {
             if (channels == 1) pcm = monoToStereo(pcm)
             if (fileRate != targetRate) pcm = resamplePcm(pcm, fileRate, targetRate, 2)
 
-            // Cache the processed atmosphere at 44100/2ch for next time
-            if (targetRate == 44100) {
-                atmospherePcmCache[key] = pcm.copyOf()
-            }
+            // Cache the processed atmosphere at target rate for next time
+            atmospherePcmCache[cacheKey] = pcm.copyOf()
 
             val result = ShortArray(targetLength)
             var pos = 0

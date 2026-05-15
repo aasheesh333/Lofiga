@@ -2,6 +2,8 @@
 <paths>
     <external-path name="music_lofiga" path="Music/Lofiga/" />
     <external-path name="downloads_lofiga" path="Download/Lofiga/" />
+    <external-path name="downloads_alt" path="Downloads/Lofiga/" />
     <external-files-path name="app_files" path="Music/Lofiga/" />
+    <external-files-path name="app_downloads" path="Download/Lofiga/" />
     <cache-path name="cache" path="/" />
 </paths>

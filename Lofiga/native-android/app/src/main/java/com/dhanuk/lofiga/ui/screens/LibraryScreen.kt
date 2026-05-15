@@ -254,15 +254,19 @@ private fun LibraryItem(
                             text = { Text("Share", color = MaterialTheme.colorScheme.onSurface) },
                             onClick = {
                                 showMenu = false
-                                val shareFile = File(filePath)
-                                if (shareFile.exists()) {
-                                    val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", shareFile)
-                                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                                        type = "audio/*"
-                                        putExtra(Intent.EXTRA_STREAM, uri)
-                                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                try {
+                                    val shareFile = File(filePath)
+                                    if (shareFile.exists()) {
+                                        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", shareFile)
+                                        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                            type = "audio/*"
+                                            putExtra(Intent.EXTRA_STREAM, uri)
+                                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                        }
+                                        context.startActivity(Intent.createChooser(shareIntent, "Share track"))
                                     }
-                                    context.startActivity(Intent.createChooser(shareIntent, "Share track"))
+                                } catch (e: Exception) {
+                                    android.widget.Toast.makeText(context, "Could not share file", android.widget.Toast.LENGTH_SHORT).show()
                                 }
                             },
                             leadingIcon = { Icon(Icons.Outlined.Share, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)) }
