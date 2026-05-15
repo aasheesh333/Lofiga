@@ -37,15 +37,15 @@ jobs:
             -dname "CN=Lofiga,O=Lofiga,C=US"
 
       - name: Make Gradlew Executable
-        run: chmod +x native-android/gradlew
+        run: chmod +x Lofiga/native-android/gradlew
 
       - name: Build APK (Demo Signed)
         run: |
-          cd native-android
+          cd Lofiga/native-android
           ./gradlew assembleDebug
 
       - name: Upload Android APK
         uses: actions/upload-artifact@v4
         with:
           name: app-debug.apk
-          path: native-android/app/build/outputs/apk/debug/app-debug.apk
+          path: Lofiga/native-android/app/build/outputs/apk/debug/app-debug.apk
