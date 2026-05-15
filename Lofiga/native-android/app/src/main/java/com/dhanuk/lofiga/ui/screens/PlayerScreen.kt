@@ -11,6 +11,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.Canvas
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
@@ -26,6 +27,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.geometry.Rect
 import androidx.core.content.FileProvider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import com.dhanuk.lofiga.model.CustomPreset
@@ -317,28 +319,28 @@ fun PlayerScreen(
 
                     // --- Waveform Visualizer ---
 Canvas(modifier = Modifier.fillMaxWidth().height(150.dp)) {
-val width = size.width
-    val height = size.height
-    val barCount = fftData.size
-    val barWidth = width / barCount
-    for (i in 0 until barCount) {
-        val barHeight = fftData[i] * height * 0.8f
-        drawRect(
-            brush = Brush.verticalGradient(
-                listOf(
-                    Purple500.copy(alpha = 0.8f),
-                    Purple500.copy(alpha = 0.3f)
+        val width = size.width
+        val height = size.height
+        val barCount = fftData.size
+        val barWidth = width / barCount
+        for (i in 0 until barCount) {
+            val barHeight = fftData[i] * height * 0.8f
+            drawRect(
+                brush = Brush.verticalGradient(
+                    listOf(
+                        Purple500.copy(alpha = 0.8f),
+                        Purple500.copy(alpha = 0.3f)
+                    )
+                ),
+                rect = Rect(
+                    left = i * barWidth,
+                    top = height - barHeight,
+                    right = (i + 1) * barWidth,
+                    bottom = height
                 )
-            ),
-            rect = Rect(
-                left = i * barWidth,
-                top = height - barHeight,
-                right = (i + 1) * barWidth,
-                bottom = height
             )
-        )
+        }
     }
-}
 
                     Spacer(Modifier.height(16.dp))
 

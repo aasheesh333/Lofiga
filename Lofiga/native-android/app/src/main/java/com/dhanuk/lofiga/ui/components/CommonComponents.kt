@@ -48,8 +48,6 @@ fun AmbientBackground(modifier: Modifier = Modifier) {
 }
 
 
-}
-
 @Composable
 fun LofigaNavigationBar(
     selectedIndex: Int,
