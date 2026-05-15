@@ -54,8 +54,9 @@ class AudioEngine(private val context: Context) {
     private var equalizer: Equalizer? = null
     private var precomputedFrames: List<List<Float>> = emptyList()
 
-    private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     private var positionJob: Job? = null
+    private var fftJob: Job? = null
     private var wasPlayingBeforeFocusLoss = false
 
     private val audioFocusRequest = AudioManager.OnAudioFocusChangeListener { focusChange ->
@@ -134,6 +135,7 @@ class AudioEngine(private val context: Context) {
         _position.value = 0
         _duration.value = 0
         resetWaveformData()
+        fftJob?.cancel()
 
         if (!requestAudioFocus()) {
             _error.value = "Cannot get audio focus"
@@ -153,7 +155,9 @@ try {
             val dur = mediaPlayer.duration.toLong()
             _duration.value = dur
             initEffects(mediaPlayer.audioSessionId)
-            precomputeFFT(context, uri)
+            fftJob = scope.launch(Dispatchers.IO) {
+                precomputeFFT(context, uri)
+            }
             android.util.Log.i("AudioEngine", "Track loaded, duration: ${dur}ms")
         }
         prepareAsync()
@@ -176,6 +180,7 @@ try {
         _position.value = 0
         _duration.value = 0
         resetWaveformData()
+        fftJob?.cancel()
 
         if (!requestAudioFocus()) {
             _error.value = "Cannot get audio focus"
@@ -195,7 +200,9 @@ try {
             val dur = mediaPlayer.duration.toLong()
             _duration.value = dur
             initEffects(mediaPlayer.audioSessionId)
-            precomputeFFT(filePath)
+            fftJob = scope.launch(Dispatchers.IO) {
+                precomputeFFT(filePath)
+            }
             android.util.Log.i("AudioEngine", "File loaded, duration: ${dur}ms")
         }
         prepareAsync()
