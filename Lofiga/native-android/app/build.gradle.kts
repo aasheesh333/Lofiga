@@ -3,6 +3,8 @@ plugins {
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.google.devtools.ksp") version "2.2.20-2.0.2"
+    id("com.google.gms.google-services")
+    id("com.onesignal.androidsdk.onesignal-gradle-plugin")
 }
 
 android {
@@ -13,36 +15,51 @@ android {
         applicationId = "com.dhanuk.lofiga"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "2.0.0"
+        versionCode = project.findProperty("VERSION_CODE")?.toString()?.toIntOrNull() ?: 2
+        versionName = project.findProperty("VERSION_NAME")?.toString() ?: "2.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-}
 
-signingConfigs {
-    create("demo") {
-        storeFile = file("demo.keystore")
-        storePassword = "android"
-        keyAlias = "demo_key"
-        keyPassword = "android"
+        manifestPlaceholders["onesignal_app_id"] = ""
     }
-}
 
-buildTypes {
- release {
- signingConfig = signingConfigs.getByName("demo")
- isMinifyEnabled = true
- isShrinkResources = true
- proguardFiles(
- getDefaultProguardFile("proguard-android-optimize.txt"),
- "proguard-rules.pro"
- )
- }
- debug {
- signingConfig = signingConfigs.getByName("demo")
- isMinifyEnabled = false
- }
-}
+    signingConfigs {
+        create("demo") {
+            storeFile = file("demo.keystore")
+            storePassword = "android"
+            keyAlias = "demo_key"
+            keyPassword = "android"
+        }
+        create("release") {
+            val keystorePath = System.getenv("KEYSTORE_PATH")
+            if (keystorePath != null && keystorePath.isNotEmpty()) {
+                storeFile = file(keystorePath)
+                storePassword = System.getenv("KEYSTORE_PASSWORD") ?: ""
+                keyAlias = System.getenv("KEY_ALIAS") ?: "lofiga"
+                keyPassword = System.getenv("KEY_PASSWORD") ?: ""
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            signingConfig = if (System.getenv("KEYSTORE_PASSWORD") != null) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("demo")
+            }
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+        }
+        debug {
+            signingConfig = signingConfigs.getByName("demo")
+            isMinifyEnabled = false
+        }
+    }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -57,11 +74,38 @@ buildTypes {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        }
+    }
+
+    flavorDimensions += "environment"
+    productFlavors {
+        create("dev") {
+            dimension = "environment"
+            applicationIdSuffix = ".dev"
+            versionNameSuffix = "-dev"
+            manifestPlaceholders["onesignal_app_id"] = "placeholder-dev-id"
+            manifestPlaceholders["ADMOB_APP_ID"] = "ca-app-pub-3940256099942544~3347511713"
+            buildConfigField("String", "ONESIGNAL_APP_ID", "\"placeholder-dev-id\"")
+            buildConfigField("String", "ADMOB_APP_ID", "\"ca-app-pub-3940256099942544~3347511713\"")
+            buildConfigField("String", "ADMOB_BANNER_ID", "\"ca-app-pub-3940256099942544/6300978111\"")
+            buildConfigField("String", "ADMOB_INTERSTITIAL_ID", "\"ca-app-pub-3940256099942544/1033173712\"")
+            buildConfigField("String", "ADMOB_REWARDED_ID", "\"ca-app-pub-3940256099942544/5224354917\"")
+        }
+        create("prod") {
+            dimension = "environment"
+            manifestPlaceholders["onesignal_app_id"] = System.getenv("ONESIGNAL_APP_ID") ?: ""
+            manifestPlaceholders["ADMOB_APP_ID"] = System.getenv("ADMOB_APP_ID") ?: "ca-app-pub-3940256099942544~3347511713"
+            buildConfigField("String", "ONESIGNAL_APP_ID", "\"${System.getenv("ONESIGNAL_APP_ID") ?: ""}\"")
+            buildConfigField("String", "ADMOB_APP_ID", "\"${System.getenv("ADMOB_APP_ID") ?: "ca-app-pub-3940256099942544~3347511713"}\"")
+            buildConfigField("String", "ADMOB_BANNER_ID", "\"${System.getenv("ADMOB_BANNER_ID") ?: "ca-app-pub-3940256099942544/6300978111"}\"")
+            buildConfigField("String", "ADMOB_INTERSTITIAL_ID", "\"${System.getenv("ADMOB_INTERSTITIAL_ID") ?: "ca-app-pub-3940256099942544/1033173712"}\"")
+            buildConfigField("String", "ADMOB_REWARDED_ID", "\"${System.getenv("ADMOB_REWARDED_ID") ?: "ca-app-pub-3940256099942544/5224354917"}\"")
         }
     }
 }
@@ -95,6 +139,11 @@ dependencies {
 
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:$coroutinesVersion")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:$coroutinesVersion")
+
+    implementation("com.google.android.gms:play-services-ads:24.2.0")
+    implementation("com.google.android.ump:user-messaging-platform:3.1.0")
+
+    implementation("com.onesignal:OneSignal:[5.0.0, 5.99.99]")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 }

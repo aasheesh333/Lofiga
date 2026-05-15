@@ -31,6 +31,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.core.content.FileProvider
 import androidx.compose.material3.ExperimentalMaterial3Api
+import com.dhanuk.lofiga.ads.AdManager
 import com.dhanuk.lofiga.model.CustomPreset
 import com.dhanuk.lofiga.model.LofiPreset
 import com.dhanuk.lofiga.ui.MainViewModel
@@ -120,11 +121,11 @@ fun PlayerScreen(
                     }
                     context.startActivity(Intent.createChooser(shareIntent, "Share Lofi Mix"))
                 } catch (e: Exception) {
-                    // FileProvider might fail, fallback to snackbar
                     snackbarHostState.showSnackbar("Exported to: $path")
                 }
             }
             viewModel.clearExportedFilePath()
+            AdManager.showInterstitial(context)
         }
     }
 

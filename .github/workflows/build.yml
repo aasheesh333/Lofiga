@@ -1,17 +1,32 @@
-name: Build Android APK
+name: Build Android Release
 
 on:
   push:
     branches:
-      - "**"
+      - "main"
+      - "master"
+    tags:
+      - "v*"
   pull_request:
   workflow_dispatch:
 
 jobs:
-  build:
-    name: Build Android APK
+  build-release:
+    name: Build Android Release (AAB + APK)
     runs-on: ubuntu-latest
     timeout-minutes: 45
+
+    env:
+      ADMOB_APP_ID: ${{ secrets.ADMOB_APP_ID }}
+      ADMOB_BANNER_ID: ${{ secrets.ADMOB_BANNER_ID }}
+      ADMOB_INTERSTITIAL_ID: ${{ secrets.ADMOB_INTERSTITIAL_ID }}
+      ADMOB_REWARDED_ID: ${{ secrets.ADMOB_REWARDED_ID }}
+      ONESIGNAL_APP_ID: ${{ secrets.ONESIGNAL_APP_ID }}
+      VERSION_CODE: ${{ secrets.VERSION_CODE }}
+      VERSION_NAME: ${{ secrets.VERSION_NAME }}
+      PACKAGE_NAME: ${{ secrets.PACKAGE_NAME }}
+      KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+      KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
 
     steps:
       - name: Checkout Code
@@ -29,25 +44,87 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Setup Keystore (Android)
+      - name: Decode Keystore
+        id: decode_keystore
         run: |
-          keytool -genkeypair -v -keystore release.keystore \
-            -alias lofiga -keyalg RSA -keysize 2048 -validity 10000 \
-            -storepass lofiga2024 -keypass lofiga2024 \
-            -dname "CN=Lofiga,O=Lofiga,C=US"
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > $HOME/release.keystore
+          echo "KEYSTORE_PATH=$HOME/release.keystore" >> $GITHUB_ENV
 
       - name: Make Gradlew Executable
         run: |
           chmod +x Lofiga/native-android/gradlew
           echo "sdk.dir=$ANDROID_SDK_ROOT" > Lofiga/native-android/local.properties
 
-      - name: Build APK (Demo Signed)
+      - name: Build Release AAB
         run: |
           cd Lofiga/native-android
-          ./gradlew assembleDebug
+          ./gradlew :app:bundleProdRelease \
+            -PVERSION_CODE=${VERSION_CODE} \
+            -PVERSION_NAME=${VERSION_NAME}
 
-      - name: Upload Android APK
+      - name: Build Release APK
+        run: |
+          cd Lofiga/native-android
+          ./gradlew :app:assembleProdRelease \
+            -PVERSION_CODE=${VERSION_CODE} \
+            -PVERSION_NAME=${VERSION_NAME}
+
+      - name: Upload AAB Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release.aab
+          path: Lofiga/native-android/app/build/outputs/bundle/prodRelease/app-prod-release.aab
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release.apk
+          path: Lofiga/native-android/app/build/outputs/apk/prod/release/app-prod-release.apk
+
+      - name: Create GitHub Release (on tag)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            Lofiga/native-android/app/build/outputs/bundle/prodRelease/app-prod-release.aab
+            Lofiga/native-android/app/build/outputs/apk/prod/release/app-prod-release.apk
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-debug:
+    name: Build Debug APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: "zulu"
+          java-version: "17"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Make Gradlew Executable
+        run: |
+          chmod +x Lofiga/native-android/gradlew
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > Lofiga/native-android/local.properties
+
+      - name: Build Debug APK
+        run: |
+          cd Lofiga/native-android
+          ./gradlew :app:assembleDevDebug
+
+      - name: Upload Debug APK
         uses: actions/upload-artifact@v4
         with:
           name: app-debug.apk
-          path: Lofiga/native-android/app/build/outputs/apk/debug/app-debug.apk
+          path: Lofiga/native-android/app/build/outputs/apk/dev/debug/app-dev-debug.apk

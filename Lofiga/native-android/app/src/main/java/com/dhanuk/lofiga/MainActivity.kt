@@ -61,8 +61,15 @@ class MainActivity : ComponentActivity() {
     ) { permissions ->
         val allGranted = permissions.values.all { it }
         if (!allGranted && hasRequestedPermissions) {
-            // Permissions denied - show toast but don't annoy
             Toast.makeText(this, "Some features may not work without storage access", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private val notificationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (!granted) {
+            Toast.makeText(this, "Notification permission denied", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -89,6 +96,12 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun requestNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+
     private fun checkAndRequestPermissions() {
         val hasPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_AUDIO) == PackageManager.PERMISSION_GRANTED
@@ -97,11 +110,9 @@ class MainActivity : ComponentActivity() {
         }
 
         if (!hasPermission) {
-            // Show rationale first time, then request
             if (!hasRequestedPermissions) {
                 showPermissionRationale = true
             } else {
-                // User denied before, just request again
                 requestAudioPermissions()
             }
         }
@@ -119,6 +130,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         checkAndRequestPermissions()
+        requestNotificationPermission()
 
         setContent {
             val viewModel: MainViewModel = viewModel()
@@ -133,7 +145,6 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                // Permission rationale dialog
                 if (showPermissionRationale) {
                     PermissionRationaleDialog(
                         onAccept = { proceedWithPermissions() },

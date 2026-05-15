@@ -26,20 +26,22 @@
 
 # Keep model classes for serialization
 -keep class com.dhanuk.lofiga.model.** { *; }
--keep class com.dhanuk/lofiga/data.** { *; }
-
-# Firebase Crashlytics
--keep class com.google.firebase.crashlytics.** { *; }
-
-# Audio effects (android.media.audiofx)
--keep class android.media.audiofx.** { *; }
--dontwarn android.media.audiofx.**
-
-# MediaCodec / MediaExtractor / MediaMuxer
--keep class android.media.MediaCodec { *; }
--keep class android.media.MediaExtractor { *; }
--keep class android.media.MediaMuxer { *; }
--keep class android.media.MediaFormat { *; }
+-keep class com.dhanuk.lofiga.data.** { *; }
 
 # ExportService reflection-safe
 -keep class com.dhanuk.lofiga.export.** { *; }
+
+# AdMob
+-keep public class com.google.android.gms.ads.** { public *; }
+-keep public class com.google.ads.** { public *; }
+-dontwarn com.google.android.gms.ads.**
+
+# User Messaging Platform (Consent)
+-keep class com.google.android.ump.** { *; }
+-dontwarn com.google.android.ump.**
+
+# OneSignal
+-keep class com.onesignal.** { *; }
+-dontwarn com.onesignal.**
+-keep class com.onesignal.OneSignal$NotificationReceivedHandler
+-keep class com.onesignal.OneSignal$NotificationOpenedHandler
