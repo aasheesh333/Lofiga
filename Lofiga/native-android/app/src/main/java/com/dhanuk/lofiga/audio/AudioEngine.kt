@@ -323,15 +323,10 @@ try {
     fun release() {
         positionJob?.cancel()
         scope.cancel()
-                    releaseMainPlayer()
-                }
-            }
-        }
-        try {
-            if (!player.isPlaying) {
-                player.start()
-                _isPlaying.value = true
-                
+        releaseMainPlayer()
+        releaseAtmospherePlayers()
+        releaseEffects()
+    }
     // --- Speed & Pitch (INDEPENDENT) ---
 
     fun setSpeedAndPitch(tempo: Float, semitones: Float) {
