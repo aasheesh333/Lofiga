@@ -305,6 +305,7 @@ object ExportService {
                         } else {
                             decoder.queueInputBuffer(inIdx, 0, sampleSize, extractor.sampleTime, 0)
                             totalInputBytes += sampleSize
+                            extractor.advance()
                             if (inputDuration > 0) {
                                 val progress = (totalInputBytes.toFloat() / (inputDuration * 1000)).coerceIn(0f, 0.3f)
                                 onProgress?.invoke(progress)
