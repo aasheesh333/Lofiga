@@ -1,5 +1,6 @@
 package com.dhanuk.lofiga.ui.screens
 
+import android.app.Activity
 import android.content.Intent
 import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
@@ -125,7 +126,7 @@ fun PlayerScreen(
                 }
             }
             viewModel.clearExportedFilePath()
-            AdManager.showInterstitial(context)
+            AdManager.showInterstitial(context as Activity)
         }
     }
 

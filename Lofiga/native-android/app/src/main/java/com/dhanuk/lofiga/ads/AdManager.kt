@@ -42,19 +42,18 @@ object AdManager {
         MobileAds.initialize(context) {
             Log.d(TAG, "AdMob SDK initialized")
         }
-        requestConsent(context)
     }
 
-    private fun requestConsent(context: Context) {
+    fun requestConsent(activity: Activity) {
         val params = ConsentRequestParameters.Builder().build()
-        val consentInformation = UserMessagingPlatform.getConsentInformation(context)
+        val consentInformation = UserMessagingPlatform.getConsentInformation(activity)
 
         consentInformation.requestConsentInfoUpdate(
-            context as Activity,
+            activity,
             params,
             {
                 if (consentInformation.isConsentFormAvailable) {
-                    loadAndShowConsentForm(context)
+                    loadAndShowConsentForm(activity)
                 } else {
                     _isConsentObtained.value = true
                 }
@@ -66,13 +65,13 @@ object AdManager {
         )
     }
 
-    private fun loadAndShowConsentForm(context: Context) {
-        UserMessagingPlatform.loadConsentForm(context,
+    private fun loadAndShowConsentForm(activity: Activity) {
+        UserMessagingPlatform.loadConsentForm(activity,
             { consentForm ->
-                val consentInformation = UserMessagingPlatform.getConsentInformation(context)
+                val consentInformation = UserMessagingPlatform.getConsentInformation(activity)
                 if (consentInformation.consentStatus == ConsentInformation.ConsentStatus.REQUIRED) {
-                    consentForm.show(context as Activity) {
-                        loadAndShowConsentForm(context)
+                    consentForm.show(activity) {
+                        loadAndShowConsentForm(activity)
                     }
                 } else {
                     _isConsentObtained.value = true
@@ -119,7 +118,7 @@ object AdManager {
         )
     }
 
-    fun showInterstitial(context: Context, onDismissed: (() -> Unit)? = null) {
+    fun showInterstitial(activity: Activity, onDismissed: (() -> Unit)? = null) {
         if (_isAdFree.value) {
             onDismissed?.invoke()
             return
@@ -134,11 +133,10 @@ object AdManager {
 
         if (interstitialAd != null) {
             lastInterstitialTime = now
-            interstitialAd?.show(context as Activity)
+            interstitialAd?.show(activity)
             interstitialAd?.fullScreenContentCallback = object : FullScreenContentCallback() {
                 override fun onAdDismissedFullScreenContent() {
                     interstitialAd = null
-                    loadInterstitial(context)
                     onDismissed?.invoke()
                 }
                 override fun onAdFailedToShowFullScreenContent(error: AdError) {
@@ -171,18 +169,17 @@ object AdManager {
     }
 
     fun showRewarded(
-        context: Context,
+        activity: Activity,
         onRewarded: () -> Unit,
         onDismissed: () -> Unit
     ) {
         if (rewardedAd != null) {
-            rewardedAd?.show(context as Activity) {
+            rewardedAd?.show(activity) {
                 onRewarded()
             }
             rewardedAd?.fullScreenContentCallback = object : FullScreenContentCallback() {
                 override fun onAdDismissedFullScreenContent() {
                     rewardedAd = null
-                    loadRewarded(context)
                     onDismissed()
                 }
                 override fun onAdFailedToShowFullScreenContent(error: AdError) {

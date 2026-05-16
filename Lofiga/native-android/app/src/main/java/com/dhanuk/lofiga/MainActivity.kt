@@ -36,6 +36,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.dhanuk.lofiga.ads.AdManager
 import com.dhanuk.lofiga.model.SavedConfig
 import com.dhanuk.lofiga.ui.LofigaMainApp
 import com.dhanuk.lofiga.ui.MainViewModel
@@ -115,6 +116,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        AdManager.requestConsent(this)
         checkAndRequestPermissions()
 
         setContent {
