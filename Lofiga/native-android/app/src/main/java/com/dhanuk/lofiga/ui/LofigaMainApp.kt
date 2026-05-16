@@ -1,14 +1,11 @@
 package com.dhanuk.lofiga.ui
 
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import com.dhanuk.lofiga.ads.AdManager
-import com.dhanuk.lofiga.ads.BannerAd
 import com.dhanuk.lofiga.ui.components.LofigaNavigationBar
 import com.dhanuk.lofiga.ui.screens.*
 
@@ -18,7 +15,6 @@ fun LofigaMainApp(
 ) {
     var selectedIndex by remember { mutableStateOf(0) }
     val context = LocalContext.current
-    val isAdFree by AdManager.isAdFree.collectAsState()
 
     LaunchedEffect(Unit) {
         AdManager.loadInterstitial(context)
@@ -27,20 +23,12 @@ fun LofigaMainApp(
 
     Scaffold(
         bottomBar = {
-            Column {
-                if (!isAdFree) {
-                    BannerAd(
-                        modifier = Modifier.fillMaxWidth(),
-                        context = context
-                    )
+            LofigaNavigationBar(
+                selectedIndex = selectedIndex,
+                onItemSelected = { index ->
+                    selectedIndex = index
                 }
-                LofigaNavigationBar(
-                    selectedIndex = selectedIndex,
-                    onItemSelected = { index ->
-                        selectedIndex = index
-                    }
-                )
-            }
+            )
         }
     ) { paddingValues ->
         when (selectedIndex) {

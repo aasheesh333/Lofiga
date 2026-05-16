@@ -161,15 +161,7 @@ try {
         setOnPreparedListener { mediaPlayer ->
             val dur = mediaPlayer.duration.toLong()
             _duration.value = dur
-            initEffects(mediaPlayer.audioSessionId)
-            // Start FFT in background with low priority - use a dedicated new thread
-            // to avoid blocking IO dispatcher
-            fftJob = scope.launch(Dispatchers.Default) {
-                // Use a much faster, lower-resolution FFT
-                precomputeFFTFast(context, uri)
-            }
-            // Start an animated waveform placeholder immediately so user sees something
-            startAnimatingWaveform()
+            // Start audio immediately — don't wait for effects to init
             if (autoPlayOnPrepared) {
                 try {
                     mediaPlayer.start()
@@ -177,13 +169,26 @@ try {
                     _position.value = mediaPlayer.currentPosition.toLong()
                     startPositionPolling()
                     syncAtmospheres()
-                    // Apply speed & pitch AFTER playback has started
                     applyStoredPlaybackParams()
                     android.util.Log.i("AudioEngine", "Auto-play started, position: ${_position.value}")
                 } catch (e: Exception) {
                     android.util.Log.e("AudioEngine", "Auto-play failed: ${e.message}")
                 }
             }
+            // Init effects asynchronously so audio starts immediately
+            scope.launch(Dispatchers.Default) {
+                try {
+                    initEffects(mediaPlayer.audioSessionId)
+                } catch (e: Exception) {
+                    android.util.Log.e("AudioEngine", "Effects init failed: ${e.message}")
+                }
+            }
+            // Start FFT in background
+            fftJob = scope.launch(Dispatchers.Default) {
+                precomputeFFTFast(context, uri)
+            }
+            // Start animated waveform placeholder immediately
+            startAnimatingWaveform()
             android.util.Log.i("AudioEngine", "Track loaded, duration: ${dur}ms")
         }
         prepareAsync()
@@ -230,11 +235,7 @@ try {
         setOnPreparedListener { mediaPlayer ->
             val dur = mediaPlayer.duration.toLong()
             _duration.value = dur
-            initEffects(mediaPlayer.audioSessionId)
-            fftJob = scope.launch(Dispatchers.Default) {
-                precomputeFFTFast(filePath)
-            }
-            startAnimatingWaveform()
+            // Start audio immediately — don't wait for effects to init
             if (autoPlayOnPrepared) {
                 try {
                     mediaPlayer.start()
@@ -248,6 +249,20 @@ try {
                     android.util.Log.e("AudioEngine", "Auto-play failed: ${e.message}")
                 }
             }
+            // Init effects asynchronously
+            scope.launch(Dispatchers.Default) {
+                try {
+                    initEffects(mediaPlayer.audioSessionId)
+                } catch (e: Exception) {
+                    android.util.Log.e("AudioEngine", "Effects init failed: ${e.message}")
+                }
+            }
+            // Start FFT in background
+            fftJob = scope.launch(Dispatchers.Default) {
+                precomputeFFTFast(filePath)
+            }
+            // Start animated waveform placeholder immediately
+            startAnimatingWaveform()
             android.util.Log.i("AudioEngine", "File loaded, duration: ${dur}ms")
         }
         prepareAsync()

@@ -59,7 +59,8 @@ fun LofigaNavigationBar(
         modifier = modifier,
         containerColor = colors.surface,
         contentColor = colors.textPrimary,
-        tonalElevation = 0.dp
+        tonalElevation = 0.dp,
+        windowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0)
     ) {
         listOf("Browse", "Player", "Exports", "Settings").forEachIndexed { index, label ->
             NavigationBarItem(
@@ -74,21 +75,13 @@ fun LofigaNavigationBar(
                             3 -> Icons.Outlined.Settings
                             else -> Icons.Outlined.MusicNote
                         },
-                        contentDescription = label
-                    )
-                },
-                label = {
-                    Text(
-                        text = label,
-                        fontSize = 11.sp,
-                        fontWeight = if (selectedIndex == index) FontWeight.Bold else FontWeight.Normal
+                        contentDescription = label,
+                        modifier = Modifier.size(22.dp)
                     )
                 },
                 colors = NavigationBarItemDefaults.colors(
                     selectedIconColor = Purple500,
-                    selectedTextColor = Purple500,
                     unselectedIconColor = colors.textTertiary,
-                    unselectedTextColor = colors.textTertiary,
                     indicatorColor = Purple500.copy(alpha = 0.15f)
                 )
             )
