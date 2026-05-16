@@ -325,11 +325,7 @@ class AudioEngine(private val context: Context) {
 
     fun seekTo(millis: Long) {
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                mainPlayer?.seekTo(millis)
-            } else {
-                mainPlayer?.seekTo(millis.coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
-            }
+            mainPlayer?.seekTo(millis.coerceIn(0L, Int.MAX_VALUE.toLong()).toInt())
             _position.value = millis
         } catch (e: Exception) {
             Log.e("AudioEngine", "Seek failed: ${e.message}", e)
