@@ -156,7 +156,7 @@ object ExportService {
         var sawEOS = false
 
         val totalFrames = pcm.size / channels
-        val framesPerChunk = 1024
+        val framesPerChunk = 8192
         var frameOffset = 0
 
         while (!sawEOS && !cancelFlag.get()) {
@@ -629,7 +629,7 @@ object ExportService {
         if (preset.rainVolume <= 0.01f && preset.vinylVolume <= 0.01f &&
             preset.windVolume <= 0.01f && preset.tapeVolume <= 0.01f) return pcm
 
-        data class AtmosLayer(val pcm: ShortArray, val volume: Float)
+        data class AtmosLayer(val pcm: ShortArray, val scaledVolume: Int)
 
         val activeLayers = mutableListOf<AtmosLayer>()
         listOf("rain" to preset.rainVolume, "vinyl" to preset.vinylVolume,
@@ -637,30 +637,25 @@ object ExportService {
             .filter { it.second > 0.01f }
             .forEach { (key, vol) ->
                 readAtmospherePcm(context, key, sampleRate, pcm.size)?.let { atmosPcm ->
-                    activeLayers.add(AtmosLayer(atmosPcm, vol))
+                    val scaledVol = (vol * 0.8f * 32768f).toInt()
+                    activeLayers.add(AtmosLayer(atmosPcm, scaledVol))
                 }
             }
 
         if (activeLayers.isEmpty()) return pcm
 
-        // Convert to int array for mixing to avoid overflow, then clip back
-        val output = IntArray(pcm.size)
-        // First copy original PCM to output
-        for (i in pcm.indices) {
-            output[i] = pcm[i].toInt()
-        }
-        // Mix each atmosphere layer
-        for (layer in activeLayers) {
-            val vol = (layer.volume * 0.8f * 32768f).toInt()
-            val limit = minOf(pcm.size, layer.pcm.size)
-            for (i in 0 until limit) {
-                output[i] += (layer.pcm[i].toInt() * vol) shr 15
-            }
-        }
-        // Clip and convert back to shorts
+        // Single pass: mix all layers + clip in one loop
         val result = ShortArray(pcm.size)
-        for (i in output.indices) {
-            result[i] = output[i].coerceIn(-32768, 32767).toShort()
+        val minLayerSize = activeLayers.minOfOrNull { it.pcm.size } ?: 0
+
+        for (i in result.indices) {
+            var sample = pcm[i].toInt()
+            if (i < minLayerSize) {
+                for (layer in activeLayers) {
+                    sample += (layer.pcm[i].toInt() * layer.scaledVolume) shr 15
+                }
+            }
+            result[i] = (sample + Short.MIN_VALUE).coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
         }
         return result
     }

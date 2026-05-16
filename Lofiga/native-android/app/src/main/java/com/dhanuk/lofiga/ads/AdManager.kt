@@ -24,7 +24,7 @@ import kotlinx.coroutines.flow.asStateFlow
 object AdManager {
 
     private const val TAG = "AdManager"
-    private const val MIN_INTERSTITIAL_INTERVAL = 90000L
+    private const val MIN_INTERSTITIAL_INTERVAL = 60000L
     private const val MAX_FAILED_LOADS = 3
 
     private var interstitialAd: InterstitialAd? = null
