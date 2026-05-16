@@ -159,7 +159,7 @@ class AudioEngine(private val context: Context) {
     fun loadTrack(uri: Uri, autoPlay: Boolean = false): Boolean {
         return loadTrackInternal(
             autoPlay = autoPlay,
-            setDataSource = { player -> player.setDataSource(context, uri) },
+            setupSource = { player -> player.setDataSource(context, uri) },
             initFft = { precomputeFFTFast(context, uri) },
             errorPrefix = "Failed to load track"
         )
@@ -168,7 +168,7 @@ class AudioEngine(private val context: Context) {
     fun loadTrackFromFile(filePath: String, autoPlay: Boolean = false): Boolean {
         return loadTrackInternal(
             autoPlay = autoPlay,
-            setDataSource = { player -> player.setDataSource(filePath) },
+            setupSource = { player -> player.setDataSource(filePath) },
             initFft = { precomputeFFTFast(filePath) },
             errorPrefix = "Failed to load file"
         )
@@ -176,7 +176,7 @@ class AudioEngine(private val context: Context) {
 
     private fun loadTrackInternal(
         autoPlay: Boolean,
-        setDataSource: (MediaPlayer) -> Unit,
+        setupSource: (MediaPlayer) -> Unit,
         initFft: () -> Unit,
         errorPrefix: String
     ): Boolean {
@@ -204,7 +204,7 @@ class AudioEngine(private val context: Context) {
                         .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
                         .build()
                 )
-                setDataSource(this)
+                setupSource(this)
                 setOnPreparedListener { mediaPlayer ->
                     val dur = mediaPlayer.duration.toLong()
                     _duration.value = dur
