@@ -4,6 +4,11 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
   <!-- Melting musical note - purple to cyan gradient (scaled to fit adaptive icon safe area) -->
+  <group
+      android:translateX="20.25"
+      android:translateY="20.25"
+      android:scaleX="0.625"
+      android:scaleY="0.625">
   <!-- Background circle (now smaller, within safe zone) -->
   <path
       android:fillColor="#191022"
@@ -36,4 +41,5 @@
   <path
       android:fillColor="#3DF5E6"
       android:pathData="M52,80 C50,84 48,90 46,94 C44,98 46,100 48,100 C50,100 52,96 54,90 C56,84 56,82 54,80Z"/>
+  </group>
 </vector>
