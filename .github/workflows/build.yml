@@ -29,7 +29,7 @@ jobs:
       VERSION_NAME: ${{ secrets.VERSION_NAME }}
       KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
       KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-      KEY_ALIAS: "lofiga"
+      KEY_ALIAS: "mykey"
 
     steps:
       - name: Checkout Code
