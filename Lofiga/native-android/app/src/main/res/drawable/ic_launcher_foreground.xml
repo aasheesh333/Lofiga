@@ -1,44 +1,38 @@
-<?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-android:width="108dp"
-android:height="108dp"
-android:viewportWidth="108"
-android:viewportHeight="108">
-<!-- Background circle -->
-<path
-android:fillColor="#FFFFFFFF"
-android:pathData="M54,54m-40,0a40,40 0,1 1,80 0a40,40 0,1 1,-80 0"/>
-<!-- Vinyl record -->
-<path
-android:fillColor="#FF000000"
-android:pathData="M54,54m-30,0a30,30 0,1 1,60 0a30,30 0,1 1,-60 0"/>
-<!-- Inner grooves -->
-<path
-android:fillColor="@android:color/transparent"
-android:strokeColor="#FF000000"
-android:strokeWidth="0.5"
-android:pathData="M54,54m-25,0a25,25 0,1 1,50 0a25,25 0,1 1,-50 0"/>
-<path
-android:fillColor="@android:color/transparent"
-android:strokeColor="#FF000000"
-android:strokeWidth="0.5"
-android:pathData="M54,54m-20,0a20,20 0,1 1,40 0a20,20 0,1 1,-40 0"/>
-<path
-android:fillColor="@android:color/transparent"
-android:strokeColor="#FF000000"
-android:strokeWidth="0.5"
-android:pathData="M54,54m-15,0a15,15 0,1 1,30 0a15,15 0,1 1,-30 0"/>
-<!-- Black label -->
-<path
-android:fillColor="#FF000000"
-android:pathData="M54,54m-12,0a12,12 0,1 1,24 0a12,12 0,1 1,-24 0"/>
-<!-- Center hole -->
-<path
-android:fillColor="#FF000000"
-android:pathData="M54,54m-3,0a3,3 0,1 1,6 0a3,3 0,1 1,-6 0"/>
-<!-- Play triangle -->
-<path
-android:fillColor="#FFFFFFFF"
-android:pathData="M51,48l8,6l-8,6z"
-android:strokeWidth="0"/>
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+  <!-- Melting musical note - purple to cyan gradient -->
+  <path
+      android:fillColor="#191022"
+      android:pathData="M54,54m-40,0a40,40 0,1 1,80 0a40,40 0,1 1,-80 0"/>
+  <!-- Note head -->
+  <path
+      android:fillColor="#993DF5"
+      android:pathData="M48,52 C42,48 36,52 34,56 C32,60 34,64 40,64 C46,64 50,60 52,56 C54,52 52,50 48,52Z"/>
+  <!-- Stem -->
+  <path
+      android:fillColor="#993DF5"
+      android:pathData="M50,52 L50,20 C50,18 52,18 54,18 L56,18 C58,18 58,20 58,20 L58,52 C58,54 56,54 54,54 L52,54 C50,54 50,52 50,52Z"/>
+  <!-- Flag -->
+  <path
+      android:fillColor="#993DF5"
+      android:pathData="M58,20 C68,20 80,28 82,40 C84,48 78,56 72,58 C70,59 68,57 68,55 L68,30 C68,24 64,20 58,20Z"/>
+  <!-- Melting drips - gradient to cyan -->
+  <path
+      android:fillColor="#6B8BF5"
+      android:pathData="M40,64 C38,68 36,72 34,74 C32,76 34,78 36,78 C38,78 40,76 42,72 C44,68 44,66 42,64Z"/>
+  <path
+      android:fillColor="#5E9AF5"
+      android:pathData="M48,66 C46,70 44,76 42,80 C40,84 42,88 44,88 C46,88 48,84 50,78 C52,72 52,68 50,66Z"/>
+  <path
+      android:fillColor="#4AABF5"
+      android:pathData="M56,64 C54,68 52,72 50,74 C48,76 50,78 52,78 C54,78 56,76 58,72 C60,68 60,66 58,64Z"/>
+  <path
+      android:fillColor="#3DBBF5"
+      android:pathData="M38,78 C36,82 34,86 32,88 C30,90 32,92 34,92 C36,92 38,90 40,86 C42,82 42,80 40,78Z"/>
+  <path
+      android:fillColor="#3DF5E6"
+      android:pathData="M52,82 C50,86 48,92 46,96 C44,100 46,102 48,102 C50,102 52,98 54,92 C56,86 56,84 54,82Z"/>
 </vector>

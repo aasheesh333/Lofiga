@@ -6,23 +6,28 @@ plugins {
 }
 
 android {
-    namespace = "com.dhanuk.lofiga"
+    namespace = System.getenv("PACKAGE_NAME") ?: project.findProperty("PACKAGE_NAME")?.toString() ?: "com.dhanuk.lofiga"
     compileSdk = 35
 
+    val admobAppId = System.getenv("ADMOB_APP_ID") ?: project.findProperty("ADMOB_APP_ID")?.toString() ?: "ca-app-pub-3940256099942544~3347511713"
+    val admobBannerId = System.getenv("ADMOB_BANNER_ID") ?: project.findProperty("ADMOB_BANNER_ID")?.toString() ?: "ca-app-pub-3940256099942544/6300978111"
+    val admobInterstitialId = System.getenv("ADMOB_INTERSTITIAL_ID") ?: project.findProperty("ADMOB_INTERSTITIAL_ID")?.toString() ?: "ca-app-pub-3940256099942544/1033173712"
+    val admobRewardedId = System.getenv("ADMOB_REWARDED_ID") ?: project.findProperty("ADMOB_REWARDED_ID")?.toString() ?: "ca-app-pub-3940256099942544/5224354917"
+
     defaultConfig {
-        applicationId = "com.dhanuk.lofiga"
+        applicationId = namespace
         minSdk = 26
         targetSdk = 35
-        versionCode = project.findProperty("VERSION_CODE")?.toString()?.toIntOrNull() ?: 2
-        versionName = project.findProperty("VERSION_NAME")?.toString() ?: "2.0.0"
+        versionCode = System.getenv("VERSION_CODE")?.toIntOrNull() ?: project.findProperty("VERSION_CODE")?.toString()?.toIntOrNull() ?: 2
+        versionName = System.getenv("VERSION_NAME") ?: project.findProperty("VERSION_NAME")?.toString() ?: "2.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        manifestPlaceholders["ADMOB_APP_ID"] = "ca-app-pub-3940256099942544~3347511713"
-        buildConfigField("String", "ADMOB_APP_ID", "\"ca-app-pub-3940256099942544~3347511713\"")
-        buildConfigField("String", "ADMOB_BANNER_ID", "\"ca-app-pub-3940256099942544/6300978111\"")
-        buildConfigField("String", "ADMOB_INTERSTITIAL_ID", "\"ca-app-pub-3940256099942544/1033173712\"")
-        buildConfigField("String", "ADMOB_REWARDED_ID", "\"ca-app-pub-3940256099942544/5224354917\"")
+        manifestPlaceholders["ADMOB_APP_ID"] = admobAppId
+        buildConfigField("String", "ADMOB_APP_ID", "\"$admobAppId\"")
+        buildConfigField("String", "ADMOB_BANNER_ID", "\"$admobBannerId\"")
+        buildConfigField("String", "ADMOB_INTERSTITIAL_ID", "\"$admobInterstitialId\"")
+        buildConfigField("String", "ADMOB_REWARDED_ID", "\"$admobRewardedId\"")
     }
 
     signingConfigs {
@@ -32,11 +37,22 @@ android {
             keyAlias = "demo_key"
             keyPassword = "android"
         }
+        create("release") {
+            val keystorePath = System.getenv("KEYSTORE_PATH") ?: project.findProperty("KEYSTORE_PATH")?.toString()
+            if (!keystorePath.isNullOrEmpty()) {
+                storeFile = file(keystorePath)
+            } else {
+                storeFile = file("demo.keystore")
+            }
+            storePassword = System.getenv("KEYSTORE_PASSWORD") ?: project.findProperty("KEYSTORE_PASSWORD")?.toString() ?: "android"
+            keyAlias = System.getenv("KEY_ALIAS") ?: project.findProperty("KEY_ALIAS")?.toString() ?: "demo_key"
+            keyPassword = System.getenv("KEY_PASSWORD") ?: project.findProperty("KEY_PASSWORD")?.toString() ?: "android"
+        }
     }
 
     buildTypes {
         release {
-            signingConfig = signingConfigs.getByName("demo")
+            signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(

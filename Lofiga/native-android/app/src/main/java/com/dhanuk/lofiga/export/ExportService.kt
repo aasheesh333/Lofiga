@@ -13,11 +13,27 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import android.util.Log
+import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 
 object ExportService {
 
-    private val isCancelled = AtomicBoolean(false)
+    private val activeExports = ConcurrentHashMap<UUID, AtomicBoolean>()
+
+    private const val MAX_CACHE_ENTRIES = 4
+
+    // LRU cache for atmosphere PCM data - bounded to prevent memory leaks
+    private object AtmosphereCache {
+        private val cache = java.util.LinkedHashMap<String, ShortArray?>((MAX_CACHE_ENTRIES + 1).toFloat(), 0.75f, true) { _, eldest ->
+            cache.size > MAX_CACHE_ENTRIES
+        }
+
+        @Synchronized fun get(key: String): ShortArray? = cache[key]
+        @Synchronized fun put(key: String, value: ShortArray) { cache[key] = value }
+        @Synchronized fun clear() { cache.clear() }
+    }
 
     private val SUPPORTED_FORMATS = listOf("m4a", "wav")
     private val SUPPORTED_BITRATES = listOf("128k", "192k", "256k", "320k")
@@ -25,7 +41,7 @@ object ExportService {
 
     // Cache for atmosphere PCM data to avoid re-reading WAV files on every export
     // Key format: "{name}_{sampleRate}" e.g. "rain_44100"
-    private val atmospherePcmCache = mutableMapOf<String, ShortArray?>()
+    // Uses LRU cache with bounded size (see AtmosphereCache above)
 
     suspend fun exportTrack(
         context: Context,
@@ -38,7 +54,9 @@ object ExportService {
         outputDir: String? = null,
         onProgress: ((Float) -> Unit)? = null
     ): String? = withContext(Dispatchers.IO) {
-        isCancelled.set(false)
+        val exportId = UUID.randomUUID()
+        val cancelFlag = AtomicBoolean(false)
+        activeExports[exportId] = cancelFlag
 
         val cleanName = fileName.substringBeforeLast(".").replace(Regex("[\\\\/:*?\"<>|]"), "_")
         val musicDir = context.getExternalFilesDir(Environment.DIRECTORY_MUSIC)
@@ -59,9 +77,14 @@ object ExportService {
             }
 
             if (format == "wav") {
-                exportAsWav(context, sourceUri, preset, outputFile, onProgress)
+                exportAsWav(context, sourceUri, preset, outputFile, cancelFlag, onProgress)
             } else {
-                exportWithMediaCodec(context, sourceUri, preset, outputFile, format, bitrate, onProgress)
+                exportWithMediaCodec(context, sourceUri, preset, outputFile, format, bitrate, cancelFlag, onProgress)
+            }
+
+            if (cancelFlag.get()) {
+                outputFile.delete()
+                return@withContext null
             }
 
             if (outputFile.exists()) {
@@ -77,15 +100,13 @@ object ExportService {
                 }
             }
 
-            if (isCancelled.get()) {
-                outputFile.delete()
-                return@withContext null
-            }
-
             return@withContext outputFile.absolutePath
         } catch (e: Exception) {
+            Log.e("ExportService", "Export failed: ${e.message}", e)
             if (outputFile.exists()) outputFile.delete()
             throw e
+        } finally {
+            activeExports.remove(exportId)
         }
     }
 
@@ -96,14 +117,15 @@ object ExportService {
         outputFile: File,
         format: String,
         bitrate: String,
+        cancelFlag: AtomicBoolean,
         onProgress: ((Float) -> Unit)?
     ) {
-        val pcmShorts = collectAndProcessPcm(context, sourceUri, preset, onProgress)
-        if (pcmShorts == null || pcmShorts.isEmpty() || isCancelled.get()) {
-            if (!isCancelled.get()) onProgress?.invoke(1.0f)
+        val pcmShorts = collectAndProcessPcm(context, sourceUri, preset, cancelFlag, onProgress)
+        if (pcmShorts == null || pcmShorts.isEmpty() || cancelFlag.get()) {
+            if (!cancelFlag.get()) onProgress?.invoke(1.0f)
             return
         }
-        encodePcmToAac(outputFile, pcmShorts, 44100, 2, bitrate, onProgress)
+        encodePcmToAac(outputFile, pcmShorts, 44100, 2, bitrate, cancelFlag, onProgress)
     }
 
     private fun encodePcmToAac(
@@ -112,6 +134,7 @@ object ExportService {
         sampleRate: Int,
         channels: Int,
         bitrate: String,
+        cancelFlag: AtomicBoolean,
         onProgress: ((Float) -> Unit)?
     ) {
         val mime = "audio/mp4a-latm"
@@ -135,7 +158,7 @@ object ExportService {
         val framesPerChunk = 1024
         var frameOffset = 0
 
-        while (!sawEOS && !isCancelled.get()) {
+        while (!sawEOS && !cancelFlag.get()) {
             val inputIdx = encoder.dequeueInputBuffer(10000)
             if (inputIdx >= 0) {
                 val inBuf = encoder.getInputBuffer(inputIdx)!!
@@ -187,7 +210,7 @@ object ExportService {
         }
 
         // Drain remaining output buffers after EOS
-        while (!isCancelled.get()) {
+        while (!cancelFlag.get()) {
             val bufInfo = MediaCodec.BufferInfo()
             val outIdx = encoder.dequeueOutputBuffer(bufInfo, 5000)
             if (outIdx < 0) break
@@ -215,13 +238,14 @@ object ExportService {
         sourceUri: Uri,
         preset: PresetValues,
         outputFile: File,
+        cancelFlag: AtomicBoolean,
         onProgress: ((Float) -> Unit)?
     ) {
-        val pcmShorts = collectAndProcessPcm(context, sourceUri, preset, onProgress)
-        if (pcmShorts != null && pcmShorts.isNotEmpty() && !isCancelled.get()) {
+        val pcmShorts = collectAndProcessPcm(context, sourceUri, preset, cancelFlag, onProgress)
+        if (pcmShorts != null && pcmShorts.isNotEmpty() && !cancelFlag.get()) {
             writeWavFile(outputFile, pcmShorts, 44100, 2)
             onProgress?.invoke(1.0f)
-        } else if (!isCancelled.get()) {
+        } else if (!cancelFlag.get()) {
             onProgress?.invoke(1.0f)
         }
     }
@@ -256,6 +280,7 @@ object ExportService {
         context: Context,
         sourceUri: Uri,
         preset: PresetValues,
+        cancelFlag: AtomicBoolean,
         onProgress: ((Float) -> Unit)?
     ): ShortArray? {
         val extractor = MediaExtractor()
@@ -292,7 +317,7 @@ object ExportService {
             var wasTruncated = false
 
             while (!sawOutputEOS && !accumulator.isFull) {
-                if (isCancelled.get()) { decoder.stop(); decoder.release(); extractor.release(); return null }
+                if (cancelFlag.get()) { decoder.stop(); decoder.release(); extractor.release(); return null }
 
                 if (!sawInputEOS) {
                     val inIdx = decoder.dequeueInputBuffer(10000)
@@ -378,7 +403,7 @@ object ExportService {
                 pcmShorts
             }
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e("ExportService", "PCM processing failed: ${e.message}", e)
             null
         } finally {
             try { decoder?.stop(); decoder?.release() } catch (_: Exception) {}
@@ -642,9 +667,9 @@ object ExportService {
     private fun readAtmospherePcm(context: Context, key: String, targetRate: Int, targetLength: Int): ShortArray? {
         val assetPath = getAtmosphereAssetPath(key) ?: return null
 
-        // Check cache first - use a common base for all requests to minimize cache misses
+        // Check LRU cache first
         val cacheKey = "${key}_${targetRate}"
-        val cached = atmospherePcmCache[cacheKey]
+        val cached = AtmosphereCache.get(cacheKey)
         if (cached != null) {
             val result = ShortArray(targetLength)
             var pos = 0
@@ -718,7 +743,7 @@ object ExportService {
             if (fileRate != targetRate) pcm = resamplePcm(pcm, fileRate, targetRate, 2)
 
             // Cache the processed atmosphere at target rate for next time
-            atmospherePcmCache[cacheKey] = pcm.copyOf()
+            AtmosphereCache.put(cacheKey, pcm)
 
             val result = ShortArray(targetLength)
             var pos = 0
@@ -729,7 +754,10 @@ object ExportService {
                 pos += len
             }
             result
-        } catch (_: Exception) { null }
+        } catch (e: Exception) {
+            Log.e("ExportService", "Failed to read atmosphere PCM for '$key': ${e.message}", e)
+            null
+        }
     }
 
     private fun getAtmosphereAssetPath(key: String): String? = when (key) {
@@ -756,7 +784,12 @@ object ExportService {
         )
     }
 
-    fun cancelExport() {
-        isCancelled.set(true)
+    fun cancelExport(exportId: UUID? = null) {
+        if (exportId != null) {
+            activeExports[exportId]?.set(true)
+        } else {
+            // Cancel all active exports
+            activeExports.values.forEach { it.set(true) }
+        }
     }
 }

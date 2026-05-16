@@ -22,11 +22,14 @@ jobs:
       ADMOB_BANNER_ID: ${{ secrets.ADMOB_BANNER_ID }}
       ADMOB_INTERSTITIAL_ID: ${{ secrets.ADMOB_INTERSTITIAL_ID }}
       ADMOB_REWARDED_ID: ${{ secrets.ADMOB_REWARDED_ID }}
+      ONESIGNAL_API_KEY: ${{ secrets.ONESIGNAL_API_KEY }}
       ONESIGNAL_APP_ID: ${{ secrets.ONESIGNAL_APP_ID }}
+      PACKAGE_NAME: ${{ secrets.PACKAGE_NAME }}
       VERSION_CODE: ${{ secrets.VERSION_CODE }}
       VERSION_NAME: ${{ secrets.VERSION_NAME }}
       KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
       KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+      KEY_ALIAS: "lofiga"
 
     steps:
       - name: Checkout Code
@@ -45,11 +48,9 @@ jobs:
         uses: android-actions/setup-android@v3
 
       - name: Decode Keystore
-        id: decode_keystore
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > $HOME/release.keystore
           echo "KEYSTORE_PATH=$HOME/release.keystore" >> $GITHUB_ENV
-          echo "KEY_ALIAS=lofiga" >> $GITHUB_ENV
 
       - name: Make Gradlew Executable
         run: |
@@ -83,8 +84,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            Lofiga/native-android/app/build/outputs/bundle/prodRelease/app-prod-release.aab
-            Lofiga/native-android/app/build/outputs/apk/prod/release/app-prod-release.apk
+            Lofiga/native-android/app/build/outputs/bundle/release/app-release.aab
+            Lofiga/native-android/app/build/outputs/apk/release/app-release.apk
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

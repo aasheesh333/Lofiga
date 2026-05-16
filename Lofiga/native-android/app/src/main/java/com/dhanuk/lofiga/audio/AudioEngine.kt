@@ -9,6 +9,7 @@ import android.media.MediaFormat
 import android.media.MediaPlayer
 import android.media.PlaybackParams
 import android.net.Uri
+import android.os.Build
 import android.media.audiofx.BassBoost
 import android.media.audiofx.Equalizer
 import android.media.audiofx.PresetReverb
@@ -65,7 +66,8 @@ class AudioEngine(private val context: Context) {
     private var visualAnimSeq = 0L
     private var animatingWaveform = false
 
-    private val audioFocusRequest = AudioManager.OnAudioFocusChangeListener { focusChange ->
+    private var audioFocusRequest: AudioFocusRequest? = null
+    private val focusChangeListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
         when (focusChange) {
             AudioManager.AUDIOFOCUS_LOSS -> {
                 // Permanent focus loss - pause playback
@@ -121,92 +123,62 @@ class AudioEngine(private val context: Context) {
 
     private fun requestAudioFocus(): Boolean {
         val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-        return audioManager.requestAudioFocus(
-            audioFocusRequest,
-            AudioManager.STREAM_MUSIC,
-            AudioManager.AUDIOFOCUS_GAIN
-        ) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+                .setOnAudioFocusChangeListener(focusChangeListener)
+                .setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_MEDIA)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                        .build()
+                )
+                .build()
+            audioFocusRequest = request
+            audioManager.requestAudioFocus(request) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+        } else {
+            @Suppress("DEPRECATION")
+            audioManager.requestAudioFocus(
+                focusChangeListener,
+                AudioManager.STREAM_MUSIC,
+                AudioManager.AUDIOFOCUS_GAIN
+            ) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+        }
     }
 
     private fun abandonAudioFocus() {
         val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-        audioManager.abandonAudioFocus(audioFocusRequest)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            audioFocusRequest?.let { audioManager.abandonAudioFocusRequest(it) }
+        } else {
+            @Suppress("DEPRECATION")
+            audioManager.abandonAudioFocus(focusChangeListener)
+        }
     }
 
     fun loadTrack(uri: Uri, autoPlay: Boolean = false): Boolean {
-        _isPlaying.value = false
-        releaseMainPlayer()
-        releaseEffects()
-        _error.value = null
-        _position.value = 0
-        _duration.value = 0
-        resetWaveformData()
-        fftJob?.cancel()
-        autoPlayOnPrepared = autoPlay
-
-        if (!requestAudioFocus()) {
-            _error.value = "Cannot get audio focus"
-            return false
-        }
-
-try {
-    val player = MediaPlayer().apply {
-        setDataSource(context, uri)
-        setAudioAttributes(
-            AudioAttributes.Builder()
-                .setUsage(AudioAttributes.USAGE_MEDIA)
-                .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                .build()
+        return loadTrackInternal(
+            autoPlay = autoPlay,
+            setDataSource = { player -> player.setDataSource(context, uri) },
+            initFft = { precomputeFFTFast(context, uri) },
+            errorPrefix = "Failed to load track"
         )
-        setOnPreparedListener { mediaPlayer ->
-            val dur = mediaPlayer.duration.toLong()
-            _duration.value = dur
-            // Start audio immediately — don't wait for effects to init
-            if (autoPlayOnPrepared) {
-                try {
-                    mediaPlayer.start()
-                    _isPlaying.value = true
-                    _position.value = mediaPlayer.currentPosition.toLong()
-                    startPositionPolling()
-                    syncAtmospheres()
-                    applyStoredPlaybackParams()
-                    android.util.Log.i("AudioEngine", "Auto-play started, position: ${_position.value}")
-                } catch (e: Exception) {
-                    android.util.Log.e("AudioEngine", "Auto-play failed: ${e.message}")
-                }
-            }
-            // Init effects asynchronously so audio starts immediately
-            scope.launch(Dispatchers.Default) {
-                try {
-                    initEffects(mediaPlayer.audioSessionId)
-                } catch (e: Exception) {
-                    android.util.Log.e("AudioEngine", "Effects init failed: ${e.message}")
-                }
-            }
-            // Start FFT in background
-            fftJob = scope.launch(Dispatchers.Default) {
-                precomputeFFTFast(context, uri)
-            }
-            // Start animated waveform placeholder immediately
-            startAnimatingWaveform()
-            android.util.Log.i("AudioEngine", "Track loaded, duration: ${dur}ms")
-        }
-        prepareAsync()
-    }
-    mainPlayer = player
-    // Store pending params to apply after player starts
-    storedTempo = pendingTempo
-    storedPitch = pendingPitch
-    return true
-} catch (e: Exception) {
-            _error.value = "Failed to load track: ${e.message}"
-            abandonAudioFocus()
-            e.printStackTrace()
-            return false
-        }
     }
 
     fun loadTrackFromFile(filePath: String, autoPlay: Boolean = false): Boolean {
+        return loadTrackInternal(
+            autoPlay = autoPlay,
+            setDataSource = { player -> player.setDataSource(filePath) },
+            initFft = { precomputeFFTFast(filePath) },
+            errorPrefix = "Failed to load file"
+        )
+    }
+
+    private fun loadTrackInternal(
+        autoPlay: Boolean,
+        setDataSource: (MediaPlayer) -> Unit,
+        initFft: () -> Unit,
+        errorPrefix: String
+    ): Boolean {
         _isPlaying.value = false
         releaseMainPlayer()
         releaseEffects()
@@ -223,59 +195,52 @@ try {
             return false
         }
 
-try {
-    val player = MediaPlayer().apply {
-        setDataSource(filePath)
-        setAudioAttributes(
-            AudioAttributes.Builder()
-                .setUsage(AudioAttributes.USAGE_MEDIA)
-                .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                .build()
-        )
-        setOnPreparedListener { mediaPlayer ->
-            val dur = mediaPlayer.duration.toLong()
-            _duration.value = dur
-            // Start audio immediately — don't wait for effects to init
-            if (autoPlayOnPrepared) {
-                try {
-                    mediaPlayer.start()
-                    _isPlaying.value = true
-                    _position.value = mediaPlayer.currentPosition.toLong()
-                    startPositionPolling()
-                    syncAtmospheres()
-                    applyStoredPlaybackParams()
-                    android.util.Log.i("AudioEngine", "Auto-play started, position: ${_position.value}")
-                } catch (e: Exception) {
-                    android.util.Log.e("AudioEngine", "Auto-play failed: ${e.message}")
+        try {
+            val player = MediaPlayer().apply {
+                setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_MEDIA)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                        .build()
+                )
+                setDataSource(this)
+                setOnPreparedListener { mediaPlayer ->
+                    val dur = mediaPlayer.duration.toLong()
+                    _duration.value = dur
+                    if (autoPlayOnPrepared) {
+                        try {
+                            mediaPlayer.start()
+                            _isPlaying.value = true
+                            _position.value = mediaPlayer.currentPosition.toLong()
+                            startPositionPolling()
+                            syncAtmospheres()
+                            applyStoredPlaybackParams()
+                            Log.i("AudioEngine", "Auto-play started, position: ${_position.value}")
+                        } catch (e: Exception) {
+                            Log.e("AudioEngine", "Auto-play failed: ${e.message}")
+                        }
+                    }
+                    scope.launch(Dispatchers.Default) {
+                        try {
+                            initEffects(mediaPlayer.audioSessionId)
+                        } catch (e: Exception) {
+                            Log.e("AudioEngine", "Effects init failed: ${e.message}")
+                        }
+                    }
+                    fftJob = scope.launch(Dispatchers.Default) { initFft() }
+                    startAnimatingWaveform()
+                    Log.i("AudioEngine", "Track loaded, duration: ${dur}ms")
                 }
+                prepareAsync()
             }
-            // Init effects asynchronously
-            scope.launch(Dispatchers.Default) {
-                try {
-                    initEffects(mediaPlayer.audioSessionId)
-                } catch (e: Exception) {
-                    android.util.Log.e("AudioEngine", "Effects init failed: ${e.message}")
-                }
-            }
-            // Start FFT in background
-            fftJob = scope.launch(Dispatchers.Default) {
-                precomputeFFTFast(filePath)
-            }
-            // Start animated waveform placeholder immediately
-            startAnimatingWaveform()
-            android.util.Log.i("AudioEngine", "File loaded, duration: ${dur}ms")
-        }
-        prepareAsync()
-    }
-    mainPlayer = player
-    storedTempo = pendingTempo
-    storedPitch = pendingPitch
-    return true
-} catch (e: Exception) {
-            _error.value = "Failed to load file: ${e.message}"
-            _duration.value = 0
+            mainPlayer = player
+            storedTempo = pendingTempo
+            storedPitch = pendingPitch
+            return true
+        } catch (e: Exception) {
+            _error.value = "$errorPrefix: ${e.message}"
             abandonAudioFocus()
-            e.printStackTrace()
+            Log.e("AudioEngine", "$errorPrefix: ${e.message}", e)
             return false
         }
     }
@@ -309,7 +274,7 @@ try {
             }
         } catch (e: Exception) {
             _error.value = "Playback error: ${e.message}"
-            e.printStackTrace()
+            Log.e("AudioEngine", "Playback error: ${e.message}", e)
         }
     }
 
@@ -327,7 +292,7 @@ try {
             pauseAtmospheres()
         } catch (e: Exception) {
             _error.value = "Pause error: ${e.message}"
-            e.printStackTrace()
+            Log.e("AudioEngine", "Playback error: ${e.message}", e)
         }
     }
 
@@ -351,17 +316,21 @@ try {
             }
         } catch (e: Exception) {
             _error.value = "Play/Pause error: ${e.message}"
-            e.printStackTrace()
+            Log.e("AudioEngine", "Playback error: ${e.message}", e)
         }
     }
 
 
     fun seekTo(millis: Long) {
         try {
-            mainPlayer?.seekTo(millis.toInt())
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                mainPlayer?.seekTo(millis)
+            } else {
+                mainPlayer?.seekTo(millis.coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
+            }
             _position.value = millis
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e("AudioEngine", "Seek failed: ${e.message}", e)
         }
     }
 
@@ -419,7 +388,7 @@ try {
                         .setAudioFallbackMode(PlaybackParams.AUDIO_FALLBACK_MODE_DEFAULT)
                     player.playbackParams = params
                 } catch (e: Exception) {
-                    e.printStackTrace()
+                    Log.e("AudioEngine", "Playback error: ${e.message}", e)
                 }
             }
         }
@@ -490,7 +459,7 @@ try {
                         else -> PresetReverb.PRESET_PLATE
                     }
                 }
-            } catch (e: Exception) { e.printStackTrace() }
+            } catch (e: Exception) { Log.e("AudioEngine", "Reverb error: ${e.message}", e) }
         } ?: run {
             // Store for later application when effects are initialized
             pendingReverb = wet
@@ -509,7 +478,7 @@ try {
                 val s = (strength * 1000).toInt().coerceIn(0, 1000).toShort()
                 it.setStrength(s)
                 it.enabled = strength > 0.01f
-            } catch (e: Exception) { e.printStackTrace() }
+            } catch (e: Exception) { Log.e("AudioEngine", "Reverb error: ${e.message}", e) }
         }
     }
 
@@ -536,7 +505,7 @@ try {
                     }
                     eq.enabled = false
                 }
-            } catch (e: Exception) { e.printStackTrace() }
+            } catch (e: Exception) { Log.e("AudioEngine", "Reverb error: ${e.message}", e) }
         }
     }
 
@@ -565,7 +534,7 @@ try {
                         else -> PresetReverb.PRESET_PLATE
                     }
                 }
-            } catch (e: Exception) { e.printStackTrace() }
+            } catch (e: Exception) { Log.e("AudioEngine", "Reverb error: ${e.message}", e) }
         }
     }
 
