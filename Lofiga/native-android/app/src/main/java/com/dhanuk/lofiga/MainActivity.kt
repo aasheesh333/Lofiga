@@ -75,6 +75,11 @@ class MainActivity : ComponentActivity() {
             ) {
                 permissions.add(Manifest.permission.READ_MEDIA_AUDIO)
             }
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED
+            ) {
+                permissions.add(Manifest.permission.POST_NOTIFICATIONS)
+            }
         } else {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE)
                 != PackageManager.PERMISSION_GRANTED
@@ -90,13 +95,14 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun checkAndRequestPermissions() {
-        val hasPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_AUDIO) == PackageManager.PERMISSION_GRANTED
+        val missingPermissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_AUDIO) != PackageManager.PERMISSION_GRANTED ||
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         } else {
-            ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
+            ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED
         }
 
-        if (!hasPermission) {
+        if (missingPermissions) {
             if (!hasRequestedPermissions) {
                 showPermissionRationale = true
             } else {
@@ -382,13 +388,14 @@ fun PermissionRationaleDialog(
         text = {
             Column {
                 Text(
-                    "Lofiga needs access to your music files to:",
+                    "Lofiga needs a few permissions to work:",
                     color = White60,
                     modifier = Modifier.padding(bottom = 12.dp)
                 )
                 Text("• Scan your songs library", color = White38)
                 Text("• Load songs for editing", color = White38)
                 Text("• Export your lofi mixes", color = White38)
+                Text("• Send you music updates and tips", color = White38)
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
                     "Your music stays on your device - we never upload or share your files.",

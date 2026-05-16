@@ -39,3 +39,7 @@
 # User Messaging Platform (Consent)
 -keep class com.google.android.ump.** { *; }
 -dontwarn com.google.android.ump.**
+
+# OneSignal
+-keep class com.onesignal.** { *; }
+-dontwarn com.onesignal.**

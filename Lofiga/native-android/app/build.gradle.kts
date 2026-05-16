@@ -24,29 +24,20 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         manifestPlaceholders["ADMOB_APP_ID"] = admobAppId
+        manifestPlaceholders["ONESIGNAL_APP_ID"] = System.getenv("ONESIGNAL_APP_ID") ?: project.findProperty("ONESIGNAL_APP_ID")?.toString() ?: ""
         buildConfigField("String", "ADMOB_APP_ID", "\"$admobAppId\"")
         buildConfigField("String", "ADMOB_BANNER_ID", "\"$admobBannerId\"")
         buildConfigField("String", "ADMOB_INTERSTITIAL_ID", "\"$admobInterstitialId\"")
         buildConfigField("String", "ADMOB_REWARDED_ID", "\"$admobRewardedId\"")
+        buildConfigField("String", "ONESIGNAL_APP_ID", "\"${System.getenv("ONESIGNAL_APP_ID") ?: project.findProperty("ONESIGNAL_APP_ID")?.toString() ?: ""}\"")
     }
 
     signingConfigs {
-        create("demo") {
-            storeFile = file("demo.keystore")
-            storePassword = "android"
-            keyAlias = "demo_key"
-            keyPassword = "android"
-        }
         create("release") {
-            val keystorePath = System.getenv("KEYSTORE_PATH") ?: project.findProperty("KEYSTORE_PATH")?.toString()
-            if (!keystorePath.isNullOrEmpty()) {
-                storeFile = file(keystorePath)
-            } else {
-                storeFile = file("demo.keystore")
-            }
-            storePassword = System.getenv("KEYSTORE_PASSWORD") ?: project.findProperty("KEYSTORE_PASSWORD")?.toString() ?: "android"
-            keyAlias = System.getenv("KEY_ALIAS") ?: project.findProperty("KEY_ALIAS")?.toString() ?: "mykey"
-            keyPassword = System.getenv("KEY_PASSWORD") ?: project.findProperty("KEY_PASSWORD")?.toString() ?: "android"
+            storeFile = file(System.getenv("KEYSTORE_PATH") ?: project.findProperty("KEYSTORE_PATH")?.toString() ?: error("KEYSTORE_PATH not set"))
+            storePassword = System.getenv("KEYSTORE_PASSWORD") ?: project.findProperty("KEYSTORE_PASSWORD")?.toString() ?: error("KEYSTORE_PASSWORD not set")
+            keyAlias = "mykey"
+            keyPassword = System.getenv("KEY_PASSWORD") ?: project.findProperty("KEY_PASSWORD")?.toString() ?: error("KEY_PASSWORD not set")
         }
     }
 
@@ -61,7 +52,6 @@ android {
             )
         }
         debug {
-            signingConfig = signingConfigs.getByName("demo")
             isMinifyEnabled = false
         }
     }
@@ -125,6 +115,7 @@ dependencies {
 
     implementation("com.google.android.gms:play-services-ads:24.2.0")
     implementation("com.google.android.ump:user-messaging-platform:3.1.0")
+    implementation("com.onesignal:OneSignal:[5.0.0, 5.99.99]")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 }
