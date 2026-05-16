@@ -26,8 +26,9 @@ object ExportService {
 
     // LRU cache for atmosphere PCM data - bounded to prevent memory leaks
     private object AtmosphereCache {
-        private val cache = java.util.LinkedHashMap<String, ShortArray?>((MAX_CACHE_ENTRIES + 1).toFloat(), 0.75f, true) { _, eldest ->
-            cache.size > MAX_CACHE_ENTRIES
+        private val cache = object : java.util.LinkedHashMap<String, ShortArray>(MAX_CACHE_ENTRIES + 1, 0.75f, true) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, ShortArray>): Boolean =
+                size > MAX_CACHE_ENTRIES
         }
 
         @Synchronized fun get(key: String): ShortArray? = cache[key]
