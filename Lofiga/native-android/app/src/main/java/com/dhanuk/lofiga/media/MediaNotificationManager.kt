@@ -49,6 +49,20 @@ class MediaNotificationManager(private val context: Context) {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        val playPauseAction = if (isPlaying) {
+            NotificationCompat.Action.Builder(
+                android.R.drawable.ic_media_pause,
+                "Pause",
+                createMediaButtonIntent(MediaPlaybackService.ACTION_PAUSE)
+            ).build()
+        } else {
+            NotificationCompat.Action.Builder(
+                android.R.drawable.ic_media_play,
+                "Play",
+                createMediaButtonIntent(MediaPlaybackService.ACTION_PLAY)
+            ).build()
+        }
+
         return NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle(title)
@@ -56,9 +70,11 @@ class MediaNotificationManager(private val context: Context) {
             .setContentIntent(openIntent)
             .setOngoing(isPlaying)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .addAction(playPauseAction)
             .setStyle(
                 MediaStyle()
                     .setMediaSession(token)
+                    .setShowActionsInCompactView(0)
             )
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)

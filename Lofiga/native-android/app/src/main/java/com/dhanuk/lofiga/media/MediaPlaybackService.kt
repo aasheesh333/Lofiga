@@ -17,6 +17,8 @@ class MediaPlaybackService : Service() {
 
         const val ACTION_START = "com.dhanuk.lofiga.START"
         const val ACTION_STOP = "com.dhanuk.lofiga.STOP"
+        const val ACTION_PLAY = "com.dhanuk.lofiga.PLAY"
+        const val ACTION_PAUSE = "com.dhanuk.lofiga.PAUSE"
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -31,6 +33,14 @@ class MediaPlaybackService : Service() {
                 notificationManager?.dismiss()
                 stopSelf()
                 return START_NOT_STICKY
+            }
+            ACTION_PLAY -> {
+                sessionManager?.playPlayback()
+                showAsForeground(true)
+            }
+            ACTION_PAUSE -> {
+                sessionManager?.pausePlayback()
+                showAsForeground(false)
             }
         }
         return START_STICKY
