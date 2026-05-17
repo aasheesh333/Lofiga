@@ -59,7 +59,6 @@ class MediaNotificationManager(private val context: Context) {
             .setStyle(
                 MediaStyle()
                     .setMediaSession(token)
-                    .setShowActionsInCompactView(0)
             )
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
