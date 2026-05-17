@@ -96,31 +96,36 @@ class MainViewModel(application: Application) : AndroidViewModel(application) { 
 
             if (isPlaying) {
                 sessionManager.updatePlaybackState(true, audioEngine.position.value, audioEngine.duration.value)
-            } else {
-                if (audioEngine.currentTrackTitle.isEmpty()) {
-                    sessionManager.updatePlaybackState(false, 0, 0)
-                    val intent = Intent(app, MediaPlaybackService::class.java).apply {
-                        action = MediaPlaybackService.ACTION_STOP
-                    }
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        app.startForegroundService(intent)
-                    } else {
-                        app.startService(intent)
-                    }
-                    return@onPlaybackStateChanged
-                } else {
-                    sessionManager.updatePlaybackState(false, audioEngine.position.value, audioEngine.duration.value)
+                val intent = Intent(app, MediaPlaybackService::class.java).apply {
+                    action = MediaPlaybackService.ACTION_START
+                    putExtra("is_playing", true)
                 }
-            }
-
-            val intent = Intent(app, MediaPlaybackService::class.java).apply {
-                action = MediaPlaybackService.ACTION_START
-                putExtra("is_playing", isPlaying)
-            }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                app.startForegroundService(intent)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    app.startForegroundService(intent)
+                } else {
+                    app.startService(intent)
+                }
+            } else if (audioEngine.currentTrackTitle.isEmpty()) {
+                sessionManager.updatePlaybackState(false, 0, 0)
+                val intent = Intent(app, MediaPlaybackService::class.java).apply {
+                    action = MediaPlaybackService.ACTION_STOP
+                }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    app.startForegroundService(intent)
+                } else {
+                    app.startService(intent)
+                }
             } else {
-                app.startService(intent)
+                sessionManager.updatePlaybackState(false, audioEngine.position.value, audioEngine.duration.value)
+                val intent = Intent(app, MediaPlaybackService::class.java).apply {
+                    action = MediaPlaybackService.ACTION_START
+                    putExtra("is_playing", false)
+                }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    app.startForegroundService(intent)
+                } else {
+                    app.startService(intent)
+                }
             }
         }
 
