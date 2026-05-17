@@ -96,14 +96,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) { 
 
             if (isPlaying) {
                 sessionManager.updatePlaybackState(true, audioEngine.position.value, audioEngine.duration.value)
-                val intent = Intent(app, MediaPlaybackService::class.java).apply {
-                    action = MediaPlaybackService.ACTION_START
-                }
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    app.startForegroundService(intent)
-                } else {
-                    app.startService(intent)
-                }
             } else {
                 if (audioEngine.currentTrackTitle.isEmpty()) {
                     sessionManager.updatePlaybackState(false, 0, 0)
@@ -115,17 +107,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) { 
                     } else {
                         app.startService(intent)
                     }
+                    return@onPlaybackStateChanged
                 } else {
                     sessionManager.updatePlaybackState(false, audioEngine.position.value, audioEngine.duration.value)
-                    val intent = Intent(app, MediaPlaybackService::class.java).apply {
-                        action = MediaPlaybackService.ACTION_PAUSE
-                    }
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        app.startForegroundService(intent)
-                    } else {
-                        app.startService(intent)
-                    }
                 }
+            }
+
+            val intent = Intent(app, MediaPlaybackService::class.java).apply {
+                action = MediaPlaybackService.ACTION_START
+                putExtra("is_playing", isPlaying)
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                app.startForegroundService(intent)
+            } else {
+                app.startService(intent)
             }
         }
 

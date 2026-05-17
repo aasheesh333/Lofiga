@@ -15,26 +15,15 @@ class MediaPlaybackService : Service() {
         var currentTitle: String = ""
         var currentArtist: String = ""
 
-        const val ACTION_PLAY = "com.dhanuk.lofiga.PLAY"
-        const val ACTION_PAUSE = "com.dhanuk.lofiga.PAUSE"
-        const val ACTION_STOP = "com.dhanuk.lofiga.STOP"
         const val ACTION_START = "com.dhanuk.lofiga.START"
+        const val ACTION_STOP = "com.dhanuk.lofiga.STOP"
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val action = intent?.action
-
-        when (action) {
+        when (intent?.action) {
             ACTION_START -> {
-                showAsForeground(true)
-            }
-            ACTION_PLAY -> {
-                sessionManager?.playPlayback()
-                showAsForeground(true)
-            }
-            ACTION_PAUSE -> {
-                sessionManager?.pausePlayback()
-                showAsForeground(false)
+                val isPlaying = intent.getBooleanExtra("is_playing", true)
+                showAsForeground(isPlaying)
             }
             ACTION_STOP -> {
                 sessionManager?.stopPlayback()
@@ -44,7 +33,6 @@ class MediaPlaybackService : Service() {
                 return START_NOT_STICKY
             }
         }
-
         return START_STICKY
     }
 

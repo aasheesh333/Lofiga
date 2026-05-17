@@ -16,10 +16,7 @@ class MediaSessionManager(context: Context) {
         setCallback(object : MediaSessionCompat.Callback() {
             override fun onPlay() { audioEngine?.play() }
             override fun onPause() { audioEngine?.pause() }
-            override fun onStop() {
-                audioEngine?.stop()
-                isActive = false
-            }
+            override fun onStop() { stopPlayback() }
             override fun onSeekTo(pos: Long) { audioEngine?.seekTo(pos) }
         })
     }
