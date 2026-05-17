@@ -238,6 +238,13 @@ class AudioEngine(private val context: Context) {
                     startAnimatingWaveform()
                     Log.i("AudioEngine", "Track loaded, duration: ${dur}ms")
                 }
+                setOnCompletionListener {
+                    _isPlaying.value = false
+                    positionJob?.cancel()
+                    pauseAtmospheres()
+                    onPlaybackStateChanged?.invoke(false)
+                    Log.i("AudioEngine", "Track playback completed")
+                }
                 prepareAsync()
             }
             mainPlayer = player
