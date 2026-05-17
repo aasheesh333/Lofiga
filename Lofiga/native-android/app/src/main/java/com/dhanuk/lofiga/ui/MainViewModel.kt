@@ -10,6 +10,8 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.dhanuk.lofiga.audio.AudioEngine
 import com.dhanuk.lofiga.data.AppRepository
+import com.dhanuk.lofiga.LofigaApplication
+import com.dhanuk.lofiga.media.MediaPlaybackService
 import com.dhanuk.lofiga.model.*
 import com.dhanuk.lofiga.util.AudioQueryHelper
 import com.dhanuk.lofiga.util.SettingsManager
@@ -76,6 +78,48 @@ class MainViewModel(application: Application) : AndroidViewModel(application) { 
         viewModelScope.launch {
             audioEngine.init()
         }
+
+        val app = getApplication<LofigaApplication>()
+        val sessionManager = app.mediaSessionManager
+        val notificationManager = app.mediaNotificationManager
+
+        sessionManager.attach(audioEngine)
+
+        MediaPlaybackService.notificationManager = notificationManager
+        MediaPlaybackService.sessionManager = sessionManager
+
+        audioEngine.onPlaybackStateChanged = { isPlaying ->
+            if (isPlaying) {
+                val notification = notificationManager.buildNotification(
+                    sessionManager.token,
+                    audioEngine.currentTrackTitle,
+                    audioEngine.currentTrackArtist,
+                    isPlaying = true
+                )
+                notificationManager.show(notification)
+                sessionManager.updatePlaybackState(true, 0, audioEngine.duration.value)
+
+                val title = audioEngine.currentTrackTitle
+                val artist = audioEngine.currentTrackArtist
+                MediaPlaybackService.currentTitle = title
+                MediaPlaybackService.currentArtist = artist
+                sessionManager.updateMetadata(title, artist)
+            } else {
+                if (audioEngine.currentTrackTitle.isEmpty()) {
+                    notificationManager.dismiss()
+                } else {
+                    val notification = notificationManager.buildNotification(
+                        sessionManager.token,
+                        audioEngine.currentTrackTitle,
+                        audioEngine.currentTrackArtist,
+                        isPlaying = false
+                    )
+                    notificationManager.show(notification)
+                    sessionManager.updatePlaybackState(false, 0, audioEngine.duration.value)
+                }
+            }
+        }
+
         loadSongs()
         loadRecentEdits()
         loadCustomPresets()
@@ -110,6 +154,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) { 
     // --- Track Loading ---
 
     fun loadTrack(track: AudioTrack) {
+        audioEngine.currentTrackTitle = track.title
+        audioEngine.currentTrackArtist = track.artist
         val success = track.uri?.let { audioEngine.loadTrack(it, autoPlay = true) } ?: false
         if (success) {
             _currentTrack.value = track
@@ -121,6 +167,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) { 
     }
 
     fun loadTrackFromFile(filePath: String, fileName: String): Boolean {
+        audioEngine.currentTrackTitle = fileName
+        audioEngine.currentTrackArtist = ""
         _currentTrack.value = AudioTrack(
             title = fileName,
             dataPath = filePath

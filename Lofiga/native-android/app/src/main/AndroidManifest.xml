@@ -39,6 +39,11 @@
             android:permission="android.permission.BIND_JOB_SERVICE"
             android:exported="false" />
 
+        <service
+            android:name=".media.MediaPlaybackService"
+            android:foregroundServiceType="mediaPlayback"
+            android:exported="false" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"

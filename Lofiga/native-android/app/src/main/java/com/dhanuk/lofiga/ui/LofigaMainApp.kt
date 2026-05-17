@@ -5,6 +5,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.dhanuk.lofiga.ads.AdManager
 import com.dhanuk.lofiga.ui.components.LofigaNavigationBar
 import com.dhanuk.lofiga.ui.screens.*
@@ -15,6 +18,19 @@ fun LofigaMainApp(
 ) {
     var selectedIndex by remember { mutableStateOf(0) }
     val context = LocalContext.current
+
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                if (viewModel.audioEngine.isPlaying.value && selectedIndex != 1) {
+                    selectedIndex = 1
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     LaunchedEffect(Unit) {
         AdManager.loadInterstitial(context)

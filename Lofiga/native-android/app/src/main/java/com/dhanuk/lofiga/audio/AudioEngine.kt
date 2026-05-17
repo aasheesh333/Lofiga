@@ -48,6 +48,10 @@ class AudioEngine(private val context: Context) {
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
+    var currentTrackTitle: String = ""
+    var currentTrackArtist: String = ""
+    var onPlaybackStateChanged: ((isPlaying: Boolean) -> Unit)? = null
+
     private var mainPlayer: MediaPlayer? = null
     private val atmospherePlayers = mutableMapOf<String, MediaPlayer>()
     private val atmosphereVolumes = mutableMapOf<String, Float>()
@@ -272,6 +276,7 @@ class AudioEngine(private val context: Context) {
                 startPositionPolling()
                 syncAtmospheres()
                 applyStoredPlaybackParams()
+                onPlaybackStateChanged?.invoke(true)
                 android.util.Log.i("AudioEngine", "Play started, position: ${_position.value}, duration: ${_duration.value}")
             }
         } catch (e: Exception) {
@@ -292,6 +297,7 @@ class AudioEngine(private val context: Context) {
             _isPlaying.value = false
             positionJob?.cancel()
             pauseAtmospheres()
+            onPlaybackStateChanged?.invoke(false)
         } catch (e: Exception) {
             _error.value = "Pause error: ${e.message}"
             Log.e("AudioEngine", "Playback error: ${e.message}", e)
@@ -355,6 +361,7 @@ class AudioEngine(private val context: Context) {
         _position.value = 0
         positionJob?.cancel()
         abandonAudioFocus()
+        onPlaybackStateChanged?.invoke(false)
     }
 
     fun release() {
