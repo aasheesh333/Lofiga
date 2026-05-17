@@ -1,8 +1,11 @@
 package com.dhanuk.lofiga.media
 
+import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
+import android.os.Build
 import android.os.IBinder
+import androidx.core.app.NotificationCompat
 
 class MediaPlaybackService : Service() {
 
@@ -11,21 +14,27 @@ class MediaPlaybackService : Service() {
         var sessionManager: MediaSessionManager? = null
         var currentTitle: String = ""
         var currentArtist: String = ""
+
+        const val ACTION_PLAY = "com.dhanuk.lofiga.PLAY"
+        const val ACTION_PAUSE = "com.dhanuk.lofiga.PAUSE"
+        const val ACTION_STOP = "com.dhanuk.lofiga.STOP"
+        const val ACTION_START = "com.dhanuk.lofiga.START"
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val action = intent?.action
 
         when (action) {
-            "play" -> sessionManager?.let { sm ->
-                sm.updatePlaybackState(true, 0, 0)
-                notifyChanged(true)
+            ACTION_START, ACTION_PLAY -> {
+                sessionManager?.updatePlaybackState(true, 0, 0)
+                showAsForeground(true)
             }
-            "pause" -> sessionManager?.let { sm ->
-                sm.updatePlaybackState(false, 0, 0)
-                notifyChanged(false)
+            ACTION_PAUSE -> {
+                sessionManager?.updatePlaybackState(false, 0, 0)
+                showAsForeground(false)
             }
-            "stop" -> {
+            ACTION_STOP -> {
+                sessionManager?.stopPlayback()
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 notificationManager?.dismiss()
                 stopSelf()
@@ -38,16 +47,26 @@ class MediaPlaybackService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    private fun notifyChanged(isPlaying: Boolean) {
+    fun showAsForeground(isPlaying: Boolean) {
         val nm = notificationManager ?: return
         val sm = sessionManager ?: return
+
         val notification = nm.buildNotification(
             sm.token,
             currentTitle,
             currentArtist,
             isPlaying
         )
-        nm.show(notification)
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            startForeground(
+                MediaNotificationManager.NOTIFICATION_ID,
+                notification,
+                android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
+            )
+        } else {
+            startForeground(MediaNotificationManager.NOTIFICATION_ID, notification)
+        }
     }
 
     override fun onDestroy() {

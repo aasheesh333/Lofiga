@@ -53,20 +53,20 @@ class MediaNotificationManager(private val context: Context) {
             NotificationCompat.Action(
                 android.R.drawable.ic_media_pause,
                 "Pause",
-                createMediaButtonIntent("pause")
+                createMediaButtonIntent(MediaPlaybackService.ACTION_PAUSE)
             )
         } else {
             NotificationCompat.Action(
                 android.R.drawable.ic_media_play,
                 "Play",
-                createMediaButtonIntent("play")
+                createMediaButtonIntent(MediaPlaybackService.ACTION_PLAY)
             )
         }
 
         val stopAction = NotificationCompat.Action(
             android.R.drawable.ic_media_previous,
             "Stop",
-            createMediaButtonIntent("stop")
+            createMediaButtonIntent(MediaPlaybackService.ACTION_STOP)
         )
 
         return NotificationCompat.Builder(context, CHANNEL_ID)
@@ -76,7 +76,7 @@ class MediaNotificationManager(private val context: Context) {
             .setContentIntent(openIntent)
             .setOngoing(isPlaying)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .setDeleteIntent(createMediaButtonIntent("stop"))
+            .setDeleteIntent(createMediaButtonIntent(MediaPlaybackService.ACTION_STOP))
             .addAction(stopAction)
             .addAction(playPauseAction)
             .setStyle(

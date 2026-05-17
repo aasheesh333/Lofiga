@@ -89,9 +89,8 @@ fun PlayerScreen(
     // Slider drag state - local to prevent fighting with position updates
     var isDragging by remember { mutableStateOf(false) }
     var dragPosition by remember { mutableStateOf(0f) }
-    // Derive slider value: use drag position when dragging, otherwise use engine position
-    // Gate on playback state — slider stays at 0 until audio actually starts
-    val sliderDisplayValue = if (isDragging) dragPosition else if (isPlaying) position.toFloat() else 0f
+    // Use engine position at all times - preserves position on pause
+    val sliderDisplayValue = if (isDragging) dragPosition else position.toFloat()
 
     LaunchedEffect(viewModel) {
         viewModel.snackbarMessage.collect { snackbarHostState.showSnackbar(it) }

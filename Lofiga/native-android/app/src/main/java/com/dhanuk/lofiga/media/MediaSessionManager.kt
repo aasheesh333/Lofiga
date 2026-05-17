@@ -57,6 +57,13 @@ class MediaSessionManager(context: Context) {
         )
     }
 
+    fun stopPlayback() {
+        audioEngine?.currentTrackTitle = ""
+        audioEngine?.currentTrackArtist = ""
+        audioEngine?.stop()
+        updatePlaybackState(false, 0, 0)
+    }
+
     fun release() {
         mediaSession.isActive = false
         mediaSession.release()

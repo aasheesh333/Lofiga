@@ -2,6 +2,7 @@ package com.dhanuk.lofiga.ui
 
 import android.Manifest
 import android.app.Application
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
@@ -89,33 +90,33 @@ class MainViewModel(application: Application) : AndroidViewModel(application) { 
         MediaPlaybackService.sessionManager = sessionManager
 
         audioEngine.onPlaybackStateChanged = { isPlaying ->
-            if (isPlaying) {
-                val notification = notificationManager.buildNotification(
-                    sessionManager.token,
-                    audioEngine.currentTrackTitle,
-                    audioEngine.currentTrackArtist,
-                    isPlaying = true
-                )
-                notificationManager.show(notification)
-                sessionManager.updatePlaybackState(true, 0, audioEngine.duration.value)
+            MediaPlaybackService.currentTitle = audioEngine.currentTrackTitle
+            MediaPlaybackService.currentArtist = audioEngine.currentTrackArtist
+            sessionManager.updateMetadata(audioEngine.currentTrackTitle, audioEngine.currentTrackArtist)
 
-                val title = audioEngine.currentTrackTitle
-                val artist = audioEngine.currentTrackArtist
-                MediaPlaybackService.currentTitle = title
-                MediaPlaybackService.currentArtist = artist
-                sessionManager.updateMetadata(title, artist)
+            if (isPlaying) {
+                sessionManager.updatePlaybackState(true, audioEngine.position.value, audioEngine.duration.value)
+                val intent = Intent(app, MediaPlaybackService::class.java).apply {
+                    action = MediaPlaybackService.ACTION_START
+                }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    app.startForegroundService(intent)
+                } else {
+                    app.startService(intent)
+                }
             } else {
                 if (audioEngine.currentTrackTitle.isEmpty()) {
-                    notificationManager.dismiss()
+                    sessionManager.updatePlaybackState(false, 0, 0)
+                    val intent = Intent(app, MediaPlaybackService::class.java).apply {
+                        action = MediaPlaybackService.ACTION_STOP
+                    }
+                    app.startService(intent)
                 } else {
-                    val notification = notificationManager.buildNotification(
-                        sessionManager.token,
-                        audioEngine.currentTrackTitle,
-                        audioEngine.currentTrackArtist,
-                        isPlaying = false
-                    )
-                    notificationManager.show(notification)
-                    sessionManager.updatePlaybackState(false, 0, audioEngine.duration.value)
+                    sessionManager.updatePlaybackState(false, audioEngine.position.value, audioEngine.duration.value)
+                    val intent = Intent(app, MediaPlaybackService::class.java).apply {
+                        action = MediaPlaybackService.ACTION_PAUSE
+                    }
+                    app.startService(intent)
                 }
             }
         }
