@@ -25,7 +25,10 @@ class MediaPlaybackService : Service() {
         val action = intent?.action
 
         when (action) {
-            ACTION_START, ACTION_PLAY -> {
+            ACTION_START -> {
+                showAsForeground(true)
+            }
+            ACTION_PLAY -> {
                 sessionManager?.playPlayback()
                 showAsForeground(true)
             }
