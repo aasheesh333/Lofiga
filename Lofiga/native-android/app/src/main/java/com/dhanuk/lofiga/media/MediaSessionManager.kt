@@ -14,13 +14,13 @@ class MediaSessionManager(context: Context) {
             MediaSessionCompat.FLAG_HANDLES_TRANSPORT_CONTROLS
         )
         setCallback(object : MediaSessionCompat.Callback() {
-            override fun onPlay() = audioEngine?.play()
-            override fun onPause() = audioEngine?.pause()
+            override fun onPlay() { audioEngine?.play() }
+            override fun onPause() { audioEngine?.pause() }
             override fun onStop() {
                 audioEngine?.stop()
                 isActive = false
             }
-            override fun onSeekTo(pos: Long) = audioEngine?.seekTo(pos)
+            override fun onSeekTo(pos: Long) { audioEngine?.seekTo(pos) }
         })
     }
 
