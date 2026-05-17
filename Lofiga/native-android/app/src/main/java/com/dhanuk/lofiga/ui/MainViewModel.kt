@@ -110,13 +110,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) { 
                     val intent = Intent(app, MediaPlaybackService::class.java).apply {
                         action = MediaPlaybackService.ACTION_STOP
                     }
-                    app.startService(intent)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        app.startForegroundService(intent)
+                    } else {
+                        app.startService(intent)
+                    }
                 } else {
                     sessionManager.updatePlaybackState(false, audioEngine.position.value, audioEngine.duration.value)
                     val intent = Intent(app, MediaPlaybackService::class.java).apply {
                         action = MediaPlaybackService.ACTION_PAUSE
                     }
-                    app.startService(intent)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        app.startForegroundService(intent)
+                    } else {
+                        app.startService(intent)
+                    }
                 }
             }
         }

@@ -221,6 +221,7 @@ class AudioEngine(private val context: Context) {
                             startPositionPolling()
                             syncAtmospheres()
                             applyStoredPlaybackParams()
+                            onPlaybackStateChanged?.invoke(true)
                             Log.i("AudioEngine", "Auto-play started, position: ${_position.value}")
                         } catch (e: Exception) {
                             Log.e("AudioEngine", "Auto-play failed: ${e.message}")
@@ -316,11 +317,13 @@ class AudioEngine(private val context: Context) {
                 _isPlaying.value = false
                 positionJob?.cancel()
                 pauseAtmospheres()
+                onPlaybackStateChanged?.invoke(false)
             } else {
                 player.start()
                 _isPlaying.value = true
                 startPositionPolling()
                 syncAtmospheres()
+                onPlaybackStateChanged?.invoke(true)
             }
         } catch (e: Exception) {
             _error.value = "Play/Pause error: ${e.message}"

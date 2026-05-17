@@ -64,6 +64,16 @@ class MediaSessionManager(context: Context) {
         updatePlaybackState(false, 0, 0)
     }
 
+    fun pausePlayback() {
+        audioEngine?.pause()
+        updatePlaybackState(false, audioEngine?.position?.value ?: 0, audioEngine?.duration?.value ?: 0)
+    }
+
+    fun playPlayback() {
+        audioEngine?.play()
+        updatePlaybackState(true, audioEngine?.position?.value ?: 0, audioEngine?.duration?.value ?: 0)
+    }
+
     fun release() {
         mediaSession.isActive = false
         mediaSession.release()

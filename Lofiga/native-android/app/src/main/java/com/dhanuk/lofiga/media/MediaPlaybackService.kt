@@ -26,11 +26,11 @@ class MediaPlaybackService : Service() {
 
         when (action) {
             ACTION_START, ACTION_PLAY -> {
-                sessionManager?.updatePlaybackState(true, 0, 0)
+                sessionManager?.playPlayback()
                 showAsForeground(true)
             }
             ACTION_PAUSE -> {
-                sessionManager?.updatePlaybackState(false, 0, 0)
+                sessionManager?.pausePlayback()
                 showAsForeground(false)
             }
             ACTION_STOP -> {
