@@ -1,5 +1,7 @@
 package com.dhanuk.lofiga.ui.screens
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -96,6 +98,36 @@ fun SettingsScreen(
                 subtitle = "",
                 icon = Icons.Outlined.FavoriteBorder,
                 onClick = {}
+            )
+
+            SettingItem(
+                title = "Privacy Policy",
+                subtitle = "Learn how we handle your data",
+                icon = Icons.Outlined.PrivacyTip,
+                onClick = {
+                    val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://dhanuk.page.gd/Lofiga/Privacy-Policy.html?i=2"))
+                    context.startActivity(browserIntent)
+                }
+            )
+
+            SettingItem(
+                title = "Terms of Use",
+                subtitle = "Read our terms and conditions",
+                icon = Icons.Outlined.Description,
+                onClick = {
+                    val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://dhanuk.page.gd/Lofiga/Terms-Of-Use.html"))
+                    context.startActivity(browserIntent)
+                }
+            )
+
+            SettingItem(
+                title = "Contact Us",
+                subtitle = "Get in touch with us",
+                icon = Icons.Outlined.MailOutline,
+                onClick = {
+                    val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://dhanuk.page.gd/Lofiga/Contact-Us.html"))
+                    context.startActivity(browserIntent)
+                }
             )
 
             Spacer(Modifier.height(24.dp))
