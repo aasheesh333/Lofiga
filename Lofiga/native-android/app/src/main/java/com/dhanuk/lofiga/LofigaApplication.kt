@@ -6,9 +6,10 @@ import com.dhanuk.lofiga.ads.AdManager
 import com.dhanuk.lofiga.media.MediaNotificationManager
 import com.dhanuk.lofiga.media.MediaSessionManager
 import com.onesignal.OneSignal
-import com.onesignal.notifications.INotificationOpenedResult
-import com.onesignal.notifications.INotificationWillShowInForeground
-import com.onesignal.subscriptions.ISubscriptionState
+import com.onesignal.notifications.INotificationClickEvent
+import com.onesignal.notifications.INotificationClickListener
+import com.onesignal.user.IPushSubscriptionObserver
+import com.onesignal.user.PushSubscriptionChangedState
 
 class LofigaApplication : Application() {
 
@@ -20,23 +21,19 @@ class LofigaApplication : Application() {
     override fun onCreate() {
         super.onCreate()
 
-        OneSignal.initWithContext(this)
-        OneSignal.setAppId(BuildConfig.ONESIGNAL_APP_ID)
+        OneSignal.initWithContext(this, BuildConfig.ONESIGNAL_APP_ID)
 
-        OneSignal.setNotificationOpenedHandler { openedResult: INotificationOpenedResult ->
-            val actionId = openedResult.action?.actionId
-            val data = openedResult.notification.additionalData
-            Log.d("OneSignal", "Notification opened: actionId=$actionId, data=$data")
-        }
+        OneSignal.Notifications.addClickListener(object : INotificationClickListener {
+            override fun onClick(event: INotificationClickEvent) {
+                Log.d("OneSignal", "Notification clicked: ${event.notification.title}")
+            }
+        })
 
-        OneSignal.setSubscriptionObserver { state: ISubscriptionState ->
-            Log.d("OneSignal", "Subscription changed: subscribed=${state.subscribed}, userId=${state.userId}")
-        }
-
-        OneSignal.setNotificationWillShowInForegroundHandler { notif: INotificationWillShowInForeground ->
-            Log.d("OneSignal", "Notification received in foreground: ${notif.notificationId}")
-            notif.show()
-        }
+        OneSignal.User.pushSubscription.addObserver(object : IPushSubscriptionObserver {
+            override fun onPushSubscriptionChange(state: PushSubscriptionChangedState) {
+                Log.d("OneSignal", "Push subscription: optedIn=${state.current.optedIn}, token=${state.current.token}")
+            }
+        })
 
         mediaSessionManager = MediaSessionManager(this)
         mediaNotificationManager = MediaNotificationManager(this)
