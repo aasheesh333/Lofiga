@@ -80,14 +80,10 @@ jobs:
           echo "=== APK Signing Certificate ==="
           APK=${{ github.workspace }}/Lofiga/native-android/app/build/outputs/apk/release/app-release.apk
           AAB=${{ github.workspace }}/Lofiga/native-android/app/build/outputs/bundle/release/app-release.aab
-          # Extract cert directly from APK using keytool
-          unzip -p "$APK" META-INF/*.RSA 2>/dev/null | keytool -printcert 2>&1 || true
-          unzip -p "$APK" META-INF/*.DSA 2>/dev/null | keytool -printcert 2>&1 || true
-          # Alternative: check jarsigner verify output
-          jarsigner -verify -verbose -certs "$APK" 2>&1 | head -30 || echo "jarsigner check done"
+          # Use apksigner (it's a jar, invoke via java)
+          java -jar $ANDROID_SDK_ROOT/build-tools/*/lib/apksigner.jar verify --print-certs "$APK" 2>&1 || echo "apksigner.jar not available"
           echo "=== AAB Signing Certificate ==="
-          # AABs use different signing
-          jarsigner -verify -verbose -certs "$AAB" 2>&1 | head -30 || echo "jarsigner check done"
+          java -jar $ANDROID_SDK_ROOT/build-tools/*/lib/apksigner.jar verify --print-certs "$AAB" 2>&1 || echo "apksigner.jar not available"
 
       - name: Upload AAB Artifact
         uses: actions/upload-artifact@v4
