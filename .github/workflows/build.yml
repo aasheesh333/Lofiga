@@ -60,12 +60,27 @@ jobs:
       - name: Build Release AAB
         run: |
           cd Lofiga/native-android
-          ./gradlew :app:bundleRelease
+          ./gradlew :app:bundleRelease \
+            -PKEYSTORE_PATH="$KEYSTORE_PATH" \
+            -PKEYSTORE_PASSWORD="$KEYSTORE_PASSWORD" \
+            -PKEY_ALIAS="$KEY_ALIAS" \
+            -PKEY_PASSWORD="$KEY_PASSWORD"
 
       - name: Build Release APK
         run: |
           cd Lofiga/native-android
-          ./gradlew :app:assembleRelease
+          ./gradlew :app:assembleRelease \
+            -PKEYSTORE_PATH="$KEYSTORE_PATH" \
+            -PKEYSTORE_PASSWORD="$KEYSTORE_PASSWORD" \
+            -PKEY_ALIAS="$KEY_ALIAS" \
+            -PKEY_PASSWORD="$KEY_PASSWORD"
+
+      - name: Verify APK Signature
+        run: |
+          echo "=== APK Signing Certificate ==="
+          keytool -printcert -jarfile Lofiga/native-android/app/build/outputs/apk/release/app-release.apk 2>&1 || echo "keytool not available, skipping verification"
+          echo "=== AAB Signing Certificate ==="
+          unzip -p Lofiga/native-android/app/build/outputs/bundle/release/app-release.aab META-INF/BNDLTOOL.RSA 2>/dev/null | keytool -printcert 2>&1 || echo "Could not extract AAB cert"
 
       - name: Upload AAB Artifact
         uses: actions/upload-artifact@v4
