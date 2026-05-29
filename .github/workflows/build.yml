@@ -78,9 +78,9 @@ jobs:
       - name: Verify APK Signature
         run: |
           echo "=== APK Signing Certificate ==="
-          keytool -printcert -jarfile Lofiga/native-android/app/build/outputs/apk/release/app-release.apk 2>&1 || echo "keytool not available, skipping verification"
+          $ANDROID_SDK_ROOT/build-tools/*/apksigner verify --print-certs Lofiga/native-android/app/build/outputs/apk/release/app-release.apk 2>&1 || echo "apksigner not available, trying keytool..."
           echo "=== AAB Signing Certificate ==="
-          unzip -p Lofiga/native-android/app/build/outputs/bundle/release/app-release.aab META-INF/BNDLTOOL.RSA 2>/dev/null | keytool -printcert 2>&1 || echo "Could not extract AAB cert"
+          $ANDROID_SDK_ROOT/build-tools/*/apksigner verify --print-certs Lofiga/native-android/app/build/outputs/bundle/release/app-release.aab 2>&1 || echo "Could not verify AAB cert"
 
       - name: Upload AAB Artifact
         uses: actions/upload-artifact@v4
