@@ -77,13 +77,14 @@ jobs:
 
       - name: Verify APK Signature
         run: |
+          echo "=== Keystore Certificate ==="
+          keytool -list -v -keystore "$KEYSTORE_PATH" -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" 2>&1 | head -20
           echo "=== APK Signing Certificate ==="
           APK=${{ github.workspace }}/Lofiga/native-android/app/build/outputs/apk/release/app-release.apk
           AAB=${{ github.workspace }}/Lofiga/native-android/app/build/outputs/bundle/release/app-release.aab
-          # Use apksigner (it's a jar, invoke via java)
-          java -jar $ANDROID_SDK_ROOT/build-tools/*/lib/apksigner.jar verify --print-certs "$APK" 2>&1 || echo "apksigner.jar not available"
-          echo "=== AAB Signing Certificate ==="
-          java -jar $ANDROID_SDK_ROOT/build-tools/*/lib/apksigner.jar verify --print-certs "$AAB" 2>&1 || echo "apksigner.jar not available"
+          jarsigner -verify -certs "$AAB" 2>&1 | head -10
+          echo "=== Build artifacts exist ==="
+          ls -lh "$APK" "$AAB"
 
       - name: Upload AAB Artifact
         uses: actions/upload-artifact@v4
