@@ -13,7 +13,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>lofiga</string>
+	<string>Lofiga</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -51,7 +51,5 @@
 	</array>
 	<key>NSAppleMusicUsageDescription</key>
 	<string>Lofiga needs access to your music library to import songs for processing.</string>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>Lofiga needs access to audio for processing.</string>
 </dict>
 </plist>
