@@ -16,7 +16,13 @@ class LofigaApplication : Application() {
     override fun onCreate() {
         super.onCreate()
 
-        OneSignal.initWithContext(this, BuildConfig.ONESIGNAL_APP_ID)
+        // Only initialize OneSignal when an App ID is configured (set the
+        // ONESIGNAL_APP_ID secret/property at build time). Initializing with a
+        // blank ID leaves the SDK in a broken state.
+        val oneSignalAppId = BuildConfig.ONESIGNAL_APP_ID
+        if (oneSignalAppId.isNotBlank()) {
+            OneSignal.initWithContext(this, oneSignalAppId)
+        }
 
         mediaSessionManager = MediaSessionManager(this)
         mediaNotificationManager = MediaNotificationManager(this)

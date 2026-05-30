@@ -88,16 +88,14 @@ object ExportService {
                 return@withContext null
             }
 
-            if (outputFile.exists()) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    val values = ContentValues().apply {
-                        put(MediaStore.Audio.Media.DISPLAY_NAME, outputFile.name)
-                        put(MediaStore.Audio.Media.MIME_TYPE,
-                            if (format == "wav") "audio/wav" else "audio/mp4")
-                        put(MediaStore.Audio.Media.RELATIVE_PATH, "${Environment.DIRECTORY_MUSIC}/Lofiga")
-                        put(MediaStore.Audio.Media.IS_MUSIC, true)
-                    }
-                    context.contentResolver.insert(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, values)
+            if (outputFile.exists() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                // Publish a copy into the public Music/Lofiga collection so the
+                // track is visible to other music apps. Writing the bytes via
+                // IS_PENDING avoids leaving an empty/broken MediaStore entry.
+                try {
+                    publishToMediaStore(context, outputFile, format)
+                } catch (e: Exception) {
+                    Log.w("ExportService", "MediaStore publish failed: ${e.message}")
                 }
             }
 
@@ -108,6 +106,31 @@ object ExportService {
             throw e
         } finally {
             activeExports.remove(exportId)
+        }
+    }
+
+    private fun publishToMediaStore(context: Context, file: File, format: String) {
+        val resolver = context.contentResolver
+        val collection = MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+        val values = ContentValues().apply {
+            put(MediaStore.Audio.Media.DISPLAY_NAME, file.name)
+            put(MediaStore.Audio.Media.MIME_TYPE, if (format == "wav") "audio/wav" else "audio/mp4")
+            put(MediaStore.Audio.Media.RELATIVE_PATH, "${Environment.DIRECTORY_MUSIC}/Lofiga")
+            put(MediaStore.Audio.Media.IS_MUSIC, true)
+            put(MediaStore.Audio.Media.IS_PENDING, 1)
+        }
+        val uri = resolver.insert(collection, values) ?: return
+        try {
+            resolver.openOutputStream(uri)?.use { out ->
+                file.inputStream().use { input -> input.copyTo(out) }
+            }
+            values.clear()
+            values.put(MediaStore.Audio.Media.IS_PENDING, 0)
+            resolver.update(uri, values, null, null)
+        } catch (e: Exception) {
+            // Roll back the pending entry so we never leave an empty record.
+            resolver.delete(uri, null, null)
+            throw e
         }
     }
 
