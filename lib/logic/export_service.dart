@@ -137,20 +137,36 @@ class ExportService {
 
       if (ReturnCode.isSuccess(returnCode)) {
          debugPrint('FFmpeg Export success to temp directory. Copying to final destination...');
-         
-         // Safely copy the file from temp to the actual requested custom export path
+
+         // Safely copy the file from temp to the requested export path.
+         // If the custom path is not writable (e.g. a folder outside the app
+         // sandbox on Android 11+), fall back to the app's own directory so the
+         // user never loses their rendered track.
+         final tempFile = File(tempOutputPath);
          try {
-           final tempFile = File(tempOutputPath);
            if (await tempFile.exists()) {
              await tempFile.copy(finalOutputPath);
-             // Cleanup temp file
              await tempFile.delete();
            }
+           return finalOutputPath;
          } catch (copyError) {
-           throw Exception("FFmpeg succeeded but failed to save file to $finalOutputPath: $copyError");
+           debugPrint('Primary save to $finalOutputPath failed: $copyError. Falling back to app directory.');
+           try {
+             final Directory fallbackDir = Platform.isAndroid
+                 ? (await getExternalStorageDirectory() ?? await getApplicationDocumentsDirectory())
+                 : await getApplicationDocumentsDirectory();
+             final String fallbackPath =
+                 '${fallbackDir.path}/${cleanName} - ${presetStr} - ${bitrate}.$ext';
+             if (await tempFile.exists()) {
+               await tempFile.copy(fallbackPath);
+               await tempFile.delete();
+             }
+             return fallbackPath;
+           } catch (fallbackError) {
+             throw Exception(
+                 "FFmpeg succeeded but the file could not be saved: $fallbackError");
+           }
          }
-         
-         return finalOutputPath;
       } else if (ReturnCode.isCancel(returnCode)) {
          debugPrint('Export cancelled by user');
          throw Exception("ExportCancelled");

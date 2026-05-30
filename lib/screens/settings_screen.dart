@@ -18,6 +18,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
   AppSettings _settings = AppSettings();
   bool _isLoading = true;
 
+  // IMPORTANT (Play Store requirement): replace these with your real, publicly
+  // hosted URLs before publishing. Google Play requires a working Privacy Policy
+  // URL for any app that accesses media/storage. The Play listing must use the
+  // same URL.
+  static const String _privacyPolicyUrl = 'https://example.com/privacy';
+  static const String _termsUrl = 'https://example.com/terms';
+
   @override
   void initState() {
     super.initState();
@@ -234,11 +241,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
                        _buildSectionTitle(context, 'ABOUT'),
                        const SizedBox(height: 16),
-                       _buildSettingItem(context, 'Version', '1.0.0 (Beta)', Icons.info_outline, onTap: () {
+                       _buildSettingItem(context, 'Version', '1.0.0', Icons.info_outline, onTap: () {
                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Lofiga v1.0.0 is up to date!')));
                        }),
-                       _buildSettingItem(context, 'Privacy Policy', '', Icons.privacy_tip, onTap: () => _launchURL('https://example.com/privacy')),
-                       _buildSettingItem(context, 'Terms of Service', '', Icons.description, onTap: () => _launchURL('https://example.com/terms')),
+                       _buildSettingItem(context, 'Privacy Policy', '', Icons.privacy_tip, onTap: () => _launchURL(_privacyPolicyUrl)),
+                       _buildSettingItem(context, 'Terms of Service', '', Icons.description, onTap: () => _launchURL(_termsUrl)),
 
                        const SizedBox(height: 50),
                        
@@ -274,8 +281,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _launchURL(String urlString) async {
     final Uri url = Uri.parse(urlString);
-    if (!await launchUrl(url)) {
-      debugPrint('Could not launch \$url');
+    final bool launched = await launchUrl(url, mode: LaunchMode.externalApplication);
+    if (!launched) {
+      debugPrint('Could not launch $urlString');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not open link')),
+        );
+      }
     }
   }
 

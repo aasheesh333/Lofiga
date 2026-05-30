@@ -36,6 +36,8 @@ class AudioEngine {
 
   // State
   bool _isInitialized = false;
+  Completer<void>? _initCompleter; // Serializes concurrent init() calls
+  Timer? _positionTimer; // Polling timer handle (so it can be cancelled)
   bool _isPlaying = false;
   bool _isLooping = false;
   Duration _duration = Duration.zero;
@@ -56,6 +58,10 @@ class AudioEngine {
   // Initialize Engine
   Future<void> init() async {
     if (_isInitialized) return;
+    // If an init is already in progress, await the same operation instead of
+    // starting a second one (loadTrack/screens may call init concurrently).
+    if (_initCompleter != null) return _initCompleter!.future;
+    _initCompleter = Completer<void>();
 
     try {
       _soloud = SoLoud.instance;
@@ -74,8 +80,11 @@ class AudioEngine {
 
       // Start position polling loop
       _startPositionPolling();
+      _initCompleter!.complete();
     } catch (e) {
       _log.severe('Failed to initialize SoLoud: $e');
+      _initCompleter!.complete(); // Don't surface as unhandled error; guarded by _isInitialized
+      _initCompleter = null; // Allow a later retry
     }
   }
 
@@ -333,7 +342,8 @@ class AudioEngine {
 
   // Internal Loop
   void _startPositionPolling() {
-    Timer.periodic(const Duration(milliseconds: 100), (timer) {
+    _positionTimer?.cancel();
+    _positionTimer = Timer.periodic(const Duration(milliseconds: 100), (timer) {
       if (_musicHandle != null && _soloud != null) {
         // Query actual position from SoLoud
         final actualPosition = _soloud!.getPosition(_musicHandle!);
@@ -363,6 +373,7 @@ class AudioEngine {
   void dispose() {
     // Note: Since this is a singleton provided at app level,
     // calling dispose() shuts down the engine globally.
+    _positionTimer?.cancel();
     _soloud?.deinit();
     for (var player in _atmospherePlayers.values) {
       player.dispose();
