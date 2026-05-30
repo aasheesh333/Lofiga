@@ -131,19 +131,24 @@ object AdManager {
             return
         }
 
-        if (interstitialAd != null) {
+        val ad = interstitialAd
+        if (ad != null) {
             lastInterstitialTime = now
-            interstitialAd?.show(activity)
-            interstitialAd?.fullScreenContentCallback = object : FullScreenContentCallback() {
+            // The callback MUST be set before show() so dismissal is handled
+            // reliably and the next interstitial is preloaded.
+            ad.fullScreenContentCallback = object : FullScreenContentCallback() {
                 override fun onAdDismissedFullScreenContent() {
                     interstitialAd = null
+                    loadInterstitial(activity.applicationContext)
                     onDismissed?.invoke()
                 }
                 override fun onAdFailedToShowFullScreenContent(error: AdError) {
                     interstitialAd = null
+                    loadInterstitial(activity.applicationContext)
                     onDismissed?.invoke()
                 }
             }
+            ad.show(activity)
         } else {
             onDismissed?.invoke()
         }
@@ -173,20 +178,23 @@ object AdManager {
         onRewarded: () -> Unit,
         onDismissed: () -> Unit
     ) {
-        if (rewardedAd != null) {
-            rewardedAd?.show(activity) {
-                onRewarded()
-            }
-            rewardedAd?.fullScreenContentCallback = object : FullScreenContentCallback() {
+        val ad = rewardedAd
+        if (ad != null) {
+            // Set the callback before show() so dismissal/reward are handled
+            // reliably and the next rewarded ad is preloaded.
+            ad.fullScreenContentCallback = object : FullScreenContentCallback() {
                 override fun onAdDismissedFullScreenContent() {
                     rewardedAd = null
+                    loadRewarded(activity.applicationContext)
                     onDismissed()
                 }
                 override fun onAdFailedToShowFullScreenContent(error: AdError) {
                     rewardedAd = null
+                    loadRewarded(activity.applicationContext)
                     onDismissed()
                 }
             }
+            ad.show(activity) { onRewarded() }
         } else {
             onDismissed()
         }

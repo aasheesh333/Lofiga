@@ -1,5 +1,7 @@
 package com.dhanuk.lofiga.ui
 
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -9,6 +11,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.dhanuk.lofiga.ads.AdManager
+import com.dhanuk.lofiga.ads.BannerAd
 import com.dhanuk.lofiga.ui.components.LofigaNavigationBar
 import com.dhanuk.lofiga.ui.screens.*
 
@@ -39,12 +42,22 @@ fun LofigaMainApp(
 
     Scaffold(
         bottomBar = {
-            LofigaNavigationBar(
-                selectedIndex = selectedIndex,
-                onItemSelected = { index ->
-                    selectedIndex = index
+            Column {
+                // Anchored banner on browsing screens (not the editor) so it
+                // never overlaps the playback/effect controls.
+                if (selectedIndex != 1) {
+                    BannerAd(
+                        context = context,
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
-            )
+                LofigaNavigationBar(
+                    selectedIndex = selectedIndex,
+                    onItemSelected = { index ->
+                        selectedIndex = index
+                    }
+                )
+            }
         }
     ) { paddingValues ->
         when (selectedIndex) {
