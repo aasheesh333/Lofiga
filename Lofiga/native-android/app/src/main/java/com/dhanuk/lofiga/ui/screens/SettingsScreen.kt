@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.dhanuk.lofiga.ads.BannerAd
 import com.dhanuk.lofiga.ui.MainViewModel
 import com.dhanuk.lofiga.ui.components.*
 import com.dhanuk.lofiga.ui.theme.*
@@ -200,6 +201,11 @@ fun SettingsScreen(
                     }
                 }
             }
+
+            Spacer(Modifier.height(16.dp))
+            BannerAd(
+                modifier = Modifier.fillMaxWidth()
+            )
         }
     }
 

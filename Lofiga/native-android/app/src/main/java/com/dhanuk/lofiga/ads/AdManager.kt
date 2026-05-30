@@ -24,13 +24,15 @@ import kotlinx.coroutines.flow.asStateFlow
 object AdManager {
 
     private const val TAG = "AdManager"
-    private const val MIN_INTERSTITIAL_INTERVAL = 60000L
+    private const val MIN_INTERSTITIAL_INTERVAL = 10000L
     private const val MAX_FAILED_LOADS = 3
 
     private var interstitialAd: InterstitialAd? = null
     private var rewardedAd: RewardedAd? = null
+    private var bannerAd: com.google.android.gms.ads.AdView? = null
     private var lastInterstitialTime = 0L
-    private var consecutiveFailures = 0
+    private var consecutiveInterstitialFailures = 0
+    private var consecutiveRewardedFailures = 0
 
     private val _isConsentObtained = MutableStateFlow(false)
     val isConsentObtained: StateFlow<Boolean> = _isConsentObtained.asStateFlow()
@@ -84,6 +86,10 @@ object AdManager {
         )
     }
 
+    // ========================
+    // INTERSTITIAL
+    // ========================
+
     fun loadInterstitial(context: Context) {
         if (_isAdFree.value) return
 
@@ -94,7 +100,7 @@ object AdManager {
             object : InterstitialAdLoadCallback() {
                 override fun onAdLoaded(ad: InterstitialAd) {
                     interstitialAd = ad
-                    consecutiveFailures = 0
+                    consecutiveInterstitialFailures = 0
                     Log.d(TAG, "Interstitial ad loaded")
                     ad.fullScreenContentCallback = object : FullScreenContentCallback() {
                         override fun onAdDismissedFullScreenContent() {
@@ -108,9 +114,9 @@ object AdManager {
                     }
                 }
                 override fun onAdFailedToLoad(error: LoadAdError) {
-                    consecutiveFailures++
+                    consecutiveInterstitialFailures++
                     Log.e(TAG, "Interstitial failed to load: ${error.message}")
-                    if (consecutiveFailures < MAX_FAILED_LOADS) {
+                    if (consecutiveInterstitialFailures < MAX_FAILED_LOADS) {
                         loadInterstitial(context)
                     }
                 }
@@ -149,6 +155,10 @@ object AdManager {
         }
     }
 
+    // ========================
+    // REWARDED
+    // ========================
+
     fun loadRewarded(context: Context) {
         RewardedAd.load(
             context,
@@ -157,12 +167,25 @@ object AdManager {
             object : RewardedAdLoadCallback() {
                 override fun onAdLoaded(ad: RewardedAd) {
                     rewardedAd = ad
-                    consecutiveFailures = 0
+                    consecutiveRewardedFailures = 0
                     Log.d(TAG, "Rewarded ad loaded")
+                    ad.fullScreenContentCallback = object : FullScreenContentCallback() {
+                        override fun onAdDismissedFullScreenContent() {
+                            rewardedAd = null
+                            loadRewarded(context)
+                        }
+                        override fun onAdFailedToShowFullScreenContent(error: AdError) {
+                            rewardedAd = null
+                            Log.e(TAG, "Rewarded failed to show: ${error.message}")
+                        }
+                    }
                 }
                 override fun onAdFailedToLoad(error: LoadAdError) {
-                    consecutiveFailures++
+                    consecutiveRewardedFailures++
                     Log.e(TAG, "Rewarded failed to load: ${error.message}")
+                    if (consecutiveRewardedFailures < MAX_FAILED_LOADS) {
+                        loadRewarded(context)
+                    }
                 }
             }
         )
@@ -192,7 +215,42 @@ object AdManager {
         }
     }
 
+    fun isRewardedReady(): Boolean = rewardedAd != null
+
+    // ========================
+    // BANNER (Singleton)
+    // ========================
+
+    fun getOrCreateBannerAd(context: Context, adUnitId: String): com.google.android.gms.ads.AdView {
+        return bannerAd ?: createBannerAd(context, adUnitId).also { bannerAd = it }
+    }
+
+    private fun createBannerAd(context: Context, adUnitId: String): com.google.android.gms.ads.AdView {
+        return com.google.android.gms.ads.AdView(context).apply {
+            setAdSize(com.google.android.gms.ads.AdSize.BANNER)
+            this.adUnitId = adUnitId
+            loadAd(AdRequest.Builder().build())
+        }
+    }
+
+    fun refreshBannerIfNeeded(context: Context) {
+        val ad = bannerAd ?: return
+        if (ad.adUnitId == null) return
+        val isLoading = ad.isLoading
+        if (!isLoading) {
+            ad.loadAd(AdRequest.Builder().build())
+        }
+    }
+
+    fun destroyBanner() {
+        bannerAd?.destroy()
+        bannerAd = null
+    }
+
     fun setAdFree(adFree: Boolean) {
         _isAdFree.value = adFree
+        if (adFree) {
+            destroyBanner()
+        }
     }
 }

@@ -20,14 +20,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
+import com.dhanuk.lofiga.ads.BannerAd
 import com.dhanuk.lofiga.ui.MainViewModel
 import com.dhanuk.lofiga.ui.components.*
 import com.dhanuk.lofiga.ui.theme.*
 import java.io.File
 
-/**
- * Library screen showing exported lofi mixes on the device.
- */
 @Composable
 fun LibraryScreen(
     viewModel: MainViewModel,
@@ -38,25 +36,17 @@ fun LibraryScreen(
     var exportedFiles by remember { mutableStateOf<List<File>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
 
-
-    // Helper removed; loading logic inlined in LaunchedEffect blocks
-
-    // Initial load
     LaunchedEffect(Unit) {
-        // Load exports directly
-        // Look for exported files in app-specific Music/Lofiga directory
         val files = mutableListOf<File>()
         val musDir = appContext.getExternalFilesDir(Environment.DIRECTORY_MUSIC)
         val dirs = mutableListOf<File>()
         if (musDir != null) {
             dirs.add(File(musDir, "Lofiga"))
         }
-        // Also check old shared storage paths for backward compatibility
         try {
             dirs.add(File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC), "Lofiga"))
             dirs.add(File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "Lofiga"))
         } catch (_: Exception) {
-            // On Android 11+, shared storage paths may not be accessible
         }
         dirs.forEach { dir ->
             if (dir.exists()) {
@@ -71,7 +61,6 @@ fun LibraryScreen(
         isLoading = false
     }
 
-    // Refresh when an export completes
     LaunchedEffect(viewModel) {
         viewModel.exportCompleted.collect {
             val files = mutableListOf<File>()
@@ -83,7 +72,8 @@ fun LibraryScreen(
             try {
                 dirs.add(File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC), "Lofiga"))
                 dirs.add(File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "Lofiga"))
-            } catch (_: Exception) { }
+            } catch (_: Exception) {
+            }
             dirs.forEach { dir ->
                 if (dir.exists()) {
                     files.addAll(
@@ -97,83 +87,87 @@ fun LibraryScreen(
         }
     }
 
-
     Box(modifier = modifier.fillMaxSize()) {
         AmbientBackground()
 
-        if (isLoading) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = Purple500)
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 80.dp)
-            ) {
-                item {
-                    Text(
-                        text = "Your Mixes",
-                        style = MaterialTheme.typography.headlineLarge,
-color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.padding(bottom = 20.dp)
-                    )
+        Column(modifier = Modifier.fillMaxSize()) {
+            if (isLoading) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = Purple500)
                 }
-
-                if (exportedFiles.isEmpty()) {
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 80.dp)
+                ) {
                     item {
-                        Box(
-                            modifier = Modifier.fillMaxWidth().fillMaxHeight(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                // Replicate empty state from PlayerScreen for consistency
-                                Surface(
-                                    modifier = Modifier.size(140.dp),
-                                    shape = CircleShape,
-                                    color = Purple500.copy(alpha = 0.1f),
-                                    border = BorderStroke(2.dp, Purple500.copy(alpha = 0.2f))
-                                ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Icon(
-                                            Icons.Outlined.LibraryMusic,
-                                            contentDescription = null,
-                                            tint = Purple500.copy(alpha = 0.6f),
-                                            modifier = Modifier.size(64.dp)
-                                        )
-                                    }
-                                }
-                                Spacer(Modifier.height(28.dp))
-                                Text(
-                                    "No generated songs yet",
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    style = MaterialTheme.typography.titleLarge,
-                                    fontWeight = FontWeight.Bold,
-                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                                )
-                                Spacer(Modifier.height(8.dp))
-                                Text(
-                                    "Export a track to see it here",
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                                )
-                            }
-                        }
-                    }
-                } else {
-                    items(exportedFiles) { file ->
-                        LibraryItem(
-                            fileName = file.name,
-                            filePath = file.absolutePath,
-                            onPlay = { onFileSelected(file.absolutePath, file.name) },
-                            onDelete = {
-                                file.delete()
-                                exportedFiles = exportedFiles - file
-                            }
+                        Text(
+                            text = "Your Mixes",
+                            style = MaterialTheme.typography.headlineLarge,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.padding(bottom = 20.dp)
                         )
                     }
+
+                    if (exportedFiles.isEmpty()) {
+                        item {
+                            Box(
+                                modifier = Modifier.fillMaxWidth().fillMaxHeight(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Surface(
+                                        modifier = Modifier.size(140.dp),
+                                        shape = CircleShape,
+                                        color = Purple500.copy(alpha = 0.1f),
+                                        border = BorderStroke(2.dp, Purple500.copy(alpha = 0.2f))
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Icon(
+                                                Icons.Outlined.LibraryMusic,
+                                                contentDescription = null,
+                                                tint = Purple500.copy(alpha = 0.6f),
+                                                modifier = Modifier.size(64.dp)
+                                            )
+                                        }
+                                    }
+                                    Spacer(Modifier.height(28.dp))
+                                    Text(
+                                        "No generated songs yet",
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        style = MaterialTheme.typography.titleLarge,
+                                        fontWeight = FontWeight.Bold,
+                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                    )
+                                    Spacer(Modifier.height(8.dp))
+                                    Text(
+                                        "Export a track to see it here",
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                    )
+                                }
+                            }
+                        }
+                    } else {
+                        items(exportedFiles) { file ->
+                            LibraryItem(
+                                fileName = file.name,
+                                filePath = file.absolutePath,
+                                onPlay = { onFileSelected(file.absolutePath, file.name) },
+                                onDelete = {
+                                    file.delete()
+                                    exportedFiles = exportedFiles - file
+                                }
+                            )
+                        }
+                    }
                 }
             }
+
+            BannerAd(
+                modifier = Modifier.fillMaxWidth()
+            )
         }
     }
 }

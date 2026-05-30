@@ -1,5 +1,6 @@
 package com.dhanuk.lofiga.ui
 
+import android.app.Activity
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -17,6 +18,7 @@ fun LofigaMainApp(
     viewModel: MainViewModel
 ) {
     var selectedIndex by remember { mutableStateOf(0) }
+    var previousIndex by remember { mutableStateOf(0) }
     val context = LocalContext.current
 
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -32,9 +34,11 @@ fun LofigaMainApp(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    LaunchedEffect(Unit) {
-        AdManager.loadInterstitial(context)
-        AdManager.loadRewarded(context)
+    LaunchedEffect(selectedIndex) {
+        if (previousIndex != selectedIndex) {
+            AdManager.showInterstitial(context as Activity)
+            previousIndex = selectedIndex
+        }
     }
 
     Scaffold(

@@ -126,7 +126,7 @@ fun PlayerScreen(
                 }
             }
             viewModel.clearExportedFilePath()
-            AdManager.showInterstitial(context as Activity)
+            AdManager.showRewarded(context as Activity, onRewarded = {}, onDismissed = {})
         }
     }
 

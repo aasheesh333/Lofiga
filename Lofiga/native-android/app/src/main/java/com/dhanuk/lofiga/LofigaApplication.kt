@@ -23,5 +23,7 @@ class LofigaApplication : Application() {
         mediaNotificationManager.createChannel()
 
         AdManager.initialize(this)
+        AdManager.loadInterstitial(this)
+        AdManager.loadRewarded(this)
     }
 }
