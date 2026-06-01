@@ -7,6 +7,7 @@ import android.util.Log
 import java.security.MessageDigest
 import com.dhanuk.lofiga.BuildConfig
 import com.google.android.gms.ads.AdError
+import com.google.android.gms.ads.AdListener
 import com.google.android.gms.ads.AdRequest
 import com.google.android.gms.ads.FullScreenContentCallback
 import com.google.android.gms.ads.LoadAdError
@@ -53,6 +54,13 @@ object AdManager {
         val isConsentObtained: Boolean = false,
         val isInterstitialReady: Boolean = false,
         val isRewardedReady: Boolean = false,
+        val isBannerAdViewCreated: Boolean = false,
+        val isBannerAdViewAttached: Boolean = false,
+        val isBannerLoaded: Boolean = false,
+        val bannerLoadAttempts: Int = 0,
+        val lastBannerError: String? = null,
+        val lastBannerErrorCode: Int? = null,
+        val lastBannerErrorName: String? = null,
         val consecutiveInterstitialFailures: Int = 0,
         val consecutiveRewardedFailures: Int = 0,
         val lastInterstitialError: String? = null,
@@ -71,6 +79,10 @@ object AdManager {
     private var lastInterstitialErrorCode: Int? = null
     private var lastRewardedError: String? = null
     private var lastRewardedErrorCode: Int? = null
+    private var lastBannerError: String? = null
+    private var lastBannerErrorCode: Int? = null
+    private var bannerLoadAttempts = 0
+    private var isBannerLoaded = false
     private var isAdTestMode = false
 
     private val _diagnostics = MutableStateFlow(AdDiagnostics())
@@ -146,12 +158,20 @@ object AdManager {
     }
 
     private fun pushDiagnostics() {
+        val ad = bannerAd
         _diagnostics.value = AdDiagnostics(
             isMobileAdsInitialized = mobileAdsInitialized,
             isAdFree = _isAdFree.value,
             isConsentObtained = _isConsentObtained.value,
             isInterstitialReady = interstitialAd != null,
             isRewardedReady = rewardedAd != null,
+            isBannerAdViewCreated = ad != null,
+            isBannerAdViewAttached = ad?.parent != null,
+            isBannerLoaded = isBannerLoaded,
+            bannerLoadAttempts = bannerLoadAttempts,
+            lastBannerError = lastBannerError,
+            lastBannerErrorCode = lastBannerErrorCode,
+            lastBannerErrorName = lastBannerErrorCode?.let { decodeErrorCode(it) },
             consecutiveInterstitialFailures = consecutiveInterstitialFailures,
             consecutiveRewardedFailures = consecutiveRewardedFailures,
             lastInterstitialError = lastInterstitialError,
@@ -367,24 +387,83 @@ object AdManager {
     // ========================
 
     fun getOrCreateBannerAd(context: Context, adUnitId: String): com.google.android.gms.ads.AdView {
-        return bannerAd ?: createBannerAd(context, adUnitId).also { bannerAd = it }
+        return bannerAd ?: createBannerAd(context, adUnitId).also {
+            bannerAd = it
+            pushDiagnostics()
+        }
     }
 
     private fun createBannerAd(context: Context, adUnitId: String): com.google.android.gms.ads.AdView {
-        return com.google.android.gms.ads.AdView(context).apply {
-            setAdSize(com.google.android.gms.ads.AdSize.BANNER)
-            this.adUnitId = adUnitId
-            loadAd(AdRequest.Builder().build())
+        val view = com.google.android.gms.ads.AdView(context)
+        view.setAdSize(com.google.android.gms.ads.AdSize.BANNER)
+        view.adUnitId = adUnitId
+        view.adListener = object : AdListener() {
+            override fun onAdLoaded() {
+                isBannerLoaded = true
+                lastBannerError = null
+                lastBannerErrorCode = null
+                Log.d(TAG, "Banner ad loaded")
+                pushDiagnostics()
+            }
+            override fun onAdFailedToLoad(error: LoadAdError) {
+                isBannerLoaded = false
+                lastBannerError = "code=${error.code} domain=${error.domain} msg=${error.message}"
+                lastBannerErrorCode = error.code
+                bannerLoadAttempts++
+                Log.e(TAG, "Banner failed to load: code=${error.code} ${decodeErrorCode(error.code)} - ${error.message}")
+                pushDiagnostics()
+            }
+            override fun onAdOpened() {
+                Log.d(TAG, "Banner ad opened")
+            }
+            override fun onAdClicked() {
+                Log.d(TAG, "Banner ad clicked")
+            }
+            override fun onAdClosed() {
+                Log.d(TAG, "Banner ad closed")
+            }
+            override fun onAdImpression() {
+                Log.d(TAG, "Banner ad impression")
+            }
+        }
+        return view
+    }
+
+    /**
+     * Call this after the AdView has been added to a parent ViewGroup.
+     * Per AdMob best practice, attach to the hierarchy first, then load.
+     */
+    fun loadBannerIfNeeded() {
+        val ad = bannerAd ?: return
+        if (ad.adUnitId.isNullOrBlank()) return
+        if (ad.parent == null) {
+            Log.w(TAG, "loadBannerIfNeeded: AdView not attached to parent, skipping load")
+            return
+        }
+        if (!ad.isLoading) {
+            ad.loadAd(AdRequest.Builder().build())
+            pushDiagnostics()
         }
     }
 
-    fun refreshBannerIfNeeded(context: Context) {
+    fun refreshBannerIfNeeded() {
         val ad = bannerAd ?: return
-        if (ad.adUnitId == null) return
-        val isLoading = ad.isLoading
-        if (!isLoading) {
+        if (ad.adUnitId.isNullOrBlank()) return
+        if (!ad.isLoading) {
             ad.loadAd(AdRequest.Builder().build())
         }
+    }
+
+    fun reloadBanner() {
+        val ad = bannerAd ?: return
+        if (ad.adUnitId.isNullOrBlank()) return
+        ad.loadAd(AdRequest.Builder().build())
+        bannerLoadAttempts++
+        pushDiagnostics()
+    }
+
+    fun notifyBannerDetached() {
+        pushDiagnostics()
     }
 
     fun destroyBanner() {

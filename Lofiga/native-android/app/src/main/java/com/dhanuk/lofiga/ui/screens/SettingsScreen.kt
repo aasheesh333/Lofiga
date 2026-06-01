@@ -285,6 +285,11 @@ private fun AdDiagnosticsDialog(onDismiss: () -> Unit) {
         Toast.makeText(context, "Counters reset, reloading ads…", Toast.LENGTH_SHORT).show()
     }
 
+    fun reloadBanner() {
+        AdManager.reloadBanner()
+        Toast.makeText(context, "Banner reloaded", Toast.LENGTH_SHORT).show()
+    }
+
     fun toggleTestMode(enabled: Boolean) {
         adTestMode = enabled
         DebugFlags.setAdTestModeEnabled(context, enabled)
@@ -312,6 +317,15 @@ private fun AdDiagnosticsDialog(onDismiss: () -> Unit) {
         appendLine("Interstitial ready: ${diag.isInterstitialReady}")
         appendLine("Rewarded ready:     ${diag.isRewardedReady}")
         appendLine("Ad test mode:       ${diag.isAdTestMode}")
+        appendLine("---- Banner ----")
+        appendLine("AdView created:     ${diag.isBannerAdViewCreated}")
+        appendLine("AdView attached:    ${diag.isBannerAdViewAttached}")
+        appendLine("Banner loaded:      ${diag.isBannerLoaded}")
+        appendLine("Load attempts:      ${diag.bannerLoadAttempts}")
+        appendLine("Last banner error:  ${diag.lastBannerError ?: "none"}")
+        if (diag.lastBannerErrorCode != null) {
+            appendLine("Banner error decoded: ${diag.lastBannerErrorCode} = ${diag.lastBannerErrorName}")
+        }
         appendLine("---- Failures (auto-reset on app foreground) ----")
         appendLine("Consecutive interstitial failures: ${diag.consecutiveInterstitialFailures} / ${diag.maxFailedLoads}")
         appendLine("Consecutive rewarded failures:     ${diag.consecutiveRewardedFailures} / ${diag.maxFailedLoads}")
@@ -356,6 +370,18 @@ private fun AdDiagnosticsDialog(onDismiss: () -> Unit) {
                 DiagLine("Interstitial ready", diag.isInterstitialReady.toString())
                 DiagLine("Rewarded ready", diag.isRewardedReady.toString())
                 DiagLine("Ad test mode", diag.isAdTestMode.toString())
+
+                Spacer(Modifier.height(12.dp))
+                Text("Banner (singleton)", color = Purple500, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
+                Spacer(Modifier.height(4.dp))
+                DiagLine("AdView created", diag.isBannerAdViewCreated.toString())
+                DiagLine("AdView attached", diag.isBannerAdViewAttached.toString())
+                DiagLine("Banner loaded", diag.isBannerLoaded.toString())
+                DiagLine("Load attempts", diag.bannerLoadAttempts.toString())
+                DiagLine("Last banner error", diag.lastBannerError ?: "none")
+                if (diag.lastBannerErrorCode != null) {
+                    DiagLine("Banner error decoded", "${diag.lastBannerErrorCode} = ${diag.lastBannerErrorName}")
+                }
 
                 Spacer(Modifier.height(12.dp))
                 Text("Failures & Errors", color = Purple500, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
@@ -431,6 +457,9 @@ private fun AdDiagnosticsDialog(onDismiss: () -> Unit) {
                         color = if (adTestMode) Purple500 else colors.textTertiary,
                         fontWeight = FontWeight.Bold
                     )
+                }
+                TextButton(onClick = { reloadBanner() }) {
+                    Text("Reload Banner", color = Purple500)
                 }
                 TextButton(onClick = { forceReload() }) {
                     Text("Reset & Reload", color = Purple500)

@@ -18,11 +18,15 @@ fun BannerAd(
     DisposableEffect(adView) {
         onDispose {
             (adView.parent as? ViewGroup)?.removeView(adView)
+            AdManager.notifyBannerDetached()
         }
     }
 
     AndroidView(
         factory = { adView },
+        update = {
+            AdManager.loadBannerIfNeeded()
+        },
         modifier = modifier
     )
 }
