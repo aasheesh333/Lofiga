@@ -4,6 +4,7 @@ import android.app.Activity
 import android.app.Application
 import android.os.Bundle
 import com.dhanuk.lofiga.ads.AdManager
+import com.dhanuk.lofiga.ads.DebugFlags
 import com.dhanuk.lofiga.media.MediaNotificationManager
 import com.dhanuk.lofiga.media.MediaSessionManager
 import com.onesignal.OneSignal
@@ -21,6 +22,10 @@ class LofigaApplication : Application() {
         super.onCreate()
 
         OneSignal.initWithContext(this, BuildConfig.ONESIGNAL_APP_ID)
+
+        if (DebugFlags.isAdTestModeEnabled(this)) {
+            AdManager.applyTestMode(this)
+        }
 
         mediaSessionManager = MediaSessionManager(this)
         mediaNotificationManager = MediaNotificationManager(this)

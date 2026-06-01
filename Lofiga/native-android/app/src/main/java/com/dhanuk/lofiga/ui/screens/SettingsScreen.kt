@@ -25,6 +25,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.dhanuk.lofiga.ads.AdManager
 import com.dhanuk.lofiga.ads.BannerAd
+import com.dhanuk.lofiga.ads.DebugFlags
 import com.dhanuk.lofiga.ui.MainViewModel
 import com.dhanuk.lofiga.ui.components.*
 import com.dhanuk.lofiga.ui.theme.*
@@ -271,6 +272,7 @@ private fun AdDiagnosticsDialog(onDismiss: () -> Unit) {
     val context = LocalContext.current
     val diag by AdManager.diagnostics.collectAsState()
     val colors = LocalAppColors.current
+    var adTestMode by remember { mutableStateOf(DebugFlags.isAdTestModeEnabled(context)) }
 
     fun copyToClipboard(text: String) {
         val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
@@ -281,6 +283,19 @@ private fun AdDiagnosticsDialog(onDismiss: () -> Unit) {
     fun forceReload() {
         AdManager.resetFailureCounters(context)
         Toast.makeText(context, "Counters reset, reloading ads…", Toast.LENGTH_SHORT).show()
+    }
+
+    fun toggleTestMode(enabled: Boolean) {
+        adTestMode = enabled
+        DebugFlags.setAdTestModeEnabled(context, enabled)
+        if (enabled) {
+            val ids = AdManager.applyTestMode(context)
+            AdManager.resetFailureCounters(context)
+            Toast.makeText(context, "Test mode ON. Device added: ${ids.firstOrNull() ?: "none"}", Toast.LENGTH_LONG).show()
+        } else {
+            AdManager.clearTestMode()
+            Toast.makeText(context, "Test mode OFF. Restart app to clear fully.", Toast.LENGTH_LONG).show()
+        }
     }
 
     val report = buildString {
@@ -296,12 +311,19 @@ private fun AdDiagnosticsDialog(onDismiss: () -> Unit) {
         appendLine("Ad-free:          ${diag.isAdFree}")
         appendLine("Interstitial ready: ${diag.isInterstitialReady}")
         appendLine("Rewarded ready:     ${diag.isRewardedReady}")
+        appendLine("Ad test mode:       ${diag.isAdTestMode}")
         appendLine("---- Failures (auto-reset on app foreground) ----")
         appendLine("Consecutive interstitial failures: ${diag.consecutiveInterstitialFailures} / ${diag.maxFailedLoads}")
         appendLine("Consecutive rewarded failures:     ${diag.consecutiveRewardedFailures} / ${diag.maxFailedLoads}")
         appendLine("Min interstitial interval:         ${diag.minInterstitialIntervalMs} ms")
         appendLine("Last interstitial error: ${diag.lastInterstitialError ?: "none"}")
+        if (diag.lastInterstitialErrorCode != null) {
+            appendLine("Interstitial error decoded: ${diag.lastInterstitialErrorCode} = ${diag.lastInterstitialErrorName}")
+        }
         appendLine("Last rewarded error:     ${diag.lastRewardedError ?: "none"}")
+        if (diag.lastRewardedErrorCode != null) {
+            appendLine("Rewarded error decoded: ${diag.lastRewardedErrorCode} = ${diag.lastRewardedErrorName}")
+        }
     }
 
     AlertDialog(
@@ -333,6 +355,7 @@ private fun AdDiagnosticsDialog(onDismiss: () -> Unit) {
                 DiagLine("Ad-free mode", diag.isAdFree.toString())
                 DiagLine("Interstitial ready", diag.isInterstitialReady.toString())
                 DiagLine("Rewarded ready", diag.isRewardedReady.toString())
+                DiagLine("Ad test mode", diag.isAdTestMode.toString())
 
                 Spacer(Modifier.height(12.dp))
                 Text("Failures & Errors", color = Purple500, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
@@ -355,27 +378,59 @@ private fun AdDiagnosticsDialog(onDismiss: () -> Unit) {
                     color = colors.textTertiary,
                     style = MaterialTheme.typography.bodySmall
                 )
+
+                Spacer(Modifier.height(12.dp))
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(8.dp),
+                    color = colors.surface
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Ad test mode (this device)", color = colors.textPrimary, fontWeight = FontWeight.W600, style = MaterialTheme.typography.bodyMedium)
+                            Text(
+                                "Registers this phone as a test device. Required to open the Ad Inspector and shows test ads that always fill.",
+                                color = colors.textTertiary,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                        Switch(
+                            checked = adTestMode,
+                            onCheckedChange = { toggleTestMode(it) }
+                        )
+                    }
+                }
             }
         },
         confirmButton = {
             Column(horizontalAlignment = Alignment.End) {
-                TextButton(onClick = {
-                    Toast.makeText(context, "Opening Ad Inspector…", Toast.LENGTH_SHORT).show()
-                    try {
-                        MobileAds.openAdInspector(context, OnAdInspectorClosedListener { error ->
-                            if (error != null) {
-                                android.util.Log.e("AdManager", "Ad Inspector closed with error: code=${error.code} ${error.message}")
-                                Toast.makeText(context, "Inspector error code=${error.code}: ${error.message}", Toast.LENGTH_LONG).show()
-                            } else {
-                                Toast.makeText(context, "Inspector closed", Toast.LENGTH_SHORT).show()
-                            }
-                        })
-                    } catch (t: Throwable) {
-                        android.util.Log.e("AdManager", "Ad Inspector open threw ${t.javaClass.simpleName}: ${t.message}", t)
-                        Toast.makeText(context, "Inspector unavailable (${t.javaClass.simpleName}): ${t.message}", Toast.LENGTH_LONG).show()
-                    }
-                }) {
-                    Text("Open Ad Inspector", color = Purple500, fontWeight = FontWeight.Bold)
+                TextButton(
+                    onClick = {
+                        Toast.makeText(context, "Opening Ad Inspector…", Toast.LENGTH_SHORT).show()
+                        try {
+                            MobileAds.openAdInspector(context, OnAdInspectorClosedListener { error ->
+                                if (error != null) {
+                                    android.util.Log.e("AdManager", "Ad Inspector closed with error: code=${error.code} ${error.message}")
+                                    Toast.makeText(context, "Inspector error code=${error.code}: ${error.message}", Toast.LENGTH_LONG).show()
+                                } else {
+                                    Toast.makeText(context, "Inspector closed", Toast.LENGTH_SHORT).show()
+                                }
+                            })
+                        } catch (t: Throwable) {
+                            android.util.Log.e("AdManager", "Ad Inspector open threw ${t.javaClass.simpleName}: ${t.message}", t)
+                            Toast.makeText(context, "Inspector unavailable (${t.javaClass.simpleName}): ${t.message}", Toast.LENGTH_LONG).show()
+                        }
+                    },
+                    enabled = adTestMode
+                ) {
+                    Text(
+                        "Open Ad Inspector",
+                        color = if (adTestMode) Purple500 else colors.textTertiary,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
                 TextButton(onClick = { forceReload() }) {
                     Text("Reset & Reload", color = Purple500)

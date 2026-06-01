@@ -2,6 +2,7 @@ package com.dhanuk.lofiga.ads
 
 import android.app.Activity
 import android.content.Context
+import android.provider.Settings
 import android.util.Log
 import com.dhanuk.lofiga.BuildConfig
 import com.google.android.gms.ads.AdError
@@ -9,6 +10,7 @@ import com.google.android.gms.ads.AdRequest
 import com.google.android.gms.ads.FullScreenContentCallback
 import com.google.android.gms.ads.LoadAdError
 import com.google.android.gms.ads.MobileAds
+import com.google.android.gms.ads.RequestConfiguration
 import com.google.android.gms.ads.interstitial.InterstitialAd
 import com.google.android.gms.ads.interstitial.InterstitialAdLoadCallback
 import com.google.android.gms.ads.rewarded.RewardedAd
@@ -59,7 +61,8 @@ object AdManager {
         val lastRewardedErrorCode: Int? = null,
         val lastRewardedErrorName: String? = null,
         val minInterstitialIntervalMs: Long = MIN_INTERSTITIAL_INTERVAL,
-        val maxFailedLoads: Int = MAX_FAILED_LOADS
+        val maxFailedLoads: Int = MAX_FAILED_LOADS,
+        val isAdTestMode: Boolean = false
     )
 
     private var mobileAdsInitialized = false
@@ -67,6 +70,7 @@ object AdManager {
     private var lastInterstitialErrorCode: Int? = null
     private var lastRewardedError: String? = null
     private var lastRewardedErrorCode: Int? = null
+    private var isAdTestMode = false
 
     private val _diagnostics = MutableStateFlow(AdDiagnostics())
     val diagnostics: StateFlow<AdDiagnostics> = _diagnostics.asStateFlow()
@@ -103,6 +107,30 @@ object AdManager {
         loadRewarded(context)
     }
 
+    fun applyTestMode(context: Context): List<String> {
+        val androidId = Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID)
+        val ids = buildList {
+            if (!androidId.isNullOrBlank()) add(androidId)
+            add(AdRequest.DEVICE_ID_EMULATOR)
+        }
+        MobileAds.setRequestConfiguration(
+            RequestConfiguration.Builder()
+                .setTestDeviceIds(ids)
+                .build()
+        )
+        isAdTestMode = true
+        Log.d(TAG, "Ad test mode applied. Test device IDs: $ids")
+        pushDiagnostics()
+        return ids
+    }
+
+    fun clearTestMode() {
+        MobileAds.setRequestConfiguration(RequestConfiguration.Builder().build())
+        isAdTestMode = false
+        Log.d(TAG, "Ad test mode cleared")
+        pushDiagnostics()
+    }
+
     private fun pushDiagnostics() {
         _diagnostics.value = AdDiagnostics(
             isMobileAdsInitialized = mobileAdsInitialized,
@@ -117,7 +145,8 @@ object AdManager {
             lastInterstitialErrorName = lastInterstitialErrorCode?.let { decodeErrorCode(it) },
             lastRewardedError = lastRewardedError,
             lastRewardedErrorCode = lastRewardedErrorCode,
-            lastRewardedErrorName = lastRewardedErrorCode?.let { decodeErrorCode(it) }
+            lastRewardedErrorName = lastRewardedErrorCode?.let { decodeErrorCode(it) },
+            isAdTestMode = isAdTestMode
         )
     }
 
