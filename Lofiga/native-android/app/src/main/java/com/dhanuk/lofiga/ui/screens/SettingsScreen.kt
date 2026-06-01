@@ -278,6 +278,11 @@ private fun AdDiagnosticsDialog(onDismiss: () -> Unit) {
         Toast.makeText(context, "Copied to clipboard", Toast.LENGTH_SHORT).show()
     }
 
+    fun forceReload() {
+        AdManager.resetFailureCounters(context)
+        Toast.makeText(context, "Counters reset, reloading ads…", Toast.LENGTH_SHORT).show()
+    }
+
     val report = buildString {
         appendLine("AdMob Diagnostics")
         appendLine("---- IDs (verify these match your AdMob console) ----")
@@ -291,7 +296,7 @@ private fun AdDiagnosticsDialog(onDismiss: () -> Unit) {
         appendLine("Ad-free:          ${diag.isAdFree}")
         appendLine("Interstitial ready: ${diag.isInterstitialReady}")
         appendLine("Rewarded ready:     ${diag.isRewardedReady}")
-        appendLine("---- Failures ----")
+        appendLine("---- Failures (auto-reset on app foreground) ----")
         appendLine("Consecutive interstitial failures: ${diag.consecutiveInterstitialFailures} / ${diag.maxFailedLoads}")
         appendLine("Consecutive rewarded failures:     ${diag.consecutiveRewardedFailures} / ${diag.maxFailedLoads}")
         appendLine("Min interstitial interval:         ${diag.minInterstitialIntervalMs} ms")
@@ -336,22 +341,45 @@ private fun AdDiagnosticsDialog(onDismiss: () -> Unit) {
                 DiagLine("Rewarded fail streak", "${diag.consecutiveRewardedFailures} / ${diag.maxFailedLoads}")
                 DiagLine("Min interstitial interval", "${diag.minInterstitialIntervalMs} ms")
                 DiagLine("Last interstitial error", diag.lastInterstitialError ?: "none")
+                if (diag.lastInterstitialErrorCode != null) {
+                    DiagLine("Interstitial error decoded", "${diag.lastInterstitialErrorCode} = ${diag.lastInterstitialErrorName}")
+                }
                 DiagLine("Last rewarded error", diag.lastRewardedError ?: "none")
+                if (diag.lastRewardedErrorCode != null) {
+                    DiagLine("Rewarded error decoded", "${diag.lastRewardedErrorCode} = ${diag.lastRewardedErrorName}")
+                }
+
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    "code=3 (NO_FILL) means AdMob received the request but has no ad to serve. Usually: new ad units, low impression history, or no demand for this device/region. Wait 24h, or check AdMob console ad-unit status.",
+                    color = colors.textTertiary,
+                    style = MaterialTheme.typography.bodySmall
+                )
             }
         },
         confirmButton = {
-            TextButton(onClick = {
-                try {
-                    MobileAds.openAdInspector(context, OnAdInspectorClosedListener { error ->
-                        if (error != null) {
-                            Toast.makeText(context, "Ad Inspector error: ${error.message}", Toast.LENGTH_LONG).show()
-                        }
-                    })
-                } catch (t: Throwable) {
-                    Toast.makeText(context, "Ad Inspector unavailable: ${t.message}", Toast.LENGTH_LONG).show()
+            Column(horizontalAlignment = Alignment.End) {
+                TextButton(onClick = {
+                    Toast.makeText(context, "Opening Ad Inspector…", Toast.LENGTH_SHORT).show()
+                    try {
+                        MobileAds.openAdInspector(context, OnAdInspectorClosedListener { error ->
+                            if (error != null) {
+                                android.util.Log.e("AdManager", "Ad Inspector closed with error: code=${error.code} ${error.message}")
+                                Toast.makeText(context, "Inspector error code=${error.code}: ${error.message}", Toast.LENGTH_LONG).show()
+                            } else {
+                                Toast.makeText(context, "Inspector closed", Toast.LENGTH_SHORT).show()
+                            }
+                        })
+                    } catch (t: Throwable) {
+                        android.util.Log.e("AdManager", "Ad Inspector open threw ${t.javaClass.simpleName}: ${t.message}", t)
+                        Toast.makeText(context, "Inspector unavailable (${t.javaClass.simpleName}): ${t.message}", Toast.LENGTH_LONG).show()
+                    }
+                }) {
+                    Text("Open Ad Inspector", color = Purple500, fontWeight = FontWeight.Bold)
                 }
-            }) {
-                Text("Open Ad Inspector", color = Purple500, fontWeight = FontWeight.Bold)
+                TextButton(onClick = { forceReload() }) {
+                    Text("Reset & Reload", color = Purple500)
+                }
             }
         },
         dismissButton = {

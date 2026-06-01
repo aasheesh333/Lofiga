@@ -53,17 +53,55 @@ object AdManager {
         val consecutiveInterstitialFailures: Int = 0,
         val consecutiveRewardedFailures: Int = 0,
         val lastInterstitialError: String? = null,
+        val lastInterstitialErrorCode: Int? = null,
+        val lastInterstitialErrorName: String? = null,
         val lastRewardedError: String? = null,
+        val lastRewardedErrorCode: Int? = null,
+        val lastRewardedErrorName: String? = null,
         val minInterstitialIntervalMs: Long = MIN_INTERSTITIAL_INTERVAL,
         val maxFailedLoads: Int = MAX_FAILED_LOADS
     )
 
     private var mobileAdsInitialized = false
     private var lastInterstitialError: String? = null
+    private var lastInterstitialErrorCode: Int? = null
     private var lastRewardedError: String? = null
+    private var lastRewardedErrorCode: Int? = null
 
     private val _diagnostics = MutableStateFlow(AdDiagnostics())
     val diagnostics: StateFlow<AdDiagnostics> = _diagnostics.asStateFlow()
+
+    fun decodeErrorCode(code: Int): String = when (code) {
+        0 -> "INTERNAL_ERROR"
+        1 -> "INVALID_REQUEST"
+        2 -> "NETWORK_ERROR"
+        3 -> "NO_FILL"
+        4 -> "INVALID_ID"
+        5 -> "IN_USE"
+        6 -> "MEDIATION_NO_FILL"
+        7 -> "MEDIATION_INVALID_ID"
+        8 -> "MEDIATION_IN_USE"
+        9 -> "MEDIATION_ERROR"
+        10 -> "NO_INVENTORY"
+        11 -> "APP_NOT_FOREGROUND"
+        12 -> "REQUEST_LIMIT_REACHED"
+        13 -> "INVALID_ARGUMENT"
+        14 -> "REWARDED_VIDEO_ALREADY_PLAYED"
+        else -> "UNKNOWN($code)"
+    }
+
+    fun resetFailureCounters(context: Context) {
+        consecutiveInterstitialFailures = 0
+        consecutiveRewardedFailures = 0
+        lastInterstitialError = null
+        lastInterstitialErrorCode = null
+        lastRewardedError = null
+        lastRewardedErrorCode = null
+        Log.d(TAG, "Failure counters reset")
+        pushDiagnostics()
+        loadInterstitial(context)
+        loadRewarded(context)
+    }
 
     private fun pushDiagnostics() {
         _diagnostics.value = AdDiagnostics(
@@ -75,7 +113,11 @@ object AdManager {
             consecutiveInterstitialFailures = consecutiveInterstitialFailures,
             consecutiveRewardedFailures = consecutiveRewardedFailures,
             lastInterstitialError = lastInterstitialError,
-            lastRewardedError = lastRewardedError
+            lastInterstitialErrorCode = lastInterstitialErrorCode,
+            lastInterstitialErrorName = lastInterstitialErrorCode?.let { decodeErrorCode(it) },
+            lastRewardedError = lastRewardedError,
+            lastRewardedErrorCode = lastRewardedErrorCode,
+            lastRewardedErrorName = lastRewardedErrorCode?.let { decodeErrorCode(it) }
         )
     }
 
@@ -165,7 +207,8 @@ object AdManager {
                 override fun onAdFailedToLoad(error: LoadAdError) {
                     consecutiveInterstitialFailures++
                     lastInterstitialError = "code=${error.code} domain=${error.domain} msg=${error.message}"
-                    Log.e(TAG, "Interstitial failed to load: ${error.message}")
+                    lastInterstitialErrorCode = error.code
+                    Log.e(TAG, "Interstitial failed to load: code=${error.code} ${decodeErrorCode(error.code)} - ${error.message}")
                     pushDiagnostics()
                     if (consecutiveInterstitialFailures < MAX_FAILED_LOADS) {
                         loadInterstitial(context)
@@ -239,7 +282,8 @@ object AdManager {
                 override fun onAdFailedToLoad(error: LoadAdError) {
                     consecutiveRewardedFailures++
                     lastRewardedError = "code=${error.code} domain=${error.domain} msg=${error.message}"
-                    Log.e(TAG, "Rewarded failed to load: ${error.message}")
+                    lastRewardedErrorCode = error.code
+                    Log.e(TAG, "Rewarded failed to load: code=${error.code} ${decodeErrorCode(error.code)} - ${error.message}")
                     pushDiagnostics()
                     if (consecutiveRewardedFailures < MAX_FAILED_LOADS) {
                         loadRewarded(context)

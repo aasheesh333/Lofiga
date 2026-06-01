@@ -1,6 +1,8 @@
 package com.dhanuk.lofiga
 
+import android.app.Activity
 import android.app.Application
+import android.os.Bundle
 import com.dhanuk.lofiga.ads.AdManager
 import com.dhanuk.lofiga.media.MediaNotificationManager
 import com.dhanuk.lofiga.media.MediaSessionManager
@@ -12,6 +14,8 @@ class LofigaApplication : Application() {
         private set
     lateinit var mediaNotificationManager: MediaNotificationManager
         private set
+
+    private var foregroundActivityCount = 0
 
     override fun onCreate() {
         super.onCreate()
@@ -25,5 +29,22 @@ class LofigaApplication : Application() {
         AdManager.initialize(this)
         AdManager.loadInterstitial(this)
         AdManager.loadRewarded(this)
+
+        registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
+            override fun onActivityStarted(activity: Activity) {
+                if (foregroundActivityCount == 0) {
+                    AdManager.resetFailureCounters(this@LofigaApplication)
+                }
+                foregroundActivityCount++
+            }
+            override fun onActivityStopped(activity: Activity) {
+                foregroundActivityCount = (foregroundActivityCount - 1).coerceAtLeast(0)
+            }
+            override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {}
+            override fun onActivityResumed(activity: Activity) {}
+            override fun onActivityPaused(activity: Activity) {}
+            override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {}
+            override fun onActivityDestroyed(activity: Activity) {}
+        })
     }
 }
