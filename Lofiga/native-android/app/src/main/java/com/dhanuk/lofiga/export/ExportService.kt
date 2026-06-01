@@ -194,9 +194,18 @@ object ExportService {
                         muxerStarted = true
                     }
                     val outBuf = encoder.getOutputBuffer(outIdx)!!
-                    outBuf.position(bufInfo.offset)
-                    outBuf.limit(bufInfo.offset + bufInfo.size)
-                    muxer.writeSampleData(trackIndex, outBuf, bufInfo)
+                    val safeSize = minOf(bufInfo.size, outBuf.capacity() - bufInfo.offset)
+                    if (safeSize > 0) {
+                        outBuf.position(bufInfo.offset)
+                        outBuf.limit(bufInfo.offset + safeSize)
+                        bufInfo.size = safeSize
+                        try {
+                            muxer.writeSampleData(trackIndex, outBuf, bufInfo)
+                        } catch (e: Exception) {
+                            Log.e("ExportService", "writeSampleData failed: ${e.javaClass.simpleName}: ${e.message}")
+                            throw e
+                        }
+                    }
                 }
                 if (bufInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) {
                     sawEOS = true
@@ -220,9 +229,18 @@ object ExportService {
             }
             if (bufInfo.size > 0 && muxerStarted) {
                 val outBuf = encoder.getOutputBuffer(outIdx)!!
-                outBuf.position(bufInfo.offset)
-                outBuf.limit(bufInfo.offset + bufInfo.size)
-                muxer.writeSampleData(trackIndex, outBuf, bufInfo)
+                val safeSize = minOf(bufInfo.size, outBuf.capacity() - bufInfo.offset)
+                if (safeSize > 0) {
+                    outBuf.position(bufInfo.offset)
+                    outBuf.limit(bufInfo.offset + safeSize)
+                    bufInfo.size = safeSize
+                    try {
+                        muxer.writeSampleData(trackIndex, outBuf, bufInfo)
+                    } catch (e: Exception) {
+                        Log.e("ExportService", "writeSampleData (drain) failed: ${e.javaClass.simpleName}: ${e.message}")
+                        throw e
+                    }
+                }
             }
             encoder.releaseOutputBuffer(outIdx, false)
             if (bufInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) break
