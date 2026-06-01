@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Context
 import android.provider.Settings
 import android.util.Log
+import android.view.View
 import java.security.MessageDigest
 import com.dhanuk.lofiga.BuildConfig
 import com.google.android.gms.ads.AdError
@@ -30,10 +31,10 @@ object AdManager {
     private const val TAG = "AdManager"
     private const val MIN_INTERSTITIAL_INTERVAL = 10000L
     private const val MAX_FAILED_LOADS = 3
+    private const val BANNER_REFRESH_INTERVAL_MS = 30_000L
 
     private var interstitialAd: InterstitialAd? = null
     private var rewardedAd: RewardedAd? = null
-    private var bannerAd: com.google.android.gms.ads.AdView? = null
     private var lastInterstitialTime = 0L
     private var consecutiveInterstitialFailures = 0
     private var consecutiveRewardedFailures = 0
@@ -58,6 +59,8 @@ object AdManager {
         val isBannerAdViewAttached: Boolean = false,
         val isBannerLoaded: Boolean = false,
         val bannerLoadAttempts: Int = 0,
+        val secondsSinceLastBannerLoad: Long = -1L,
+        val bannerRefreshCooldownSec: Long = BANNER_REFRESH_INTERVAL_MS / 1000L,
         val lastBannerError: String? = null,
         val lastBannerErrorCode: Int? = null,
         val lastBannerErrorName: String? = null,
@@ -82,7 +85,9 @@ object AdManager {
     private var lastBannerError: String? = null
     private var lastBannerErrorCode: Int? = null
     private var bannerLoadAttempts = 0
+    private var lastBannerLoadTime = 0L
     private var isBannerLoaded = false
+    private var currentBannerAd: com.google.android.gms.ads.AdView? = null
     private var isAdTestMode = false
 
     private val _diagnostics = MutableStateFlow(AdDiagnostics())
@@ -158,7 +163,11 @@ object AdManager {
     }
 
     private fun pushDiagnostics() {
-        val ad = bannerAd
+        val ad = currentBannerAd
+        val now = System.currentTimeMillis()
+        val secondsSinceLastLoad = if (lastBannerLoadTime > 0L) {
+            (now - lastBannerLoadTime) / 1000L
+        } else -1L
         _diagnostics.value = AdDiagnostics(
             isMobileAdsInitialized = mobileAdsInitialized,
             isAdFree = _isAdFree.value,
@@ -166,9 +175,10 @@ object AdManager {
             isInterstitialReady = interstitialAd != null,
             isRewardedReady = rewardedAd != null,
             isBannerAdViewCreated = ad != null,
-            isBannerAdViewAttached = ad?.parent != null,
+            isBannerAdViewAttached = ad?.isAttachedToWindow == true,
             isBannerLoaded = isBannerLoaded,
             bannerLoadAttempts = bannerLoadAttempts,
+            secondsSinceLastBannerLoad = secondsSinceLastLoad,
             lastBannerError = lastBannerError,
             lastBannerErrorCode = lastBannerErrorCode,
             lastBannerErrorName = lastBannerErrorCode?.let { decodeErrorCode(it) },
@@ -383,17 +393,18 @@ object AdManager {
     fun isRewardedReady(): Boolean = rewardedAd != null
 
     // ========================
-    // BANNER (Singleton)
+    // BANNER (per-Composable AdView with rate limiting)
     // ========================
 
-    fun getOrCreateBannerAd(context: Context, adUnitId: String): com.google.android.gms.ads.AdView {
-        return bannerAd ?: createBannerAd(context, adUnitId).also {
-            bannerAd = it
-            pushDiagnostics()
-        }
-    }
-
-    private fun createBannerAd(context: Context, adUnitId: String): com.google.android.gms.ads.AdView {
+    /**
+     * Creates a new banner AdView and wires it up to load on attach.
+     * Each BannerAd Composable gets its own AdView — avoids parent-attach
+     * conflicts that the previous singleton pattern caused.
+     *
+     * Load is rate-limited to once per BANNER_REFRESH_INTERVAL_MS (30s)
+     * to comply with AdMob's policy on banner refresh frequency.
+     */
+    fun createBannerView(context: Context, adUnitId: String): com.google.android.gms.ads.AdView {
         val view = com.google.android.gms.ads.AdView(context)
         view.setAdSize(com.google.android.gms.ads.AdSize.BANNER)
         view.adUnitId = adUnitId
@@ -402,6 +413,7 @@ object AdManager {
                 isBannerLoaded = true
                 lastBannerError = null
                 lastBannerErrorCode = null
+                lastBannerLoadTime = System.currentTimeMillis()
                 Log.d(TAG, "Banner ad loaded")
                 pushDiagnostics()
             }
@@ -410,6 +422,7 @@ object AdManager {
                 lastBannerError = "code=${error.code} domain=${error.domain} msg=${error.message}"
                 lastBannerErrorCode = error.code
                 bannerLoadAttempts++
+                lastBannerLoadTime = System.currentTimeMillis()
                 Log.e(TAG, "Banner failed to load: code=${error.code} ${decodeErrorCode(error.code)} - ${error.message}")
                 pushDiagnostics()
             }
@@ -426,49 +439,48 @@ object AdManager {
                 Log.d(TAG, "Banner ad impression")
             }
         }
+        view.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+            override fun onViewAttachedToWindow(v: View) {
+                currentBannerAd = view
+                pushDiagnostics()
+                tryLoadBanner(rateLimited = true)
+            }
+            override fun onViewDetachedFromWindow(v: View) {
+                if (currentBannerAd === view) {
+                    currentBannerAd = null
+                    isBannerLoaded = false
+                }
+                pushDiagnostics()
+            }
+        })
         return view
     }
 
-    /**
-     * Call this after the AdView has been added to a parent ViewGroup.
-     * Per AdMob best practice, attach to the hierarchy first, then load.
-     */
-    fun loadBannerIfNeeded() {
-        val ad = bannerAd ?: return
+    private fun tryLoadBanner(rateLimited: Boolean) {
+        val ad = currentBannerAd ?: return
         if (ad.adUnitId.isNullOrBlank()) return
-        if (ad.parent == null) {
-            Log.w(TAG, "loadBannerIfNeeded: AdView not attached to parent, skipping load")
-            return
+        if (ad.isLoading) return
+        if (rateLimited) {
+            val now = System.currentTimeMillis()
+            if (bannerLoadAttempts > 0 && now - lastBannerLoadTime < BANNER_REFRESH_INTERVAL_MS) {
+                Log.d(TAG, "Banner load rate-limited (cooldown ${(BANNER_REFRESH_INTERVAL_MS - (now - lastBannerLoadTime)) / 1000L}s remaining)")
+                return
+            }
         }
-        if (!ad.isLoading) {
-            ad.loadAd(AdRequest.Builder().build())
-            pushDiagnostics()
-        }
-    }
-
-    fun refreshBannerIfNeeded() {
-        val ad = bannerAd ?: return
-        if (ad.adUnitId.isNullOrBlank()) return
-        if (!ad.isLoading) {
-            ad.loadAd(AdRequest.Builder().build())
-        }
-    }
-
-    fun reloadBanner() {
-        val ad = bannerAd ?: return
-        if (ad.adUnitId.isNullOrBlank()) return
         ad.loadAd(AdRequest.Builder().build())
+        lastBannerLoadTime = System.currentTimeMillis()
         bannerLoadAttempts++
         pushDiagnostics()
     }
 
-    fun notifyBannerDetached() {
-        pushDiagnostics()
+    fun reloadBanner() {
+        tryLoadBanner(rateLimited = false)
     }
 
     fun destroyBanner() {
-        bannerAd?.destroy()
-        bannerAd = null
+        currentBannerAd?.destroy()
+        currentBannerAd = null
+        isBannerLoaded = false
     }
 
     fun setAdFree(adFree: Boolean) {

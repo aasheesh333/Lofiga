@@ -319,9 +319,11 @@ private fun AdDiagnosticsDialog(onDismiss: () -> Unit) {
         appendLine("Ad test mode:       ${diag.isAdTestMode}")
         appendLine("---- Banner ----")
         appendLine("AdView created:     ${diag.isBannerAdViewCreated}")
-        appendLine("AdView attached:    ${diag.isBannerAdViewAttached}")
+        appendLine("AdView in window:   ${diag.isBannerAdViewAttached}")
         appendLine("Banner loaded:      ${diag.isBannerLoaded}")
         appendLine("Load attempts:      ${diag.bannerLoadAttempts}")
+        appendLine("Last load (s ago):  ${if (diag.secondsSinceLastBannerLoad < 0) "never" else diag.secondsSinceLastBannerLoad}")
+        appendLine("Refresh cooldown:   ${diag.bannerRefreshCooldownSec}s")
         appendLine("Last banner error:  ${diag.lastBannerError ?: "none"}")
         if (diag.lastBannerErrorCode != null) {
             appendLine("Banner error decoded: ${diag.lastBannerErrorCode} = ${diag.lastBannerErrorName}")
@@ -372,12 +374,14 @@ private fun AdDiagnosticsDialog(onDismiss: () -> Unit) {
                 DiagLine("Ad test mode", diag.isAdTestMode.toString())
 
                 Spacer(Modifier.height(12.dp))
-                Text("Banner (singleton)", color = Purple500, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
+                Text("Banner", color = Purple500, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
                 Spacer(Modifier.height(4.dp))
                 DiagLine("AdView created", diag.isBannerAdViewCreated.toString())
-                DiagLine("AdView attached", diag.isBannerAdViewAttached.toString())
+                DiagLine("AdView in window", diag.isBannerAdViewAttached.toString())
                 DiagLine("Banner loaded", diag.isBannerLoaded.toString())
                 DiagLine("Load attempts", diag.bannerLoadAttempts.toString())
+                DiagLine("Last load (seconds ago)", if (diag.secondsSinceLastBannerLoad < 0) "never" else diag.secondsSinceLastBannerLoad.toString())
+                DiagLine("Refresh cooldown", "${diag.bannerRefreshCooldownSec}s (AdMob policy)")
                 DiagLine("Last banner error", diag.lastBannerError ?: "none")
                 if (diag.lastBannerErrorCode != null) {
                     DiagLine("Banner error decoded", "${diag.lastBannerErrorCode} = ${diag.lastBannerErrorName}")
@@ -400,7 +404,7 @@ private fun AdDiagnosticsDialog(onDismiss: () -> Unit) {
 
                 Spacer(Modifier.height(12.dp))
                 Text(
-                    "code=3 (NO_FILL) means AdMob received the request but has no ad to serve. Usually: new ad units, low impression history, or no demand for this device/region. Wait 24h, or check AdMob console ad-unit status.",
+                    "code=3 (NO_FILL): AdMob received the request but has no ad to serve right now. Common for new ad units (wait 24-48h), low impression history, or no demand for this device/region. In test mode this should be rare — if you see NO_FILL with the test-mode toggle ON, check Ad Inspector for details.",
                     color = colors.textTertiary,
                     style = MaterialTheme.typography.bodySmall
                 )
