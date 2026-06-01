@@ -1,6 +1,9 @@
 package com.dhanuk.lofiga.ui.screens
 
 import android.app.Activity
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
 import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
@@ -30,7 +33,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.text.style.TextAlign
 import androidx.core.content.FileProvider
+import android.widget.Toast
 import androidx.compose.material3.ExperimentalMaterial3Api
 import com.dhanuk.lofiga.ads.AdManager
 import com.dhanuk.lofiga.model.CustomPreset
@@ -891,6 +896,64 @@ fun PlayerScreen(
                     }
                 }
             }
+        }
+
+        // ========================
+        // EXPORT ERROR DIALOG
+        // ========================
+        val exportError by viewModel.lastExportError.collectAsState()
+        if (exportError != null) {
+            AlertDialog(
+                onDismissRequest = { viewModel.clearExportError() },
+                containerColor = colors.surface,
+                titleContentColor = colors.textPrimary,
+                textContentColor = colors.textSecondary,
+                title = {
+                    Text(
+                        "Export Failed",
+                        fontWeight = FontWeight.Bold,
+                        color = colors.textPrimary
+                    )
+                },
+                text = {
+                    Column {
+                        Text(
+                            "Please copy this error and share it with the developer:",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = colors.textSecondary
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(colors.bg, RoundedCornerShape(8.dp))
+                                .padding(12.dp)
+                        ) {
+                            Text(
+                                exportError ?: "",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = colors.textPrimary,
+                                textAlign = TextAlign.Start
+                            )
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                        cm?.setPrimaryClip(ClipData.newPlainText("Lofiga export error", exportError ?: ""))
+                        Toast.makeText(context, "Error copied to clipboard", Toast.LENGTH_SHORT).show()
+                        viewModel.clearExportError()
+                    }) {
+                        Text("Copy", color = colors.textPrimary, fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { viewModel.clearExportError() }) {
+                        Text("Close", color = colors.textSecondary)
+                    }
+                }
+            )
         }
 
         // ========================

@@ -72,6 +72,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) { 
     private val _exportProgress = MutableStateFlow(0f)
     val exportProgress: StateFlow<Float> = _exportProgress.asStateFlow()
 
+    private val _lastExportError = MutableStateFlow<String?>(null)
+    val lastExportError: StateFlow<String?> = _lastExportError.asStateFlow()
+
     private val _snackbarMessage = MutableSharedFlow<String>(extraBufferCapacity = 1)
     val snackbarMessage: SharedFlow<String> = _snackbarMessage.asSharedFlow()
 
@@ -435,6 +438,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) { 
             _isExporting.value = true
             _exportProgress.value = 0f
             _exportedFilePath.value = null
+            _lastExportError.value = null
             try {
                 val settings = settingsManager.settingsFlow.first()
                 val inputPath = if (track.dataPath.isNotBlank()) track.dataPath else null
@@ -455,11 +459,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) { 
                     _snackbarMessage.tryEmit("Export cancelled")
                 }
             } catch (e: Exception) {
-                _snackbarMessage.tryEmit("Export failed: ${e.message}")
+                val msg = "${e.javaClass.simpleName}: ${e.message ?: "(no message)"}"
+                val stack = e.stackTraceToString().lineSequence()
+                    .firstOrNull { it.contains("com.dhanuk.lofiga") }
+                    ?: e.stackTrace.firstOrNull()?.toString()
+                    ?: ""
+                _lastExportError.value = "$msg\nat $stack"
+                _snackbarMessage.tryEmit("Export failed: $msg")
             } finally {
                 _isExporting.value = false
             }
         }
+    }
+
+    fun clearExportError() {
+        _lastExportError.value = null
     }
 
     fun clearExportedFilePath() {
