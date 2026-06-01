@@ -87,7 +87,8 @@ object AdManager {
     private var bannerLoadAttempts = 0
     private var lastBannerLoadTime = 0L
     private var isBannerLoaded = false
-    private var currentBannerAd: com.google.android.gms.ads.AdView? = null
+    private var bannerAd: com.google.android.gms.ads.AdView? = null
+    private var bannerLoadAttempted = false
     private var isAdTestMode = false
 
     private val _diagnostics = MutableStateFlow(AdDiagnostics())
@@ -163,7 +164,7 @@ object AdManager {
     }
 
     private fun pushDiagnostics() {
-        val ad = currentBannerAd
+        val ad = bannerAd
         val now = System.currentTimeMillis()
         val secondsSinceLastLoad = if (lastBannerLoadTime > 0L) {
             (now - lastBannerLoadTime) / 1000L
@@ -393,94 +394,110 @@ object AdManager {
     fun isRewardedReady(): Boolean = rewardedAd != null
 
     // ========================
-    // BANNER (per-Composable AdView with rate limiting)
+    // BANNER (singleton, load once)
     // ========================
 
     /**
-     * Creates a new banner AdView and wires it up to load on attach.
-     * Each BannerAd Composable gets its own AdView — avoids parent-attach
-     * conflicts that the previous singleton pattern caused.
+     * Returns the singleton banner AdView, creating it on first call.
+     * The AdView is created ONCE and persists for the app's lifetime.
      *
-     * Load is rate-limited to once per BANNER_REFRESH_INTERVAL_MS (30s)
-     * to comply with AdMob's policy on banner refresh frequency.
+     * Per AdMob policy, we call loadAd exactly once for the lifetime of
+     * the AdView — no auto-refresh, no per-screen reload. Visibility
+     * (VISIBLE / GONE) is toggled by the caller based on which screen
+     * the user is on; the AdView itself is never destroyed or recreated
+     * during normal navigation.
+     *
+     * A single load covers the entire session. Manual "Reload Banner"
+     * from the diagnostic dialog is user-initiated and not auto-refresh.
      */
-    fun createBannerView(context: Context, adUnitId: String): com.google.android.gms.ads.AdView {
-        val view = com.google.android.gms.ads.AdView(context)
-        view.setAdSize(com.google.android.gms.ads.AdSize.BANNER)
-        view.adUnitId = adUnitId
-        view.adListener = object : AdListener() {
-            override fun onAdLoaded() {
-                isBannerLoaded = true
-                lastBannerError = null
-                lastBannerErrorCode = null
-                lastBannerLoadTime = System.currentTimeMillis()
-                Log.d(TAG, "Banner ad loaded")
-                pushDiagnostics()
-            }
-            override fun onAdFailedToLoad(error: LoadAdError) {
-                isBannerLoaded = false
-                lastBannerError = "code=${error.code} domain=${error.domain} msg=${error.message}"
-                lastBannerErrorCode = error.code
-                bannerLoadAttempts++
-                lastBannerLoadTime = System.currentTimeMillis()
-                Log.e(TAG, "Banner failed to load: code=${error.code} ${decodeErrorCode(error.code)} - ${error.message}")
-                pushDiagnostics()
-            }
-            override fun onAdOpened() {
-                Log.d(TAG, "Banner ad opened")
-            }
-            override fun onAdClicked() {
-                Log.d(TAG, "Banner ad clicked")
-            }
-            override fun onAdClosed() {
-                Log.d(TAG, "Banner ad closed")
-            }
-            override fun onAdImpression() {
-                Log.d(TAG, "Banner ad impression")
-            }
-        }
-        view.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
-            override fun onViewAttachedToWindow(v: View) {
-                currentBannerAd = view
-                pushDiagnostics()
-                tryLoadBanner(rateLimited = true)
-            }
-            override fun onViewDetachedFromWindow(v: View) {
-                if (currentBannerAd === view) {
-                    currentBannerAd = null
-                    isBannerLoaded = false
+    fun getOrCreateBannerAd(context: Context, adUnitId: String): com.google.android.gms.ads.AdView {
+        if (bannerAd == null) {
+            val view = com.google.android.gms.ads.AdView(context)
+            view.setAdSize(com.google.android.gms.ads.AdSize.BANNER)
+            view.adUnitId = adUnitId
+            view.adListener = object : AdListener() {
+                override fun onAdLoaded() {
+                    isBannerLoaded = true
+                    lastBannerError = null
+                    lastBannerErrorCode = null
+                    lastBannerLoadTime = System.currentTimeMillis()
+                    Log.d(TAG, "Banner ad loaded")
+                    pushDiagnostics()
                 }
-                pushDiagnostics()
+                override fun onAdFailedToLoad(error: LoadAdError) {
+                    isBannerLoaded = false
+                    lastBannerError = "code=${error.code} domain=${error.domain} msg=${error.message}"
+                    lastBannerErrorCode = error.code
+                    bannerLoadAttempts++
+                    lastBannerLoadTime = System.currentTimeMillis()
+                    Log.e(TAG, "Banner failed to load: code=${error.code} ${decodeErrorCode(error.code)} - ${error.message}")
+                    pushDiagnostics()
+                }
+                override fun onAdOpened() {
+                    Log.d(TAG, "Banner ad opened")
+                }
+                override fun onAdClicked() {
+                    Log.d(TAG, "Banner ad clicked")
+                }
+                override fun onAdClosed() {
+                    Log.d(TAG, "Banner ad closed")
+                }
+                override fun onAdImpression() {
+                    Log.d(TAG, "Banner ad impression")
+                }
             }
-        })
-        return view
+            bannerAd = view
+            pushDiagnostics()
+        }
+        return bannerAd!!
     }
 
-    private fun tryLoadBanner(rateLimited: Boolean) {
-        val ad = currentBannerAd ?: return
-        if (ad.adUnitId.isNullOrBlank()) return
-        if (ad.isLoading) return
-        if (rateLimited) {
-            val now = System.currentTimeMillis()
-            if (bannerLoadAttempts > 0 && now - lastBannerLoadTime < BANNER_REFRESH_INTERVAL_MS) {
-                Log.d(TAG, "Banner load rate-limited (cooldown ${(BANNER_REFRESH_INTERVAL_MS - (now - lastBannerLoadTime)) / 1000L}s remaining)")
-                return
-            }
+    /**
+     * Calls loadAd exactly once for the lifetime of the singleton AdView.
+     * Safe to call multiple times — the bannerLoadAttempted flag guards it.
+     * The actual call only happens when the AdView is attached to a window
+     * (i.e. is actually being shown), and only if no load has been attempted
+     * yet. This is the AdMob-recommended pattern: load once, show for the
+     * session, no auto-refresh.
+     */
+    fun loadBannerOnce() {
+        val ad = bannerAd ?: return
+        if (bannerLoadAttempted) return
+        if (!ad.isAttachedToWindow) {
+            Log.d(TAG, "loadBannerOnce: AdView not attached to window, will defer")
+            return
         }
+        if (ad.isLoading) return
         ad.loadAd(AdRequest.Builder().build())
-        lastBannerLoadTime = System.currentTimeMillis()
+        bannerLoadAttempted = true
         bannerLoadAttempts++
+        lastBannerLoadTime = System.currentTimeMillis()
         pushDiagnostics()
+        Log.d(TAG, "Banner load initiated (one-time)")
     }
 
     fun reloadBanner() {
-        tryLoadBanner(rateLimited = false)
+        val ad = bannerAd ?: return
+        if (ad.adUnitId.isNullOrBlank()) return
+        ad.loadAd(AdRequest.Builder().build())
+        bannerLoadAttempts++
+        lastBannerLoadTime = System.currentTimeMillis()
+        bannerLoadAttempted = true
+        pushDiagnostics()
+        Log.d(TAG, "Banner manually reloaded")
     }
 
     fun destroyBanner() {
-        currentBannerAd?.destroy()
-        currentBannerAd = null
+        bannerAd?.destroy()
+        bannerAd = null
+        bannerLoadAttempted = false
         isBannerLoaded = false
+    }
+
+    fun isBannerAdAttached(): Boolean = bannerAd?.isAttachedToWindow == true
+
+    fun setBannerVisibility(visible: Boolean) {
+        bannerAd?.visibility = if (visible) android.view.View.VISIBLE else android.view.View.GONE
     }
 
     fun setAdFree(adFree: Boolean) {

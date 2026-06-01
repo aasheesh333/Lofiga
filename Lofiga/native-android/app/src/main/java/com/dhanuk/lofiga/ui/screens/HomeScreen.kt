@@ -22,7 +22,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.dhanuk.lofiga.model.AudioTrack
 import com.dhanuk.lofiga.model.SavedConfig
-import com.dhanuk.lofiga.ads.BannerAd
 import com.dhanuk.lofiga.ui.MainViewModel
 import com.dhanuk.lofiga.ui.components.*
 import com.dhanuk.lofiga.ui.theme.*
@@ -310,10 +309,6 @@ fun HomeScreen(
                     }
                 }
             }
-
-            BannerAd(
-                modifier = Modifier.fillMaxWidth()
-            )
         }
     }
 }

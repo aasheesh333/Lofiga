@@ -24,7 +24,6 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.dhanuk.lofiga.ads.AdManager
-import com.dhanuk.lofiga.ads.BannerAd
 import com.dhanuk.lofiga.ads.DebugFlags
 import com.dhanuk.lofiga.ui.MainViewModel
 import com.dhanuk.lofiga.ui.components.*
@@ -233,10 +232,6 @@ fun SettingsScreen(
                 }
             }
 
-            Spacer(Modifier.height(16.dp))
-            BannerAd(
-                modifier = Modifier.fillMaxWidth()
-            )
         }
     }
 

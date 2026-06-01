@@ -20,7 +20,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
-import com.dhanuk.lofiga.ads.BannerAd
 import com.dhanuk.lofiga.ui.MainViewModel
 import com.dhanuk.lofiga.ui.components.*
 import com.dhanuk.lofiga.ui.theme.*
@@ -164,10 +163,6 @@ fun LibraryScreen(
                     }
                 }
             }
-
-            BannerAd(
-                modifier = Modifier.fillMaxWidth()
-            )
         }
     }
 }
