@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Context
 import android.provider.Settings
 import android.util.Log
+import java.security.MessageDigest
 import com.dhanuk.lofiga.BuildConfig
 import com.google.android.gms.ads.AdError
 import com.google.android.gms.ads.AdRequest
@@ -110,7 +111,9 @@ object AdManager {
     fun applyTestMode(context: Context): List<String> {
         val androidId = Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID)
         val ids = buildList {
-            if (!androidId.isNullOrBlank()) add(androidId)
+            if (!androidId.isNullOrBlank()) {
+                add(md5Upper(androidId))
+            }
             add(AdRequest.DEVICE_ID_EMULATOR)
         }
         MobileAds.setRequestConfiguration(
@@ -122,6 +125,17 @@ object AdManager {
         Log.d(TAG, "Ad test mode applied. Test device IDs: $ids")
         pushDiagnostics()
         return ids
+    }
+
+    private fun md5Upper(input: String): String {
+        val digest = MessageDigest.getInstance("MD5").digest(input.toByteArray(Charsets.UTF_8))
+        val hex = StringBuilder(digest.size * 2)
+        for (b in digest) {
+            val v = b.toInt() and 0xFF
+            if (v < 0x10) hex.append('0')
+            hex.append(Integer.toHexString(v))
+        }
+        return hex.toString().uppercase()
     }
 
     fun clearTestMode() {
