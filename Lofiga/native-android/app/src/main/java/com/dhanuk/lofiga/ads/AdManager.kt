@@ -40,9 +40,50 @@ object AdManager {
     private val _isAdFree = MutableStateFlow(false)
     val isAdFree: StateFlow<Boolean> = _isAdFree.asStateFlow()
 
+    data class AdDiagnostics(
+        val appId: String = BuildConfig.ADMOB_APP_ID,
+        val bannerAdUnitId: String = BuildConfig.ADMOB_BANNER_ID,
+        val interstitialAdUnitId: String = BuildConfig.ADMOB_INTERSTITIAL_ID,
+        val rewardedAdUnitId: String = BuildConfig.ADMOB_REWARDED_ID,
+        val isMobileAdsInitialized: Boolean = false,
+        val isAdFree: Boolean = false,
+        val isConsentObtained: Boolean = false,
+        val isInterstitialReady: Boolean = false,
+        val isRewardedReady: Boolean = false,
+        val consecutiveInterstitialFailures: Int = 0,
+        val consecutiveRewardedFailures: Int = 0,
+        val lastInterstitialError: String? = null,
+        val lastRewardedError: String? = null,
+        val minInterstitialIntervalMs: Long = MIN_INTERSTITIAL_INTERVAL,
+        val maxFailedLoads: Int = MAX_FAILED_LOADS
+    )
+
+    private var mobileAdsInitialized = false
+    private var lastInterstitialError: String? = null
+    private var lastRewardedError: String? = null
+
+    private val _diagnostics = MutableStateFlow(AdDiagnostics())
+    val diagnostics: StateFlow<AdDiagnostics> = _diagnostics.asStateFlow()
+
+    private fun pushDiagnostics() {
+        _diagnostics.value = AdDiagnostics(
+            isMobileAdsInitialized = mobileAdsInitialized,
+            isAdFree = _isAdFree.value,
+            isConsentObtained = _isConsentObtained.value,
+            isInterstitialReady = interstitialAd != null,
+            isRewardedReady = rewardedAd != null,
+            consecutiveInterstitialFailures = consecutiveInterstitialFailures,
+            consecutiveRewardedFailures = consecutiveRewardedFailures,
+            lastInterstitialError = lastInterstitialError,
+            lastRewardedError = lastRewardedError
+        )
+    }
+
     fun initialize(context: Context) {
         MobileAds.initialize(context) {
             Log.d(TAG, "AdMob SDK initialized")
+            mobileAdsInitialized = true
+            pushDiagnostics()
         }
     }
 
@@ -58,11 +99,13 @@ object AdManager {
                     loadAndShowConsentForm(activity)
                 } else {
                     _isConsentObtained.value = true
+                    pushDiagnostics()
                 }
             },
             { error ->
                 Log.e(TAG, "Consent info update failed: ${error.message}")
                 _isConsentObtained.value = true
+                pushDiagnostics()
             }
         )
     }
@@ -77,11 +120,13 @@ object AdManager {
                     }
                 } else {
                     _isConsentObtained.value = true
+                    pushDiagnostics()
                 }
             },
             { error ->
                 Log.e(TAG, "Consent form load failed: ${error.message}")
                 _isConsentObtained.value = true
+                pushDiagnostics()
             }
         )
     }
@@ -101,21 +146,27 @@ object AdManager {
                 override fun onAdLoaded(ad: InterstitialAd) {
                     interstitialAd = ad
                     consecutiveInterstitialFailures = 0
+                    lastInterstitialError = null
                     Log.d(TAG, "Interstitial ad loaded")
+                    pushDiagnostics()
                     ad.fullScreenContentCallback = object : FullScreenContentCallback() {
                         override fun onAdDismissedFullScreenContent() {
                             interstitialAd = null
+                            pushDiagnostics()
                             loadInterstitial(context)
                         }
                         override fun onAdFailedToShowFullScreenContent(error: AdError) {
                             interstitialAd = null
                             Log.e(TAG, "Interstitial failed to show: ${error.message}")
+                            pushDiagnostics()
                         }
                     }
                 }
                 override fun onAdFailedToLoad(error: LoadAdError) {
                     consecutiveInterstitialFailures++
+                    lastInterstitialError = "code=${error.code} domain=${error.domain} msg=${error.message}"
                     Log.e(TAG, "Interstitial failed to load: ${error.message}")
+                    pushDiagnostics()
                     if (consecutiveInterstitialFailures < MAX_FAILED_LOADS) {
                         loadInterstitial(context)
                     }
@@ -140,6 +191,7 @@ object AdManager {
         if (interstitialAd != null) {
             lastInterstitialTime = now
             interstitialAd?.show(activity)
+            pushDiagnostics()
             interstitialAd?.fullScreenContentCallback = object : FullScreenContentCallback() {
                 override fun onAdDismissedFullScreenContent() {
                     interstitialAd = null
@@ -168,21 +220,27 @@ object AdManager {
                 override fun onAdLoaded(ad: RewardedAd) {
                     rewardedAd = ad
                     consecutiveRewardedFailures = 0
+                    lastRewardedError = null
                     Log.d(TAG, "Rewarded ad loaded")
+                    pushDiagnostics()
                     ad.fullScreenContentCallback = object : FullScreenContentCallback() {
                         override fun onAdDismissedFullScreenContent() {
                             rewardedAd = null
+                            pushDiagnostics()
                             loadRewarded(context)
                         }
                         override fun onAdFailedToShowFullScreenContent(error: AdError) {
                             rewardedAd = null
                             Log.e(TAG, "Rewarded failed to show: ${error.message}")
+                            pushDiagnostics()
                         }
                     }
                 }
                 override fun onAdFailedToLoad(error: LoadAdError) {
                     consecutiveRewardedFailures++
+                    lastRewardedError = "code=${error.code} domain=${error.domain} msg=${error.message}"
                     Log.e(TAG, "Rewarded failed to load: ${error.message}")
+                    pushDiagnostics()
                     if (consecutiveRewardedFailures < MAX_FAILED_LOADS) {
                         loadRewarded(context)
                     }
@@ -252,5 +310,6 @@ object AdManager {
         if (adFree) {
             destroyBanner()
         }
+        pushDiagnostics()
     }
 }
