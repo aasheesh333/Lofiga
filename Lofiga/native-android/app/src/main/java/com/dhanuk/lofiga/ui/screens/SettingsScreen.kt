@@ -1,11 +1,7 @@
 package com.dhanuk.lofiga.ui.screens
 
-import android.content.ClipData
-import android.content.ClipboardManager
-import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -20,19 +16,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.dhanuk.lofiga.ads.AdManager
-import com.dhanuk.lofiga.ads.DebugFlags
 import com.dhanuk.lofiga.ui.MainViewModel
 import com.dhanuk.lofiga.ui.components.*
 import com.dhanuk.lofiga.ui.theme.*
 import com.dhanuk.lofiga.ui.theme.LocalAppColors
 import com.dhanuk.lofiga.util.SettingsManager
-import com.google.android.gms.ads.MobileAds
-import com.google.android.gms.ads.OnAdInspectorClosedListener
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -48,15 +38,6 @@ fun SettingsScreen(
 
     var showFormatDialog by remember { mutableStateOf(false) }
     var showBitrateDialog by remember { mutableStateOf(false) }
-    var showAdDebugDialog by remember { mutableStateOf(false) }
-    var versionTapCount by remember { mutableStateOf(0) }
-
-    LaunchedEffect(versionTapCount) {
-        if (versionTapCount in 1..6) {
-            delay(3000)
-            versionTapCount = 0
-        }
-    }
 
     Box(modifier = modifier.fillMaxSize()) {
         AmbientBackground()
@@ -107,21 +88,9 @@ fun SettingsScreen(
 
             SettingItem(
                 title = "Version",
-                subtitle = when {
-                    versionTapCount == 0 -> "2.0.0 (Native)"
-                    versionTapCount < 7 -> "2.0.0 (Native) • ${7 - versionTapCount} more tap${if (7 - versionTapCount == 1) "" else "s"}"
-                    else -> "2.0.0 (Native)"
-                },
+                subtitle = "2.0.0 (Native)",
                 icon = Icons.Outlined.Info,
-                onClick = {
-                    if (versionTapCount < 7) {
-                        versionTapCount++
-                        if (versionTapCount >= 7) {
-                            versionTapCount = 0
-                            showAdDebugDialog = true
-                        }
-                    }
-                }
+                onClick = {}
             )
 
             SettingItem(
@@ -254,245 +223,6 @@ fun SettingsScreen(
                 showBitrateDialog = false
             },
             onDismiss = { showBitrateDialog = false }
-        )
-    }
-
-    if (showAdDebugDialog) {
-        AdDiagnosticsDialog(onDismiss = { showAdDebugDialog = false })
-    }
-}
-
-@Composable
-private fun AdDiagnosticsDialog(onDismiss: () -> Unit) {
-    val context = LocalContext.current
-    val diag by AdManager.diagnostics.collectAsState()
-    val colors = LocalAppColors.current
-    var adTestMode by remember { mutableStateOf(DebugFlags.isAdTestModeEnabled(context)) }
-
-    fun copyToClipboard(text: String) {
-        val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-        cm?.setPrimaryClip(ClipData.newPlainText("AdMob diagnostics", text))
-        Toast.makeText(context, "Copied to clipboard", Toast.LENGTH_SHORT).show()
-    }
-
-    fun forceReload() {
-        AdManager.resetFailureCounters(context)
-        Toast.makeText(context, "Counters reset, reloading ads…", Toast.LENGTH_SHORT).show()
-    }
-
-    fun reloadBanner() {
-        AdManager.reloadBanner()
-        Toast.makeText(context, "Banner reloaded", Toast.LENGTH_SHORT).show()
-    }
-
-    fun toggleTestMode(enabled: Boolean) {
-        adTestMode = enabled
-        DebugFlags.setAdTestModeEnabled(context, enabled)
-        if (enabled) {
-            val ids = AdManager.applyTestMode(context)
-            AdManager.resetFailureCounters(context)
-            Toast.makeText(context, "Test mode ON. Device added: ${ids.firstOrNull() ?: "none"}", Toast.LENGTH_LONG).show()
-        } else {
-            AdManager.clearTestMode()
-            Toast.makeText(context, "Test mode OFF. Restart app to clear fully.", Toast.LENGTH_LONG).show()
-        }
-    }
-
-    val report = buildString {
-        appendLine("AdMob Diagnostics")
-        appendLine("---- IDs (verify these match your AdMob console) ----")
-        appendLine("App:          ${diag.appId}")
-        appendLine("Banner:       ${diag.bannerAdUnitId}")
-        appendLine("Interstitial: ${diag.interstitialAdUnitId}")
-        appendLine("Rewarded:     ${diag.rewardedAdUnitId}")
-        appendLine("---- State ----")
-        appendLine("SDK initialized: ${diag.isMobileAdsInitialized}")
-        appendLine("Consent obtained: ${diag.isConsentObtained}")
-        appendLine("Ad-free:          ${diag.isAdFree}")
-        appendLine("Interstitial ready: ${diag.isInterstitialReady}")
-        appendLine("Rewarded ready:     ${diag.isRewardedReady}")
-        appendLine("Ad test mode:       ${diag.isAdTestMode}")
-        appendLine("---- Banner ----")
-        appendLine("AdView created:     ${diag.isBannerAdViewCreated}")
-        appendLine("AdView in window:   ${diag.isBannerAdViewAttached}")
-        appendLine("Banner loaded:      ${diag.isBannerLoaded}")
-        appendLine("Load attempts:      ${diag.bannerLoadAttempts}")
-        appendLine("Last load (s ago):  ${if (diag.secondsSinceLastBannerLoad < 0) "never" else diag.secondsSinceLastBannerLoad}")
-        appendLine("Auto-refresh:       every ${diag.bannerRefreshCooldownSec}s (AdMob policy compliant)")
-        appendLine("Last banner error:  ${diag.lastBannerError ?: "none"}")
-        if (diag.lastBannerErrorCode != null) {
-            appendLine("Banner error decoded: ${diag.lastBannerErrorCode} = ${diag.lastBannerErrorName}")
-        }
-        appendLine("---- Failures (auto-reset on app foreground) ----")
-        appendLine("Consecutive interstitial failures: ${diag.consecutiveInterstitialFailures} / ${diag.maxFailedLoads}")
-        appendLine("Consecutive rewarded failures:     ${diag.consecutiveRewardedFailures} / ${diag.maxFailedLoads}")
-        appendLine("Min interstitial interval:         ${diag.minInterstitialIntervalMs} ms")
-        appendLine("Last interstitial error: ${diag.lastInterstitialError ?: "none"}")
-        if (diag.lastInterstitialErrorCode != null) {
-            appendLine("Interstitial error decoded: ${diag.lastInterstitialErrorCode} = ${diag.lastInterstitialErrorName}")
-        }
-        appendLine("Last rewarded error:     ${diag.lastRewardedError ?: "none"}")
-        if (diag.lastRewardedErrorCode != null) {
-            appendLine("Rewarded error decoded: ${diag.lastRewardedErrorCode} = ${diag.lastRewardedErrorName}")
-        }
-    }
-
-    AlertDialog(
-        containerColor = colors.surface,
-        onDismissRequest = onDismiss,
-        title = {
-            Text("AdMob Diagnostics", color = colors.textPrimary, fontWeight = FontWeight.Bold)
-        },
-        text = {
-            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                Text(
-                    "Open the Ad Inspector for official Google fill rate, request and impression data. Or copy this local snapshot to share.",
-                    color = colors.textTertiary,
-                    style = MaterialTheme.typography.bodySmall
-                )
-                Spacer(Modifier.height(12.dp))
-                Text("Ad Unit IDs", color = Purple500, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
-                Spacer(Modifier.height(4.dp))
-                DiagLine("App", diag.appId)
-                DiagLine("Banner", diag.bannerAdUnitId)
-                DiagLine("Interstitial", diag.interstitialAdUnitId)
-                DiagLine("Rewarded", diag.rewardedAdUnitId)
-
-                Spacer(Modifier.height(12.dp))
-                Text("SDK State", color = Purple500, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
-                Spacer(Modifier.height(4.dp))
-                DiagLine("MobileAds initialized", diag.isMobileAdsInitialized.toString())
-                DiagLine("Consent obtained", diag.isConsentObtained.toString())
-                DiagLine("Ad-free mode", diag.isAdFree.toString())
-                DiagLine("Interstitial ready", diag.isInterstitialReady.toString())
-                DiagLine("Rewarded ready", diag.isRewardedReady.toString())
-                DiagLine("Ad test mode", diag.isAdTestMode.toString())
-
-                Spacer(Modifier.height(12.dp))
-                Text("Banner (auto-refresh)", color = Purple500, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
-                Spacer(Modifier.height(4.dp))
-                DiagLine("AdView created", diag.isBannerAdViewCreated.toString())
-                DiagLine("AdView in window", diag.isBannerAdViewAttached.toString())
-                DiagLine("Banner loaded", diag.isBannerLoaded.toString())
-                DiagLine("Load attempts", diag.bannerLoadAttempts.toString())
-                DiagLine("Last load (seconds ago)", if (diag.secondsSinceLastBannerLoad < 0) "never" else diag.secondsSinceLastBannerLoad.toString())
-                DiagLine("Auto-refresh interval", "${diag.bannerRefreshCooldownSec}s (AdMob policy: >=30s)")
-                DiagLine("Last banner error", diag.lastBannerError ?: "none")
-                if (diag.lastBannerErrorCode != null) {
-                    DiagLine("Banner error decoded", "${diag.lastBannerErrorCode} = ${diag.lastBannerErrorName}")
-                }
-
-                Spacer(Modifier.height(12.dp))
-                Text("Failures & Errors", color = Purple500, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
-                Spacer(Modifier.height(4.dp))
-                DiagLine("Interstitial fail streak", "${diag.consecutiveInterstitialFailures} / ${diag.maxFailedLoads}")
-                DiagLine("Rewarded fail streak", "${diag.consecutiveRewardedFailures} / ${diag.maxFailedLoads}")
-                DiagLine("Min interstitial interval", "${diag.minInterstitialIntervalMs} ms")
-                DiagLine("Last interstitial error", diag.lastInterstitialError ?: "none")
-                if (diag.lastInterstitialErrorCode != null) {
-                    DiagLine("Interstitial error decoded", "${diag.lastInterstitialErrorCode} = ${diag.lastInterstitialErrorName}")
-                }
-                DiagLine("Last rewarded error", diag.lastRewardedError ?: "none")
-                if (diag.lastRewardedErrorCode != null) {
-                    DiagLine("Rewarded error decoded", "${diag.lastRewardedErrorCode} = ${diag.lastRewardedErrorName}")
-                }
-
-                Spacer(Modifier.height(12.dp))
-                Text(
-                    "code=3 (NO_FILL): AdMob received the request but has no ad to serve right now. Common for new ad units (wait 24-48h), low impression history, or no demand for this device/region. In test mode this should be rare — if you see NO_FILL with the test-mode toggle ON, check Ad Inspector for details.",
-                    color = colors.textTertiary,
-                    style = MaterialTheme.typography.bodySmall
-                )
-
-                Spacer(Modifier.height(12.dp))
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(8.dp),
-                    color = colors.surface
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Ad test mode (this device)", color = colors.textPrimary, fontWeight = FontWeight.W600, style = MaterialTheme.typography.bodyMedium)
-                            Text(
-                                "Registers this phone as a test device. Required to open the Ad Inspector and shows test ads that always fill.",
-                                color = colors.textTertiary,
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
-                        Switch(
-                            checked = adTestMode,
-                            onCheckedChange = { toggleTestMode(it) }
-                        )
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            Column(horizontalAlignment = Alignment.End) {
-                TextButton(
-                    onClick = {
-                        Toast.makeText(context, "Opening Ad Inspector…", Toast.LENGTH_SHORT).show()
-                        try {
-                            MobileAds.openAdInspector(context, OnAdInspectorClosedListener { error ->
-                                if (error != null) {
-                                    android.util.Log.e("AdManager", "Ad Inspector closed with error: code=${error.code} ${error.message}")
-                                    Toast.makeText(context, "Inspector error code=${error.code}: ${error.message}", Toast.LENGTH_LONG).show()
-                                } else {
-                                    Toast.makeText(context, "Inspector closed", Toast.LENGTH_SHORT).show()
-                                }
-                            })
-                        } catch (t: Throwable) {
-                            android.util.Log.e("AdManager", "Ad Inspector open threw ${t.javaClass.simpleName}: ${t.message}", t)
-                            Toast.makeText(context, "Inspector unavailable (${t.javaClass.simpleName}): ${t.message}", Toast.LENGTH_LONG).show()
-                        }
-                    },
-                    enabled = adTestMode
-                ) {
-                    Text(
-                        "Open Ad Inspector",
-                        color = if (adTestMode) Purple500 else colors.textTertiary,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-                TextButton(onClick = { reloadBanner() }) {
-                    Text("Reload Banner", color = Purple500)
-                }
-                TextButton(onClick = { forceReload() }) {
-                    Text("Reset & Reload", color = Purple500)
-                }
-            }
-        },
-        dismissButton = {
-            Row {
-                TextButton(onClick = { copyToClipboard(report) }) {
-                    Text("Copy", color = colors.textSecondary)
-                }
-                TextButton(onClick = onDismiss) {
-                    Text("Close", color = colors.textSecondary)
-                }
-            }
-        }
-    )
-}
-
-@Composable
-private fun DiagLine(label: String, value: String) {
-    val colors = LocalAppColors.current
-    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
-        Text(
-            "$label:",
-            color = colors.textTertiary,
-            style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.width(140.dp)
-        )
-        Text(
-            value,
-            color = colors.textPrimary,
-            style = MaterialTheme.typography.bodySmall,
-            fontFamily = FontFamily.Monospace
         )
     }
 }

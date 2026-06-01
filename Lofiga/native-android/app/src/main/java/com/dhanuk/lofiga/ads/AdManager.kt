@@ -2,23 +2,17 @@ package com.dhanuk.lofiga.ads
 
 import android.app.Activity
 import android.content.Context
-import android.provider.Settings
 import android.util.Log
-import android.view.View
-import java.security.MessageDigest
 import com.dhanuk.lofiga.BuildConfig
 import com.google.android.gms.ads.AdError
-import com.google.android.gms.ads.AdListener
 import com.google.android.gms.ads.AdRequest
 import com.google.android.gms.ads.FullScreenContentCallback
 import com.google.android.gms.ads.LoadAdError
 import com.google.android.gms.ads.MobileAds
-import com.google.android.gms.ads.RequestConfiguration
 import com.google.android.gms.ads.interstitial.InterstitialAd
 import com.google.android.gms.ads.interstitial.InterstitialAdLoadCallback
 import com.google.android.gms.ads.rewarded.RewardedAd
 import com.google.android.gms.ads.rewarded.RewardedAdLoadCallback
-import com.google.android.ump.ConsentForm
 import com.google.android.ump.ConsentInformation
 import com.google.android.ump.ConsentRequestParameters
 import com.google.android.ump.UserMessagingPlatform
@@ -55,160 +49,20 @@ object AdManager {
     private val _isAdFree = MutableStateFlow(false)
     val isAdFree: StateFlow<Boolean> = _isAdFree.asStateFlow()
 
-    data class AdDiagnostics(
-        val appId: String = BuildConfig.ADMOB_APP_ID,
-        val bannerAdUnitId: String = BuildConfig.ADMOB_BANNER_ID,
-        val interstitialAdUnitId: String = BuildConfig.ADMOB_INTERSTITIAL_ID,
-        val rewardedAdUnitId: String = BuildConfig.ADMOB_REWARDED_ID,
-        val isMobileAdsInitialized: Boolean = false,
-        val isAdFree: Boolean = false,
-        val isConsentObtained: Boolean = false,
-        val isInterstitialReady: Boolean = false,
-        val isRewardedReady: Boolean = false,
-        val isBannerAdViewCreated: Boolean = false,
-        val isBannerAdViewAttached: Boolean = false,
-        val isBannerLoaded: Boolean = false,
-        val bannerLoadAttempts: Int = 0,
-        val secondsSinceLastBannerLoad: Long = -1L,
-        val bannerRefreshCooldownSec: Long = BANNER_REFRESH_INTERVAL_MS / 1000L,
-        val lastBannerError: String? = null,
-        val lastBannerErrorCode: Int? = null,
-        val lastBannerErrorName: String? = null,
-        val consecutiveInterstitialFailures: Int = 0,
-        val consecutiveRewardedFailures: Int = 0,
-        val lastInterstitialError: String? = null,
-        val lastInterstitialErrorCode: Int? = null,
-        val lastInterstitialErrorName: String? = null,
-        val lastRewardedError: String? = null,
-        val lastRewardedErrorCode: Int? = null,
-        val lastRewardedErrorName: String? = null,
-        val minInterstitialIntervalMs: Long = MIN_INTERSTITIAL_INTERVAL,
-        val maxFailedLoads: Int = MAX_FAILED_LOADS,
-        val isAdTestMode: Boolean = false
-    )
-
-    private var mobileAdsInitialized = false
-    private var lastInterstitialError: String? = null
-    private var lastInterstitialErrorCode: Int? = null
-    private var lastRewardedError: String? = null
-    private var lastRewardedErrorCode: Int? = null
-    private var lastBannerError: String? = null
-    private var lastBannerErrorCode: Int? = null
-    private var bannerLoadAttempts = 0
-    private var lastBannerLoadTime = 0L
-    private var isBannerLoaded = false
     private var bannerAd: com.google.android.gms.ads.AdView? = null
-    private var isAdTestMode = false
-
-    private val _diagnostics = MutableStateFlow(AdDiagnostics())
-    val diagnostics: StateFlow<AdDiagnostics> = _diagnostics.asStateFlow()
-
-    fun decodeErrorCode(code: Int): String = when (code) {
-        0 -> "INTERNAL_ERROR"
-        1 -> "INVALID_REQUEST"
-        2 -> "NETWORK_ERROR"
-        3 -> "NO_FILL"
-        4 -> "INVALID_ID"
-        5 -> "IN_USE"
-        6 -> "MEDIATION_NO_FILL"
-        7 -> "MEDIATION_INVALID_ID"
-        8 -> "MEDIATION_IN_USE"
-        9 -> "MEDIATION_ERROR"
-        10 -> "NO_INVENTORY"
-        11 -> "APP_NOT_FOREGROUND"
-        12 -> "REQUEST_LIMIT_REACHED"
-        13 -> "INVALID_ARGUMENT"
-        14 -> "REWARDED_VIDEO_ALREADY_PLAYED"
-        else -> "UNKNOWN($code)"
-    }
+    private var lastBannerLoadTime = 0L
 
     fun resetFailureCounters(context: Context) {
         consecutiveInterstitialFailures = 0
         consecutiveRewardedFailures = 0
-        lastInterstitialError = null
-        lastInterstitialErrorCode = null
-        lastRewardedError = null
-        lastRewardedErrorCode = null
         Log.d(TAG, "Failure counters reset")
-        pushDiagnostics()
         loadInterstitial(context)
         loadRewarded(context)
-    }
-
-    fun applyTestMode(context: Context): List<String> {
-        val androidId = Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID)
-        val ids = buildList {
-            if (!androidId.isNullOrBlank()) {
-                add(md5Upper(androidId))
-            }
-            add(AdRequest.DEVICE_ID_EMULATOR)
-        }
-        MobileAds.setRequestConfiguration(
-            RequestConfiguration.Builder()
-                .setTestDeviceIds(ids)
-                .build()
-        )
-        isAdTestMode = true
-        Log.d(TAG, "Ad test mode applied. Test device IDs: $ids")
-        pushDiagnostics()
-        return ids
-    }
-
-    private fun md5Upper(input: String): String {
-        val digest = MessageDigest.getInstance("MD5").digest(input.toByteArray(Charsets.UTF_8))
-        val hex = StringBuilder(digest.size * 2)
-        for (b in digest) {
-            val v = b.toInt() and 0xFF
-            if (v < 0x10) hex.append('0')
-            hex.append(Integer.toHexString(v))
-        }
-        return hex.toString().uppercase()
-    }
-
-    fun clearTestMode() {
-        MobileAds.setRequestConfiguration(RequestConfiguration.Builder().build())
-        isAdTestMode = false
-        Log.d(TAG, "Ad test mode cleared")
-        pushDiagnostics()
-    }
-
-    private fun pushDiagnostics() {
-        val ad = bannerAd
-        val now = System.currentTimeMillis()
-        val secondsSinceLastLoad = if (lastBannerLoadTime > 0L) {
-            (now - lastBannerLoadTime) / 1000L
-        } else -1L
-        _diagnostics.value = AdDiagnostics(
-            isMobileAdsInitialized = mobileAdsInitialized,
-            isAdFree = _isAdFree.value,
-            isConsentObtained = _isConsentObtained.value,
-            isInterstitialReady = interstitialAd != null,
-            isRewardedReady = rewardedAd != null,
-            isBannerAdViewCreated = ad != null,
-            isBannerAdViewAttached = ad?.isAttachedToWindow == true,
-            isBannerLoaded = isBannerLoaded,
-            bannerLoadAttempts = bannerLoadAttempts,
-            secondsSinceLastBannerLoad = secondsSinceLastLoad,
-            lastBannerError = lastBannerError,
-            lastBannerErrorCode = lastBannerErrorCode,
-            lastBannerErrorName = lastBannerErrorCode?.let { decodeErrorCode(it) },
-            consecutiveInterstitialFailures = consecutiveInterstitialFailures,
-            consecutiveRewardedFailures = consecutiveRewardedFailures,
-            lastInterstitialError = lastInterstitialError,
-            lastInterstitialErrorCode = lastInterstitialErrorCode,
-            lastInterstitialErrorName = lastInterstitialErrorCode?.let { decodeErrorCode(it) },
-            lastRewardedError = lastRewardedError,
-            lastRewardedErrorCode = lastRewardedErrorCode,
-            lastRewardedErrorName = lastRewardedErrorCode?.let { decodeErrorCode(it) },
-            isAdTestMode = isAdTestMode
-        )
     }
 
     fun initialize(context: Context) {
         MobileAds.initialize(context) {
             Log.d(TAG, "AdMob SDK initialized")
-            mobileAdsInitialized = true
-            pushDiagnostics()
         }
     }
 
@@ -224,13 +78,11 @@ object AdManager {
                     loadAndShowConsentForm(activity)
                 } else {
                     _isConsentObtained.value = true
-                    pushDiagnostics()
                 }
             },
             { error ->
                 Log.e(TAG, "Consent info update failed: ${error.message}")
                 _isConsentObtained.value = true
-                pushDiagnostics()
             }
         )
     }
@@ -245,13 +97,11 @@ object AdManager {
                     }
                 } else {
                     _isConsentObtained.value = true
-                    pushDiagnostics()
                 }
             },
             { error ->
                 Log.e(TAG, "Consent form load failed: ${error.message}")
                 _isConsentObtained.value = true
-                pushDiagnostics()
             }
         )
     }
@@ -271,28 +121,21 @@ object AdManager {
                 override fun onAdLoaded(ad: InterstitialAd) {
                     interstitialAd = ad
                     consecutiveInterstitialFailures = 0
-                    lastInterstitialError = null
                     Log.d(TAG, "Interstitial ad loaded")
-                    pushDiagnostics()
                     ad.fullScreenContentCallback = object : FullScreenContentCallback() {
                         override fun onAdDismissedFullScreenContent() {
                             interstitialAd = null
-                            pushDiagnostics()
                             loadInterstitial(context)
                         }
                         override fun onAdFailedToShowFullScreenContent(error: AdError) {
                             interstitialAd = null
                             Log.e(TAG, "Interstitial failed to show: ${error.message}")
-                            pushDiagnostics()
                         }
                     }
                 }
                 override fun onAdFailedToLoad(error: LoadAdError) {
                     consecutiveInterstitialFailures++
-                    lastInterstitialError = "code=${error.code} domain=${error.domain} msg=${error.message}"
-                    lastInterstitialErrorCode = error.code
-                    Log.e(TAG, "Interstitial failed to load: code=${error.code} ${decodeErrorCode(error.code)} - ${error.message}")
-                    pushDiagnostics()
+                    Log.e(TAG, "Interstitial failed to load: code=${error.code} - ${error.message}")
                     if (consecutiveInterstitialFailures < MAX_FAILED_LOADS) {
                         loadInterstitial(context)
                     }
@@ -317,7 +160,6 @@ object AdManager {
         if (interstitialAd != null) {
             lastInterstitialTime = now
             interstitialAd?.show(activity)
-            pushDiagnostics()
             interstitialAd?.fullScreenContentCallback = object : FullScreenContentCallback() {
                 override fun onAdDismissedFullScreenContent() {
                     interstitialAd = null
@@ -346,28 +188,21 @@ object AdManager {
                 override fun onAdLoaded(ad: RewardedAd) {
                     rewardedAd = ad
                     consecutiveRewardedFailures = 0
-                    lastRewardedError = null
                     Log.d(TAG, "Rewarded ad loaded")
-                    pushDiagnostics()
                     ad.fullScreenContentCallback = object : FullScreenContentCallback() {
                         override fun onAdDismissedFullScreenContent() {
                             rewardedAd = null
-                            pushDiagnostics()
                             loadRewarded(context)
                         }
                         override fun onAdFailedToShowFullScreenContent(error: AdError) {
                             rewardedAd = null
                             Log.e(TAG, "Rewarded failed to show: ${error.message}")
-                            pushDiagnostics()
                         }
                     }
                 }
                 override fun onAdFailedToLoad(error: LoadAdError) {
                     consecutiveRewardedFailures++
-                    lastRewardedError = "code=${error.code} domain=${error.domain} msg=${error.message}"
-                    lastRewardedErrorCode = error.code
-                    Log.e(TAG, "Rewarded failed to load: code=${error.code} ${decodeErrorCode(error.code)} - ${error.message}")
-                    pushDiagnostics()
+                    Log.e(TAG, "Rewarded failed to load: code=${error.code} - ${error.message}")
                     if (consecutiveRewardedFailures < MAX_FAILED_LOADS) {
                         loadRewarded(context)
                     }
@@ -411,50 +246,17 @@ object AdManager {
      * The AdView is created ONCE and persists for the app's lifetime.
      *
      * Per AdMob policy, automatic refresh happens at most every
-     * BANNER_REFRESH_INTERVAL_MS (60s). Manual "Reload Banner" from the
-     * diagnostic dialog bypasses the interval (user-initiated action).
-     * Visibility (VISIBLE / GONE) is toggled by the caller based on
-     * which screen the user is on; the AdView itself is never destroyed
-     * or recreated during normal navigation.
+     * BANNER_REFRESH_INTERVAL_MS (60s). Visibility (VISIBLE / GONE) is
+     * toggled by the caller based on which screen the user is on; the
+     * AdView itself is never destroyed or recreated during normal
+     * navigation.
      */
     fun getOrCreateBannerAd(context: Context, adUnitId: String): com.google.android.gms.ads.AdView {
         if (bannerAd == null) {
             val view = com.google.android.gms.ads.AdView(context)
             view.setAdSize(com.google.android.gms.ads.AdSize.BANNER)
             view.adUnitId = adUnitId
-            view.adListener = object : AdListener() {
-                override fun onAdLoaded() {
-                    isBannerLoaded = true
-                    lastBannerError = null
-                    lastBannerErrorCode = null
-                    lastBannerLoadTime = System.currentTimeMillis()
-                    Log.d(TAG, "Banner ad loaded")
-                    pushDiagnostics()
-                }
-                override fun onAdFailedToLoad(error: LoadAdError) {
-                    isBannerLoaded = false
-                    lastBannerError = "code=${error.code} domain=${error.domain} msg=${error.message}"
-                    lastBannerErrorCode = error.code
-                    bannerLoadAttempts++
-                    lastBannerLoadTime = System.currentTimeMillis()
-                    Log.e(TAG, "Banner failed to load: code=${error.code} ${decodeErrorCode(error.code)} - ${error.message}")
-                    pushDiagnostics()
-                }
-                override fun onAdOpened() {
-                    Log.d(TAG, "Banner ad opened")
-                }
-                override fun onAdClicked() {
-                    Log.d(TAG, "Banner ad clicked")
-                }
-                override fun onAdClosed() {
-                    Log.d(TAG, "Banner ad closed")
-                }
-                override fun onAdImpression() {
-                    Log.d(TAG, "Banner ad impression")
-                }
-            }
             bannerAd = view
-            pushDiagnostics()
         }
         return bannerAd!!
     }
@@ -477,9 +279,7 @@ object AdManager {
         if (lastBannerLoadTime == 0L) {
             ad.loadAd(AdRequest.Builder().build())
             lastBannerLoadTime = System.currentTimeMillis()
-            bannerLoadAttempts++
             Log.d(TAG, "Banner initial load (refresh loop start)")
-            pushDiagnostics()
         }
 
         if (bannerRefreshJob?.isActive == true) return
@@ -492,9 +292,7 @@ object AdManager {
                 if (current.visibility != android.view.View.VISIBLE) continue
                 current.loadAd(AdRequest.Builder().build())
                 lastBannerLoadTime = System.currentTimeMillis()
-                bannerLoadAttempts++
                 Log.d(TAG, "Banner auto-refresh (interval=${BANNER_REFRESH_INTERVAL_MS / 1000}s)")
-                pushDiagnostics()
             }
         }
     }
@@ -504,26 +302,10 @@ object AdManager {
         bannerRefreshJob = null
     }
 
-    /**
-     * Manual reload — bypasses the refresh interval since the user
-     * explicitly asked for a new ad. Resets the last-load-time so the
-     * next auto-refresh is properly rescheduled.
-     */
-    fun reloadBanner() {
-        val ad = bannerAd ?: return
-        if (ad.adUnitId.isNullOrBlank()) return
-        ad.loadAd(AdRequest.Builder().build())
-        bannerLoadAttempts++
-        lastBannerLoadTime = System.currentTimeMillis()
-        Log.d(TAG, "Banner manually reloaded (bypasses interval)")
-        pushDiagnostics()
-    }
-
     fun destroyBanner() {
         stopBannerRefresh()
         bannerAd?.destroy()
         bannerAd = null
-        isBannerLoaded = false
     }
 
     fun isBannerAdAttached(): Boolean = bannerAd?.isAttachedToWindow == true
@@ -537,6 +319,5 @@ object AdManager {
         if (adFree) {
             destroyBanner()
         }
-        pushDiagnostics()
     }
 }

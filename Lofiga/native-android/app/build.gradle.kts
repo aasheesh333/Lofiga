@@ -9,10 +9,10 @@ android {
     namespace = System.getenv("PACKAGE_NAME") ?: project.findProperty("PACKAGE_NAME")?.toString() ?: "com.dhanuk.lofiga"
     compileSdk = 35
 
-    val admobAppId = System.getenv("ADMOB_APP_ID") ?: project.findProperty("ADMOB_APP_ID")?.toString() ?: "ca-app-pub-3940256099942544~3347511713"
-    val admobBannerId = System.getenv("ADMOB_BANNER_ID") ?: project.findProperty("ADMOB_BANNER_ID")?.toString() ?: "ca-app-pub-3940256099942544/6300978111"
-    val admobInterstitialId = System.getenv("ADMOB_INTERSTITIAL_ID") ?: project.findProperty("ADMOB_INTERSTITIAL_ID")?.toString() ?: "ca-app-pub-3940256099942544/1033173712"
-    val admobRewardedId = System.getenv("ADMOB_REWARDED_ID") ?: project.findProperty("ADMOB_REWARDED_ID")?.toString() ?: "ca-app-pub-3940256099942544/5224354917"
+    val admobAppId = System.getenv("ADMOB_APP_ID") ?: project.findProperty("ADMOB_APP_ID")?.toString() ?: ""
+    val admobBannerId = System.getenv("ADMOB_BANNER_ID") ?: project.findProperty("ADMOB_BANNER_ID")?.toString() ?: ""
+    val admobInterstitialId = System.getenv("ADMOB_INTERSTITIAL_ID") ?: project.findProperty("ADMOB_INTERSTITIAL_ID")?.toString() ?: ""
+    val admobRewardedId = System.getenv("ADMOB_REWARDED_ID") ?: project.findProperty("ADMOB_REWARDED_ID")?.toString() ?: ""
 
     defaultConfig {
         applicationId = namespace
@@ -20,8 +20,6 @@ android {
         targetSdk = 35
         versionCode = System.getenv("VERSION_CODE")?.toIntOrNull() ?: project.findProperty("VERSION_CODE")?.toString()?.toIntOrNull() ?: 2
         versionName = System.getenv("VERSION_NAME") ?: project.findProperty("VERSION_NAME")?.toString() ?: "2.0.0"
-
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         manifestPlaceholders["ADMOB_APP_ID"] = admobAppId
         manifestPlaceholders["ONESIGNAL_APP_ID"] = System.getenv("ONESIGNAL_APP_ID") ?: project.findProperty("ONESIGNAL_APP_ID")?.toString() ?: ""
