@@ -171,6 +171,7 @@ object AdManager {
                 }
             }
         } else {
+            Log.d(TAG, "Interstitial skipped - no ad ready (fill=0 or load failed)")
             onDismissed?.invoke()
         }
     }
@@ -256,6 +257,14 @@ object AdManager {
             val view = com.google.android.gms.ads.AdView(context)
             view.setAdSize(com.google.android.gms.ads.AdSize.BANNER)
             view.adUnitId = adUnitId
+            view.addOnAttachStateChangeListener(object : android.view.View.OnAttachStateChangeListener {
+                override fun onViewAttachedToWindow(v: android.view.View) {
+                    startBannerRefresh()
+                }
+                override fun onViewDetachedFromWindow(v: android.view.View) {
+                    stopBannerRefresh()
+                }
+            })
             bannerAd = view
         }
         return bannerAd!!
