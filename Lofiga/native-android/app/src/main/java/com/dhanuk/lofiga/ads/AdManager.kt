@@ -22,16 +22,26 @@ import com.google.android.ump.ConsentForm
 import com.google.android.ump.ConsentInformation
 import com.google.android.ump.ConsentRequestParameters
 import com.google.android.ump.UserMessagingPlatform
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 
 object AdManager {
 
     private const val TAG = "AdManager"
     private const val MIN_INTERSTITIAL_INTERVAL = 10000L
     private const val MAX_FAILED_LOADS = 3
-    private const val BANNER_REFRESH_INTERVAL_MS = 30_000L
+    private const val BANNER_REFRESH_INTERVAL_MS = 60_000L
+
+    private val refreshScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private var bannerRefreshJob: Job? = null
 
     private var interstitialAd: InterstitialAd? = null
     private var rewardedAd: RewardedAd? = null
@@ -88,7 +98,6 @@ object AdManager {
     private var lastBannerLoadTime = 0L
     private var isBannerLoaded = false
     private var bannerAd: com.google.android.gms.ads.AdView? = null
-    private var bannerLoadAttempted = false
     private var isAdTestMode = false
 
     private val _diagnostics = MutableStateFlow(AdDiagnostics())
@@ -394,21 +403,19 @@ object AdManager {
     fun isRewardedReady(): Boolean = rewardedAd != null
 
     // ========================
-    // BANNER (singleton, load once)
+    // BANNER (singleton, periodic refresh)
     // ========================
 
     /**
      * Returns the singleton banner AdView, creating it on first call.
      * The AdView is created ONCE and persists for the app's lifetime.
      *
-     * Per AdMob policy, we call loadAd exactly once for the lifetime of
-     * the AdView — no auto-refresh, no per-screen reload. Visibility
-     * (VISIBLE / GONE) is toggled by the caller based on which screen
-     * the user is on; the AdView itself is never destroyed or recreated
-     * during normal navigation.
-     *
-     * A single load covers the entire session. Manual "Reload Banner"
-     * from the diagnostic dialog is user-initiated and not auto-refresh.
+     * Per AdMob policy, automatic refresh happens at most every
+     * BANNER_REFRESH_INTERVAL_MS (60s). Manual "Reload Banner" from the
+     * diagnostic dialog bypasses the interval (user-initiated action).
+     * Visibility (VISIBLE / GONE) is toggled by the caller based on
+     * which screen the user is on; the AdView itself is never destroyed
+     * or recreated during normal navigation.
      */
     fun getOrCreateBannerAd(context: Context, adUnitId: String): com.google.android.gms.ads.AdView {
         if (bannerAd == null) {
@@ -453,44 +460,69 @@ object AdManager {
     }
 
     /**
-     * Calls loadAd exactly once for the lifetime of the singleton AdView.
-     * Safe to call multiple times — the bannerLoadAttempted flag guards it.
-     * The actual call only happens when the AdView is attached to a window
-     * (i.e. is actually being shown), and only if no load has been attempted
-     * yet. This is the AdMob-recommended pattern: load once, show for the
-     * session, no auto-refresh.
+     * Triggers the first banner load and starts the periodic refresh loop.
+     * Safe to call multiple times — guards prevent duplicate loads and
+     * duplicate refresh jobs. The first load happens when the AdView is
+     * attached to a window; refreshes happen every
+     * BANNER_REFRESH_INTERVAL_MS while the app is in the foreground.
      */
-    fun loadBannerOnce() {
+    fun startBannerRefresh() {
         val ad = bannerAd ?: return
-        if (bannerLoadAttempted) return
         if (!ad.isAttachedToWindow) {
-            Log.d(TAG, "loadBannerOnce: AdView not attached to window, will defer")
+            Log.d(TAG, "startBannerRefresh: AdView not attached to window, deferring")
             return
         }
         if (ad.isLoading) return
-        ad.loadAd(AdRequest.Builder().build())
-        bannerLoadAttempted = true
-        bannerLoadAttempts++
-        lastBannerLoadTime = System.currentTimeMillis()
-        pushDiagnostics()
-        Log.d(TAG, "Banner load initiated (one-time)")
+
+        if (lastBannerLoadTime == 0L) {
+            ad.loadAd(AdRequest.Builder().build())
+            lastBannerLoadTime = System.currentTimeMillis()
+            bannerLoadAttempts++
+            Log.d(TAG, "Banner initial load (refresh loop start)")
+            pushDiagnostics()
+        }
+
+        if (bannerRefreshJob?.isActive == true) return
+        bannerRefreshJob = refreshScope.launch {
+            while (isActive) {
+                delay(BANNER_REFRESH_INTERVAL_MS)
+                val current = bannerAd ?: break
+                if (!current.isAttachedToWindow) continue
+                if (current.isLoading) continue
+                if (current.visibility != android.view.View.VISIBLE) continue
+                current.loadAd(AdRequest.Builder().build())
+                lastBannerLoadTime = System.currentTimeMillis()
+                bannerLoadAttempts++
+                Log.d(TAG, "Banner auto-refresh (interval=${BANNER_REFRESH_INTERVAL_MS / 1000}s)")
+                pushDiagnostics()
+            }
+        }
     }
 
+    fun stopBannerRefresh() {
+        bannerRefreshJob?.cancel()
+        bannerRefreshJob = null
+    }
+
+    /**
+     * Manual reload — bypasses the refresh interval since the user
+     * explicitly asked for a new ad. Resets the last-load-time so the
+     * next auto-refresh is properly rescheduled.
+     */
     fun reloadBanner() {
         val ad = bannerAd ?: return
         if (ad.adUnitId.isNullOrBlank()) return
         ad.loadAd(AdRequest.Builder().build())
         bannerLoadAttempts++
         lastBannerLoadTime = System.currentTimeMillis()
-        bannerLoadAttempted = true
+        Log.d(TAG, "Banner manually reloaded (bypasses interval)")
         pushDiagnostics()
-        Log.d(TAG, "Banner manually reloaded")
     }
 
     fun destroyBanner() {
+        stopBannerRefresh()
         bannerAd?.destroy()
         bannerAd = null
-        bannerLoadAttempted = false
         isBannerLoaded = false
     }
 

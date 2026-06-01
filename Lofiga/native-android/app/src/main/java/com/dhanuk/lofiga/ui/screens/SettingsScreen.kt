@@ -318,7 +318,7 @@ private fun AdDiagnosticsDialog(onDismiss: () -> Unit) {
         appendLine("Banner loaded:      ${diag.isBannerLoaded}")
         appendLine("Load attempts:      ${diag.bannerLoadAttempts}")
         appendLine("Last load (s ago):  ${if (diag.secondsSinceLastBannerLoad < 0) "never" else diag.secondsSinceLastBannerLoad}")
-        appendLine("Refresh cooldown:   ${diag.bannerRefreshCooldownSec}s")
+        appendLine("Auto-refresh:       every ${diag.bannerRefreshCooldownSec}s (AdMob policy compliant)")
         appendLine("Last banner error:  ${diag.lastBannerError ?: "none"}")
         if (diag.lastBannerErrorCode != null) {
             appendLine("Banner error decoded: ${diag.lastBannerErrorCode} = ${diag.lastBannerErrorName}")
@@ -369,14 +369,14 @@ private fun AdDiagnosticsDialog(onDismiss: () -> Unit) {
                 DiagLine("Ad test mode", diag.isAdTestMode.toString())
 
                 Spacer(Modifier.height(12.dp))
-                Text("Banner", color = Purple500, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
+                Text("Banner (auto-refresh)", color = Purple500, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
                 Spacer(Modifier.height(4.dp))
                 DiagLine("AdView created", diag.isBannerAdViewCreated.toString())
                 DiagLine("AdView in window", diag.isBannerAdViewAttached.toString())
                 DiagLine("Banner loaded", diag.isBannerLoaded.toString())
                 DiagLine("Load attempts", diag.bannerLoadAttempts.toString())
                 DiagLine("Last load (seconds ago)", if (diag.secondsSinceLastBannerLoad < 0) "never" else diag.secondsSinceLastBannerLoad.toString())
-                DiagLine("Refresh cooldown", "${diag.bannerRefreshCooldownSec}s (AdMob policy)")
+                DiagLine("Auto-refresh interval", "${diag.bannerRefreshCooldownSec}s (AdMob policy: >=30s)")
                 DiagLine("Last banner error", diag.lastBannerError ?: "none")
                 if (diag.lastBannerErrorCode != null) {
                     DiagLine("Banner error decoded", "${diag.lastBannerErrorCode} = ${diag.lastBannerErrorName}")
