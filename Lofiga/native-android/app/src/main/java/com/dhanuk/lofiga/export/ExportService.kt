@@ -164,11 +164,15 @@ object ExportService {
             if (inputIdx >= 0) {
                 val inBuf = encoder.getInputBuffer(inputIdx)!!
                 inBuf.clear()
+                val maxFrames = inBuf.capacity() / (channels * 2)
                 val remaining = totalFrames - frameOffset
-                val frames = minOf(framesPerChunk, remaining)
+                val frames = minOf(framesPerChunk, minOf(remaining, maxFrames))
                 if (frames <= 0) {
-                    encoder.queueInputBuffer(inputIdx, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
-                    break
+                    if (remaining <= 0) {
+                        encoder.queueInputBuffer(inputIdx, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
+                        break
+                    }
+                    continue
                 }
                 val sampleCount = frames * channels
                 val bytes = ByteArray(sampleCount * 2)
