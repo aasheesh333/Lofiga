@@ -189,7 +189,7 @@ class AudioEngine(private val context: Context) {
     ): Boolean {
         _isPlaying.value = false
         releaseMainPlayer()
-        releaseEffects()
+        // Do NOT release effects! We reuse the persistent globalSessionId and its effects.
         _error.value = null
         _position.value = 0
         _duration.value = 0
@@ -206,6 +206,7 @@ class AudioEngine(private val context: Context) {
 
         try {
             val player = MediaPlayer().apply {
+                setAudioSessionId(globalSessionId)
                 setAudioAttributes(
                     AudioAttributes.Builder()
                         .setUsage(AudioAttributes.USAGE_MEDIA)
@@ -213,9 +214,17 @@ class AudioEngine(private val context: Context) {
                         .build()
                 )
                 setupSource(this)
+                // Attach Aux Effect in INITIALIZED state (before prepare). Safe and fast.
+                reverb?.let { attachAuxEffect(it.id) }
+
                 setOnPreparedListener { mediaPlayer ->
                     val dur = mediaPlayer.duration.toLong()
                     _duration.value = dur
+                    
+                    // Apply currently saved reverb send level since the effect is attached
+                    try {
+                        mediaPlayer.setAuxEffectSendLevel(pendingReverb.coerceIn(0f, 1f))
+                    } catch (e: Exception) {}
                     
                     // Start immediately for fast UI response
                     if (autoPlayOnPrepared) {
@@ -233,15 +242,7 @@ class AudioEngine(private val context: Context) {
                         }
                     }
                     
-                    // Initialize effects in background so we don't block the UI thread (prevents ANR)
-                    scope.launch(Dispatchers.IO) {
-                        try {
-                            initEffects(mediaPlayer.audioSessionId)
-                        } catch (e: Exception) {
-                            Log.e("AudioEngine", "Effects init failed: ${e.message}")
-                        }
-                    }
-                    
+                    // Compute FFT immediately (effects are already loaded in the background)
                     fftJob = scope.launch(Dispatchers.IO) {
                         fftCancelled = false
                         initFft()
@@ -438,10 +439,7 @@ class AudioEngine(private val context: Context) {
 
     private fun initEffects(audioSessionId: Int) {
         try {
-            // CRITICAL FIX: Using audioSessionId=0 (Global Mix) for Reverb.
-            // Calling attachAuxEffect on specific MediaPlayer instances causes native mediaserver crashes 
-            // on certain devices. Global reverb avoids attachAuxEffect entirely while still working!
-            reverb = PresetReverb(EFFECT_PRIORITY, 0).apply {
+            reverb = PresetReverb(EFFECT_PRIORITY, audioSessionId).apply {
                 enabled = true
                 preset = PresetReverb.PRESET_SMALLROOM
             }
@@ -570,7 +568,7 @@ class AudioEngine(private val context: Context) {
                             else -> PresetReverb.PRESET_PLATE
                         }
                     }
-                    // Note: No setAuxEffectSendLevel needed since Reverb is on Session 0 (Global)
+                    mainPlayer?.setAuxEffectSendLevel(reverbWet.coerceIn(0f, 1f))
                 } catch (e: Exception) { Log.e("AudioEngine", "Reverb error: ${e.message}", e) }
             }
         }
