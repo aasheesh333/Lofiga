@@ -207,55 +207,86 @@ class AudioEngine(private val context: Context) {
         try {
             val player = MediaPlayer().apply {
                 setAudioAttributes(
-                    AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_MEDIA)
-                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                    android.media.AudioAttributes.Builder()
+                        .setContentType(android.media.AudioAttributes.CONTENT_TYPE_MUSIC)
+                        .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
                         .build()
                 )
                 setupSource(this)
-                setOnPreparedListener { mediaPlayer ->
-                    val dur = mediaPlayer.duration.toLong()
-                    _duration.value = dur
-                    if (autoPlayOnPrepared) {
-                        try {
-                            mediaPlayer.start()
-                            _isPlaying.value = true
-                            _position.value = mediaPlayer.currentPosition.toLong()
-                            startPositionPolling()
-                            syncAtmospheres()
-                            applyStoredPlaybackParams()
-                            onPlaybackStateChanged?.invoke(true)
-                            Log.i("AudioEngine", "Auto-play started, position: ${_position.value}")
-                        } catch (e: Exception) {
-                            Log.e("AudioEngine", "Auto-play failed: ${e.message}")
-                        }
-                    }
-                    scope.launch(Dispatchers.Default) {
-                        try {
-                            initEffects(mediaPlayer.audioSessionId)
-                        } catch (e: Exception) {
-                            Log.e("AudioEngine", "Effects init failed: ${e.message}")
-                        }
-                    }
-                    fftJob = scope.launch(Dispatchers.IO) {
-                        fftCancelled = false
-                        initFft()
-                    }
-                    startAnimatingWaveform()
-                    Log.i("AudioEngine", "Track loaded, duration: ${dur}ms")
-                }
-                setOnCompletionListener {
-                    _isPlaying.value = false
-                    positionJob?.cancel()
-                    pauseAtmospheres()
-                    onPlaybackStateChanged?.invoke(false)
-                    Log.i("AudioEngine", "Track playback completed")
-                }
-                prepareAsync()
             }
             mainPlayer = player
-            storedTempo = pendingTempo
-            storedPitch = pendingPitch
+
+            // CRITICAL FIX: Initialize and attach effects on background thread BEFORE prepareAsync()!
+            // Calling attachAuxEffect after prepare/start causes fatal MediaPlayer crashes on many OEM ROMs.
+            scope.launch(Dispatchers.IO) {
+                try {
+                    val sessionId = player.audioSessionId
+                    reverb = android.media.audiofx.PresetReverb(EFFECT_PRIORITY, sessionId).apply {
+                        enabled = true
+                        preset = android.media.audiofx.PresetReverb.PRESET_SMALLROOM
+                    }
+                    bassBoost = android.media.audiofx.BassBoost(EFFECT_PRIORITY, sessionId).apply {
+                        enabled = true
+                        setStrength(0.toShort())
+                    }
+                    equalizer = android.media.audiofx.Equalizer(EFFECT_PRIORITY, sessionId).apply {
+                        enabled = true
+                        val bands = numberOfBands
+                        for (i in 0 until bands) {
+                            setBandLevel(i.toShort(), 0.toShort())
+                        }
+                    }
+
+                    // Attach aux effect safely in INITIALIZED state
+                    reverb?.let { r ->
+                        player.attachAuxEffect(r.id)
+                        player.setAuxEffectSendLevel(pendingReverb.coerceIn(0f, 1f))
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.e("AudioEngine", "Effects init failed: ${e.message}")
+                }
+                
+                // Once effects are safely attached, move to Main Thread to prepare and start
+                val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+                mainHandler.post {
+                    player.setOnPreparedListener { mediaPlayer ->
+                        val dur = mediaPlayer.duration.toLong()
+                        _duration.value = dur
+                        if (autoPlayOnPrepared) {
+                            try {
+                                mediaPlayer.start()
+                                _isPlaying.value = true
+                                _position.value = mediaPlayer.currentPosition.toLong()
+                                startPositionPolling()
+                                syncAtmospheres()
+                                applyStoredPlaybackParams()
+                                onPlaybackStateChanged?.invoke(true)
+                                android.util.Log.i("AudioEngine", "Auto-play started, position: ${_position.value}")
+                            } catch (e: Exception) {
+                                android.util.Log.e("AudioEngine", "Auto-play failed: ${e.message}")
+                            }
+                        }
+                        
+                        fftJob = scope.launch(Dispatchers.IO) {
+                            fftCancelled = false
+                            initFft()
+                        }
+                        startAnimatingWaveform()
+                    }
+                    player.setOnCompletionListener {
+                        _isPlaying.value = false
+                        positionJob?.cancel()
+                        pauseAtmospheres()
+                        onPlaybackStateChanged?.invoke(false)
+                        android.util.Log.i("AudioEngine", "Track playback completed")
+                    }
+                    try {
+                        player.prepareAsync()
+                    } catch (e: Exception) {
+                        android.util.Log.e("AudioEngine", "prepareAsync failed", e)
+                    }
+                }
+            }
             return true
         } catch (e: Exception) {
             _error.value = "$errorPrefix: ${e.message}"
@@ -431,131 +462,28 @@ class AudioEngine(private val context: Context) {
 
     // --- Audio Effects ---
 
-    private fun initEffects(audioSessionId: Int) {
-        try {
-            reverb = PresetReverb(EFFECT_PRIORITY, audioSessionId).apply {
-                enabled = true
-                preset = PresetReverb.PRESET_SMALLROOM
-            }
-
-            bassBoost = BassBoost(EFFECT_PRIORITY, audioSessionId).apply {
-                enabled = true
-                setStrength(0.toShort())
-            }
-
-            equalizer = Equalizer(EFFECT_PRIORITY, audioSessionId).apply {
-                enabled = true
-                val bands = numberOfBands
-                for (i in 0 until bands) {
-                    setBandLevel(i.toShort(), 0.toShort())
-                }
-            }
-
-            android.util.Log.i("AudioEngine", "Effects initialized on session $audioSessionId")
-            
-            // Apply any pending effect values that were set before effects were initialized
-            if (pendingReverb > 0f || pendingDelay > 0f) {
-                setReverbAndDelay(pendingReverb, pendingDelay)
-            }
-            if (pendingBass > 0f) {
-                setBassBoost(pendingBass)
-            }
-            if (pendingTreble > 0f) {
-                setTrebleCut(pendingTreble)
-            }
-        } catch (e: Exception) {
-            android.util.Log.w("AudioEngine", "Failed to init effects: ${e.message}")
-        }
-    }
-
-    fun setReverb(wet: Float) {
-        reverb?.let { r ->
-            try {
-                r.enabled = wet > 0.01f
-                if (wet > 0.01f) {
-                    r.preset = when {
-                        wet < 0.25f -> PresetReverb.PRESET_SMALLROOM
-                        wet < 0.5f -> PresetReverb.PRESET_MEDIUMROOM
-                        wet < 0.75f -> PresetReverb.PRESET_LARGEHALL
-                        else -> PresetReverb.PRESET_PLATE
-                    }
-                }
-            } catch (e: Exception) { Log.e("AudioEngine", "Reverb error: ${e.message}", e) }
-        } ?: run {
-            // Store for later application when effects are initialized
-            pendingReverb = wet
-        }
-    }
-
-    private var pendingReverb: Float = 0f
-    private var pendingDelay: Float = 0f
-    private var pendingBass: Float = 0f
-    private var pendingTreble: Float = 0f
-
-    fun setBassBoost(strength: Float) {
-        pendingBass = strength
-        bassBoost?.let {
-            try {
-                val s = (strength * 1000).toInt().coerceIn(0, 1000).toShort()
-                it.setStrength(s)
-                it.enabled = strength > 0.01f
-            } catch (e: Exception) { Log.e("AudioEngine", "Reverb error: ${e.message}", e) }
-        }
-    }
-
-    fun setTrebleCut(cutoffFactor: Float) {
-        pendingTreble = cutoffFactor
-        equalizer?.let { eq ->
-            try {
-                if (cutoffFactor > 0.01f) {
-                    val bands = eq.numberOfBands
-                    for (i in 0 until bands) {
-                        val freq = eq.getCenterFreq(i.toShort())
-                        if (freq > 2_000_000) {
-                            val gain = (-(cutoffFactor * 1500f)).toInt().coerceIn(-1500, 0).toShort()
-                            eq.setBandLevel(i.toShort(), gain)
-                        } else {
-                            eq.setBandLevel(i.toShort(), 0.toShort())
-                        }
-                    }
-                    eq.enabled = true
-                } else {
-                    val bands = eq.numberOfBands
-                    for (i in 0 until bands) {
-                        eq.setBandLevel(i.toShort(), 0.toShort())
-                    }
-                    eq.enabled = false
-                }
-            } catch (e: Exception) { Log.e("AudioEngine", "Reverb error: ${e.message}", e) }
-        }
-    }
-
-    fun setDelay(wet: Float) {
-        // No-op: delay is combined with reverb via setReverbAndDelay()
-        // to prevent overriding the reverb setting.
-    }
-
-    /**
-     * Combines both reverb and delay into a single reverb effect since
-     * Android's AudioEffect framework only provides PresetReverb.
-     */
     fun setReverbAndDelay(reverbWet: Float, delayWet: Float) {
         pendingReverb = reverbWet
         pendingDelay = delayWet
         reverb?.let { r ->
-            try {
-                val combined = (reverbWet + delayWet * 1.0f).coerceIn(0f, 1f)
-                r.enabled = combined > 0.01f
-                if (combined > 0.01f) {
-                    r.preset = when {
-                        combined < 0.06f -> PresetReverb.PRESET_NONE
-                        combined < 0.15f -> PresetReverb.PRESET_SMALLROOM
-                        combined < 0.30f -> PresetReverb.PRESET_MEDIUMROOM
-                        combined < 0.55f -> PresetReverb.PRESET_LARGEHALL
-                        else -> PresetReverb.PRESET_PLATE
+            // Reverb changes are IPC calls. Running them on UI thread causes instant ANR when dragging sliders!
+            scope.launch(Dispatchers.IO) {
+                try {
+                    val combined = (reverbWet + delayWet).coerceIn(0f, 1f)
+                    val shouldEnable = combined > 0.01f
+                    if (r.enabled != shouldEnable) r.enabled = shouldEnable
+                    
+                    if (shouldEnable) {
+                        r.preset = when {
+                            combined > 0.8f -> android.media.audiofx.PresetReverb.PRESET_LARGEROOM
+                            combined > 0.5f -> android.media.audiofx.PresetReverb.PRESET_MEDIUMROOM
+                            combined > 0.1f -> android.media.audiofx.PresetReverb.PRESET_SMALLROOM
+                            else -> android.media.audiofx.PresetReverb.PRESET_NONE
+                        }
                     }
-                }
-            } catch (e: Exception) { Log.e("AudioEngine", "Reverb error: ${e.message}", e) }
+                    mainPlayer?.setAuxEffectSendLevel(reverbWet.coerceIn(0f, 1f))
+                } catch (e: Exception) { android.util.Log.e("AudioEngine", "Reverb error: ${e.message}", e) }
+            }
         }
     }
 
