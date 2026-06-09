@@ -63,10 +63,10 @@ fun PlayerScreen(
     val currentTrack by viewModel.currentTrack.collectAsState()
     val currentValues by viewModel.currentValues.collectAsState()
     val currentPreset by viewModel.currentPreset.collectAsState()
-                    val isExporting by viewModel.isExporting.collectAsState()
+    val isExporting by viewModel.isExporting.collectAsState()
     val customPresets by viewModel.customPresets.collectAsState()
     val selectedCustomPresetId by viewModel.selectedCustomPresetId.collectAsState()
-            val audioError by viewModel.audioEngine.error.collectAsState()
+    val audioError by viewModel.audioEngine.error.collectAsState()
     val exportedFilePath by viewModel.exportedFilePath.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
@@ -85,9 +85,7 @@ fun PlayerScreen(
     // Selected effect type for menu: "all", "bass", "treble"
     var selectedEffectType by remember { mutableStateOf("all") }
 
-    // Slider drag state - local to prevent fighting with position updates
-            // Use engine position at all times - preserves position on pause
-    
+
     LaunchedEffect(viewModel) {
         viewModel.snackbarMessage.collect { snackbarHostState.showSnackbar(it) }
     }
@@ -316,7 +314,7 @@ fun PlayerScreen(
 
                     Spacer(Modifier.height(4.dp))
 
-                    // --- Waveform Visualizer (moved up, smaller) ---
+                    // --- Waveform Visualizer ---
                     WaveformVisualizer(viewModel)
 
                     Spacer(Modifier.height(10.dp))
@@ -697,7 +695,7 @@ fun PlayerScreen(
                 // FIXED BOTTOM CONTROLS (never scrolls)
                 // ========================
                 PlaybackControls(viewModel)
-            }
+
             }
 
             // ========================
@@ -904,10 +902,70 @@ fun PlayerScreen(
     }
 }
 
+
 @Composable
 private fun WaveformVisualizer(viewModel: MainViewModel) {
-        val colors = LocalAppColors.current
-    WaveformVisualizer(viewModel),
+    val fftData by viewModel.audioEngine.fftData.collectAsState()
+    val colors = LocalAppColors.current
+    Canvas(modifier = Modifier.fillMaxWidth().height(72.dp)) {
+        val width = size.width
+        val height = size.height
+        val barCount = fftData.size
+        val barWidth = width / barCount
+        if (barCount > 0) {
+            for (i in 0 until barCount) {
+                val barHeight = fftData[i] * height * 0.5f
+                drawRect(
+                    brush = Brush.verticalGradient(
+                        listOf(
+                            colors.textPrimary.copy(alpha = 0.8f),
+                            colors.textPrimary.copy(alpha = 0.3f)
+                        )
+                    ),
+                    topLeft = Offset(x = i * barWidth, y = height - barHeight),
+                    size = Size(width = barWidth, height = barHeight)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PlaybackControls(viewModel: MainViewModel) {
+    val position by viewModel.audioEngine.position.collectAsState()
+    val duration by viewModel.audioEngine.duration.collectAsState()
+    val isPlaying by viewModel.audioEngine.isPlaying.collectAsState()
+    val isLooping by viewModel.audioEngine.isLooping.collectAsState()
+    val colors = LocalAppColors.current
+    
+    var isDragging by remember { mutableStateOf(false) }
+    var dragPosition by remember { mutableStateOf(0f) }
+    val sliderDisplayValue = if (isDragging) dragPosition else position.toFloat()
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = colors.surface.copy(alpha = 0.95f),
+        tonalElevation = 8.dp,
+        shadowElevation = 16.dp
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+            // --- Seek Bar ---
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    formatDuration(sliderDisplayValue.toLong()),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.textTertiary,
+                    modifier = Modifier.width(40.dp)
+                )
+                Slider(
+                    value = sliderDisplayValue,
+                    onValueChange = { newValue ->
+                        dragPosition = newValue
+                        isDragging = true
+                    },
                     onValueChangeFinished = {
                         viewModel.audioEngine.seekTo(dragPosition.toLong())
                         isDragging = false
