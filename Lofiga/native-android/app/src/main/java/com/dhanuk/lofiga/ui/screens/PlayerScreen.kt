@@ -46,6 +46,14 @@ import com.dhanuk.lofiga.ui.theme.*
 import com.dhanuk.lofiga.ui.theme.LocalAppColors
 import java.io.File
 
+import android.content.ContextWrapper
+
+fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
+}
+
 private fun formatDuration(millis: Long): String {
     val totalSec = millis / 1000
     val min = totalSec / 60
@@ -120,7 +128,9 @@ fun PlayerScreen(
                 }
             }
             viewModel.clearExportedFilePath()
-            AdManager.showRewarded(context as Activity, onRewarded = {}, onDismissed = {})
+            context.findActivity()?.let { act ->
+                AdManager.showRewarded(act, onRewarded = {}, onDismissed = {})
+            }
         }
     }
 
@@ -911,8 +921,8 @@ private fun WaveformVisualizer(viewModel: MainViewModel) {
         val width = size.width
         val height = size.height
         val barCount = fftData.size
-        val barWidth = width / barCount
         if (barCount > 0) {
+            val barWidth = width / barCount
             for (i in 0 until barCount) {
                 val barHeight = fftData[i] * height * 0.5f
                 drawRect(

@@ -15,6 +15,15 @@ import com.dhanuk.lofiga.ads.BannerAd
 import com.dhanuk.lofiga.ui.components.LofigaNavigationBar
 import com.dhanuk.lofiga.ui.screens.*
 
+import android.content.Context
+import android.content.ContextWrapper
+
+fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
+}
+
 private const val TAB_SWITCH_AD_COOLDOWN_MS = 60_000L
 
 @Composable
@@ -30,7 +39,9 @@ fun LofigaMainApp(
         if (previousIndex != selectedIndex) {
             val now = System.currentTimeMillis()
             if (now - lastInterstitialTime >= TAB_SWITCH_AD_COOLDOWN_MS) {
-                AdManager.showInterstitial(context as Activity)
+                context.findActivity()?.let { act ->
+                    AdManager.showInterstitial(act)
+                }
                 lastInterstitialTime = now
             }
             previousIndex = selectedIndex

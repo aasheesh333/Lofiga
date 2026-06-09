@@ -437,6 +437,8 @@ class AudioEngine(private val context: Context) {
                 enabled = true
                 preset = PresetReverb.PRESET_SMALLROOM
             }
+            mainPlayer?.attachAuxEffect(reverb!!.id)
+            mainPlayer?.setAuxEffectSendLevel(1.0f)
 
             bassBoost = BassBoost(EFFECT_PRIORITY, audioSessionId).apply {
                 enabled = true
@@ -767,7 +769,9 @@ class AudioEngine(private val context: Context) {
             }
             fd.close()
             atmospherePlayers[key] = player
-            atmosphereVolumes[key] = 0f
+            if (!atmosphereVolumes.containsKey(key)) {
+                atmosphereVolumes[key] = 0f
+            }
         } catch (e: Exception) {
             android.util.Log.e("AudioEngine", "Failed to create atmosphere player '$key'", e)
         }
