@@ -49,13 +49,24 @@ class LofigaApplication : Application() {
             override fun onActivityDestroyed(activity: Activity) {}
         })
 
-        // Background thread: heavy SDK initialisation to avoid ANR on cold start
-        applicationScope.launch {
-            OneSignal.initWithContext(this@LofigaApplication, BuildConfig.ONESIGNAL_APP_ID)
+        // Defer heavy SDK initialisation to avoid blocking the first frame render
+        // Note: AdMob SDK MUST be initialized and loaded on the Main UI thread
+        applicationScope.launch(Dispatchers.Main) {
+            kotlinx.coroutines.delay(500)
+            
+            try {
+                OneSignal.initWithContext(this@LofigaApplication, BuildConfig.ONESIGNAL_APP_ID)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
 
-            AdManager.initialize(this@LofigaApplication)
-            AdManager.loadInterstitial(this@LofigaApplication)
-            AdManager.loadRewarded(this@LofigaApplication)
+            try {
+                AdManager.initialize(this@LofigaApplication)
+                AdManager.loadInterstitial(this@LofigaApplication)
+                AdManager.loadRewarded(this@LofigaApplication)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
         }
     }
 }
