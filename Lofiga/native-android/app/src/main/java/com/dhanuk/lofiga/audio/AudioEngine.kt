@@ -487,6 +487,72 @@ class AudioEngine(private val context: Context) {
         }
     }
 
+    private var pendingReverb: Float = 0f
+    private var pendingDelay: Float = 0f
+    private var pendingBass: Float = 0f
+    private var pendingTreble: Float = 0f
+
+    fun setReverb(wet: Float) {
+        reverb?.let { r ->
+            try {
+                r.enabled = wet > 0.01f
+                if (wet > 0.01f) {
+                    r.preset = when {
+                        wet < 0.25f -> android.media.audiofx.PresetReverb.PRESET_SMALLROOM
+                        wet < 0.5f -> android.media.audiofx.PresetReverb.PRESET_MEDIUMROOM
+                        wet < 0.75f -> android.media.audiofx.PresetReverb.PRESET_LARGEHALL
+                        else -> android.media.audiofx.PresetReverb.PRESET_PLATE
+                    }
+                }
+            } catch (e: Exception) { android.util.Log.e("AudioEngine", "Reverb error: ${e.message}", e) }
+        } ?: run {
+            pendingReverb = wet
+        }
+    }
+
+    fun setBassBoost(strength: Float) {
+        pendingBass = strength
+        bassBoost?.let {
+            try {
+                val s = (strength * 1000).toInt().coerceIn(0, 1000).toShort()
+                it.setStrength(s)
+                it.enabled = strength > 0.01f
+            } catch (e: Exception) { android.util.Log.e("AudioEngine", "Reverb error: ${e.message}", e) }
+        }
+    }
+
+    fun setTrebleCut(cutoffFactor: Float) {
+        pendingTreble = cutoffFactor
+        equalizer?.let { eq ->
+            try {
+                if (cutoffFactor > 0.01f) {
+                    val bands = eq.numberOfBands
+                    for (i in 0 until bands) {
+                        val freq = eq.getCenterFreq(i.toShort())
+                        if (freq > 2_000_000) {
+                            val gain = (-(cutoffFactor * 1500f)).toInt().coerceIn(-1500, 0).toShort()
+                            eq.setBandLevel(i.toShort(), gain)
+                        } else {
+                            eq.setBandLevel(i.toShort(), 0.toShort())
+                        }
+                    }
+                    eq.enabled = true
+                } else {
+                    val bands = eq.numberOfBands
+                    for (i in 0 until bands) {
+                        eq.setBandLevel(i.toShort(), 0.toShort())
+                    }
+                    eq.enabled = false
+                }
+            } catch (e: Exception) { android.util.Log.e("AudioEngine", "Reverb error: ${e.message}", e) }
+        }
+    }
+
+    fun setDelay(wet: Float) {
+        // No-op: delay is combined with reverb via setReverbAndDelay()
+        // to prevent overriding the reverb setting.
+    }
+
     // --- Fast FFT Visualization (lower resolution, much faster) ---
 
     private fun startAnimatingWaveform() {
