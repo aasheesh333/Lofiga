@@ -25,6 +25,16 @@ import java.util.concurrent.ConcurrentHashMap
 
 class AudioEngine(private val context: Context) {
 
+    // Persistent audio session for seamless effect transitions
+    private val globalSessionId = (context.getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager).generateAudioSessionId()
+    
+    init {
+        // Initialize effects ONCE in the background to prevent UI lag on track switch
+        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+            initEffects(globalSessionId)
+        }
+    }
+
     private val _isPlaying = MutableStateFlow(false)
     val isPlaying: StateFlow<Boolean> = _isPlaying.asStateFlow()
 
