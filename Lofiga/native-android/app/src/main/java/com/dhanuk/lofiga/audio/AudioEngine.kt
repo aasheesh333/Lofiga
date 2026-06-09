@@ -600,13 +600,16 @@ class AudioEngine(private val context: Context) {
     private fun precomputeFFTFast(context: Context, uri: Uri): Boolean {
         return try {
             val extractor = MediaExtractor()
-            extractor.setDataSource(context, uri, null)
-            decodeAndComputeFFTFast(extractor) { newFrames ->
-                synchronized(framesLock) {
-                    precomputedFrames.addAll(newFrames)
+            try {
+                extractor.setDataSource(context, uri, null)
+                decodeAndComputeFFTFast(extractor) { newFrames ->
+                    synchronized(framesLock) {
+                        precomputedFrames.addAll(newFrames)
+                    }
                 }
+            } finally {
+                extractor.release()
             }
-            extractor.release()
             animatingWaveform = false
             android.util.Log.i("AudioEngine", "Fast FFT done: ${precomputedFrames.size} frames")
             true
@@ -621,13 +624,16 @@ class AudioEngine(private val context: Context) {
     private fun precomputeFFTFast(filePath: String): Boolean {
         return try {
             val extractor = MediaExtractor()
-            extractor.setDataSource(filePath)
-            decodeAndComputeFFTFast(extractor) { newFrames ->
-                synchronized(framesLock) {
-                    precomputedFrames.addAll(newFrames)
+            try {
+                extractor.setDataSource(filePath)
+                decodeAndComputeFFTFast(extractor) { newFrames ->
+                    synchronized(framesLock) {
+                        precomputedFrames.addAll(newFrames)
+                    }
                 }
+            } finally {
+                extractor.release()
             }
-            extractor.release()
             animatingWaveform = false
             android.util.Log.i("AudioEngine", "Fast FFT done: ${precomputedFrames.size} frames")
             true
@@ -651,7 +657,8 @@ class AudioEngine(private val context: Context) {
             codec.configure(format, null, null, 0)
             codec.start()
 
-            val bufferInfo = MediaCodec.BufferInfo()
+            try {
+                val bufferInfo = MediaCodec.BufferInfo()
             val batch = mutableListOf<List<Float>>()
             var sawInputEOS = false
             var sawOutputEOS = false
@@ -707,10 +714,14 @@ class AudioEngine(private val context: Context) {
                 }
             }
             if (batch.isNotEmpty()) {
-                onBatch(batch.toList())
+                    onBatch(batch.toList())
+                }
+            } finally {
+                try {
+                    codec.stop()
+                } catch (_: Exception) {}
+                codec.release()
             }
-            codec.stop()
-            codec.release()
         }
     }
 
@@ -879,7 +890,12 @@ class AudioEngine(private val context: Context) {
      * Ensure main audio session is established before initializing effects.
      */
     fun ensureAudioSessionReady(): Boolean {
-        return mainPlayer != null && mainPlayer!!.audioSessionId > 0
+        val player = mainPlayer ?: return false
+        return try {
+            player.audioSessionId > 0
+        } catch (_: Exception) {
+            false
+        }
     }
 
     private fun releaseAtmospherePlayers() {
