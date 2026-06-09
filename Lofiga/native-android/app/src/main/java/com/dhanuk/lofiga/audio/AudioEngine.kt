@@ -217,34 +217,31 @@ class AudioEngine(private val context: Context) {
                     val dur = mediaPlayer.duration.toLong()
                     _duration.value = dur
                     
-                    // Initialize effects on a background thread BEFORE starting the player
-                    // Calling attachAuxEffect while the player is STARTED causes native crashes on many devices!
+                    // Start immediately for fast UI response
+                    if (autoPlayOnPrepared) {
+                        try {
+                            mediaPlayer.start()
+                            _isPlaying.value = true
+                            _position.value = mediaPlayer.currentPosition.toLong()
+                            startPositionPolling()
+                            syncAtmospheres()
+                            applyStoredPlaybackParams()
+                            onPlaybackStateChanged?.invoke(true)
+                            Log.i("AudioEngine", "Auto-play started, position: ${_position.value}")
+                        } catch (e: Exception) {
+                            Log.e("AudioEngine", "Auto-play failed: ${e.message}")
+                        }
+                    }
+                    
+                    // Initialize effects in background so we don't block the UI thread (prevents ANR)
                     scope.launch(Dispatchers.IO) {
                         try {
                             initEffects(mediaPlayer.audioSessionId)
                         } catch (e: Exception) {
                             Log.e("AudioEngine", "Effects init failed: ${e.message}")
                         }
-                        
-                        // Now it is safe to start the player
-                        val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
-                        mainHandler.post {
-                            if (autoPlayOnPrepared) {
-                                try {
-                                    mediaPlayer.start()
-                                    _isPlaying.value = true
-                                    _position.value = mediaPlayer.currentPosition.toLong()
-                                    startPositionPolling()
-                                    syncAtmospheres()
-                                    applyStoredPlaybackParams()
-                                    onPlaybackStateChanged?.invoke(true)
-                                    Log.i("AudioEngine", "Auto-play started safely, position: ${_position.value}")
-                                } catch (e: Exception) {
-                                    Log.e("AudioEngine", "Auto-play failed: ${e.message}")
-                                }
-                            }
-                        }
                     }
+                    
                     fftJob = scope.launch(Dispatchers.IO) {
                         fftCancelled = false
                         initFft()
@@ -441,12 +438,13 @@ class AudioEngine(private val context: Context) {
 
     private fun initEffects(audioSessionId: Int) {
         try {
-            reverb = PresetReverb(EFFECT_PRIORITY, audioSessionId).apply {
+            // CRITICAL FIX: Using audioSessionId=0 (Global Mix) for Reverb.
+            // Calling attachAuxEffect on specific MediaPlayer instances causes native mediaserver crashes 
+            // on certain devices. Global reverb avoids attachAuxEffect entirely while still working!
+            reverb = PresetReverb(EFFECT_PRIORITY, 0).apply {
                 enabled = true
                 preset = PresetReverb.PRESET_SMALLROOM
             }
-            mainPlayer?.attachAuxEffect(reverb!!.id)
-            mainPlayer?.setAuxEffectSendLevel(1.0f)
 
             bassBoost = BassBoost(EFFECT_PRIORITY, audioSessionId).apply {
                 enabled = true
@@ -553,19 +551,28 @@ class AudioEngine(private val context: Context) {
         pendingReverb = reverbWet
         pendingDelay = delayWet
         reverb?.let { r ->
-            try {
-                val combined = (reverbWet + delayWet * 1.0f).coerceIn(0f, 1f)
-                r.enabled = combined > 0.01f
-                if (combined > 0.01f) {
-                    r.preset = when {
-                        combined < 0.06f -> PresetReverb.PRESET_NONE
-                        combined < 0.15f -> PresetReverb.PRESET_SMALLROOM
-                        combined < 0.30f -> PresetReverb.PRESET_MEDIUMROOM
-                        combined < 0.55f -> PresetReverb.PRESET_LARGEHALL
-                        else -> PresetReverb.PRESET_PLATE
+            // Reverb state changes are synchronous IPC calls to AudioFlinger.
+            // If done on the UI thread (like when dragging a slider), it deadlocks the app (ANR).
+            scope.launch(Dispatchers.IO) {
+                try {
+                    val combined = (reverbWet + delayWet * 1.0f).coerceIn(0f, 1f)
+                    val wasEnabled = r.enabled
+                    val shouldEnable = combined > 0.01f
+                    if (wasEnabled != shouldEnable) {
+                        r.enabled = shouldEnable
                     }
-                }
-            } catch (e: Exception) { Log.e("AudioEngine", "Reverb error: ${e.message}", e) }
+                    if (shouldEnable) {
+                        r.preset = when {
+                            combined < 0.06f -> PresetReverb.PRESET_NONE
+                            combined < 0.15f -> PresetReverb.PRESET_SMALLROOM
+                            combined < 0.30f -> PresetReverb.PRESET_MEDIUMROOM
+                            combined < 0.55f -> PresetReverb.PRESET_LARGEHALL
+                            else -> PresetReverb.PRESET_PLATE
+                        }
+                    }
+                    // Note: No setAuxEffectSendLevel needed since Reverb is on Session 0 (Global)
+                } catch (e: Exception) { Log.e("AudioEngine", "Reverb error: ${e.message}", e) }
+            }
         }
     }
 
