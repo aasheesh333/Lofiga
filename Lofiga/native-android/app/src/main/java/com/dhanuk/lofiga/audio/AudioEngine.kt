@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 
 class AudioEngine(private val context: Context) {
 
@@ -53,8 +54,8 @@ class AudioEngine(private val context: Context) {
     var onPlaybackStateChanged: ((isPlaying: Boolean) -> Unit)? = null
 
     private var mainPlayer: MediaPlayer? = null
-    private val atmospherePlayers = mutableMapOf<String, MediaPlayer>()
-    private val atmosphereVolumes = mutableMapOf<String, Float>()
+    private val atmospherePlayers = ConcurrentHashMap<String, MediaPlayer>()
+    private val atmosphereVolumes = ConcurrentHashMap<String, Float>()
 
     private var reverb: PresetReverb? = null
     private var bassBoost: BassBoost? = null
@@ -65,12 +66,13 @@ class AudioEngine(private val context: Context) {
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     private var positionJob: Job? = null
     private var fftJob: Job? = null
-    private var wasPlayingBeforeFocusLoss = false
-    private var autoPlayOnPrepared = false
+    @Volatile private var fftCancelled = false
+    @Volatile private var wasPlayingBeforeFocusLoss = false
+    @Volatile private var autoPlayOnPrepared = false
 
     // Animation for visualization while FFT is computing
     private var visualAnimSeq = 0L
-    private var animatingWaveform = false
+    @Volatile private var animatingWaveform = false
 
     private var audioFocusRequest: AudioFocusRequest? = null
     private val focusChangeListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
@@ -193,6 +195,7 @@ class AudioEngine(private val context: Context) {
         _duration.value = 0
         resetWaveformData()
         fftJob?.cancel()
+        fftCancelled = true
         animatingWaveform = false
         autoPlayOnPrepared = autoPlay
 
@@ -234,7 +237,10 @@ class AudioEngine(private val context: Context) {
                             Log.e("AudioEngine", "Effects init failed: ${e.message}")
                         }
                     }
-                    fftJob = scope.launch(Dispatchers.Default) { initFft() }
+                    fftJob = scope.launch(Dispatchers.IO) {
+                        fftCancelled = false
+                        initFft()
+                    }
                     startAnimatingWaveform()
                     Log.i("AudioEngine", "Track loaded, duration: ${dur}ms")
                 }

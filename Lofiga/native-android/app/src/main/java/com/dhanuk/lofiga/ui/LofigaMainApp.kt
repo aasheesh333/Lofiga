@@ -10,13 +10,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.dhanuk.lofiga.ads.AdManager
 import com.dhanuk.lofiga.ads.BannerAd
 import com.dhanuk.lofiga.ui.components.LofigaNavigationBar
 import com.dhanuk.lofiga.ui.screens.*
+
+private const val TAB_SWITCH_AD_COOLDOWN_MS = 60_000L
 
 @Composable
 fun LofigaMainApp(
@@ -24,24 +23,16 @@ fun LofigaMainApp(
 ) {
     var selectedIndex by remember { mutableStateOf(0) }
     var previousIndex by remember { mutableStateOf(0) }
+    var lastInterstitialTime by remember { mutableStateOf(0L) }
     val context = LocalContext.current
-
-    val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                if (viewModel.audioEngine.isPlaying.value && selectedIndex != 1) {
-                    selectedIndex = 1
-                }
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
-    }
 
     LaunchedEffect(selectedIndex) {
         if (previousIndex != selectedIndex) {
-            AdManager.showInterstitial(context as Activity)
+            val now = System.currentTimeMillis()
+            if (now - lastInterstitialTime >= TAB_SWITCH_AD_COOLDOWN_MS) {
+                AdManager.showInterstitial(context as Activity)
+                lastInterstitialTime = now
+            }
             previousIndex = selectedIndex
         }
     }

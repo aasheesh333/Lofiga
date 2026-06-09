@@ -1,5 +1,6 @@
 package com.dhanuk.lofiga.media
 
+import android.app.Notification
 import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
@@ -42,22 +43,39 @@ class MediaPlaybackService : Service() {
                 sessionManager?.pausePlayback()
                 showAsForeground(false)
             }
+            else -> {
+                // Null intent (system restart) or unrecognized action.
+                // We use START_NOT_STICKY so this shouldn't normally happen,
+                // but guard against ANR by stopping immediately.
+                stopSelf()
+                return START_NOT_STICKY
+            }
         }
-        return START_STICKY
+        return START_NOT_STICKY
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     fun showAsForeground(isPlaying: Boolean) {
-        val nm = notificationManager ?: return
-        val sm = sessionManager ?: return
+        val nm = notificationManager
+        val sm = sessionManager
 
-        val notification = nm.buildNotification(
-            sm.token,
-            currentTitle,
-            currentArtist,
-            isPlaying
-        )
+        val notification: Notification = if (nm != null && sm != null) {
+            nm.buildNotification(
+                sm.token,
+                currentTitle,
+                currentArtist,
+                isPlaying
+            )
+        } else {
+            // Managers not yet initialized — build a minimal fallback notification
+            // so startForeground() is still called, avoiding an ANR on Android 12+.
+            NotificationCompat.Builder(this, MediaNotificationManager.CHANNEL_ID)
+                .setContentTitle("Lofiga")
+                .setSmallIcon(android.R.drawable.ic_media_play)
+                .setPriority(NotificationCompat.PRIORITY_LOW)
+                .build()
+        }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             startForeground(
@@ -67,6 +85,12 @@ class MediaPlaybackService : Service() {
             )
         } else {
             startForeground(MediaNotificationManager.NOTIFICATION_ID, notification)
+        }
+
+        // If managers were null we showed a fallback just to satisfy startForeground;
+        // stop immediately since we can't do anything useful without them.
+        if (nm == null || sm == null) {
+            stopSelf()
         }
     }
 

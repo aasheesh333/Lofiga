@@ -143,58 +143,60 @@ fun SettingsScreen(
                 )
             } else {
                 customPresets.forEach { preset ->
-                    var showPresetDeleteConfirm by remember { mutableStateOf(false) }
-                    if (showPresetDeleteConfirm) {
-                        DeleteConfirmDialog(
-                            title = "Delete Preset",
-                            message = "Are you sure you want to delete \"${preset.name}\"? This cannot be undone.",
-                            onConfirm = {
-                                viewModel.deleteCustomPreset(preset.id)
-                                showPresetDeleteConfirm = false
-                            },
-                            onDismiss = { showPresetDeleteConfirm = false }
-                        )
-                    }
-                    Surface(
-                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        color = colors.surface,
-                        border = ButtonDefaults.outlinedButtonBorder.copy(
-                            brush = androidx.compose.ui.graphics.Brush.linearGradient(
-                                listOf(colors.outline, colors.outline)
+                    key(preset.id) {
+                        var showPresetDeleteConfirm by remember { mutableStateOf(false) }
+                        if (showPresetDeleteConfirm) {
+                            DeleteConfirmDialog(
+                                title = "Delete Preset",
+                                message = "Are you sure you want to delete \"${preset.name}\"? This cannot be undone.",
+                                onConfirm = {
+                                    viewModel.deleteCustomPreset(preset.id)
+                                    showPresetDeleteConfirm = false
+                                },
+                                onDismiss = { showPresetDeleteConfirm = false }
                             )
-                        )
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                        }
+                        Surface(
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            color = colors.surface,
+                            border = ButtonDefaults.outlinedButtonBorder.copy(
+                                brush = androidx.compose.ui.graphics.Brush.linearGradient(
+                                    listOf(colors.outline, colors.outline)
+                                )
+                            )
                         ) {
-                            Icon(
-                                Icons.Outlined.Bookmark,
-                                contentDescription = null,
-                                tint = Cyan400,
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(Modifier.width(12.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = preset.name,
-                                    color = colors.textPrimary,
-                                    style = MaterialTheme.typography.titleMedium
-                                )
-                                Text(
-                                    text = "Custom preset",
-                                    color = colors.textTertiary,
-                                    style = MaterialTheme.typography.bodySmall
-                                )
-                            }
-                            IconButton(onClick = { showPresetDeleteConfirm = true }) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
                                 Icon(
-                                    Icons.Outlined.Delete,
-                                    contentDescription = "Delete",
-                                    tint = Color(0xFFFF5252).copy(alpha = 0.7f),
-                                    modifier = Modifier.size(18.dp)
+                                    Icons.Outlined.Bookmark,
+                                    contentDescription = null,
+                                    tint = Cyan400,
+                                    modifier = Modifier.size(20.dp)
                                 )
+                                Spacer(Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = preset.name,
+                                        color = colors.textPrimary,
+                                        style = MaterialTheme.typography.titleMedium
+                                    )
+                                    Text(
+                                        text = "Custom preset",
+                                        color = colors.textTertiary,
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
+                                IconButton(onClick = { showPresetDeleteConfirm = true }) {
+                                    Icon(
+                                        Icons.Outlined.Delete,
+                                        contentDescription = "Delete",
+                                        tint = Color(0xFFFF5252).copy(alpha = 0.7f),
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
                             }
                         }
                     }

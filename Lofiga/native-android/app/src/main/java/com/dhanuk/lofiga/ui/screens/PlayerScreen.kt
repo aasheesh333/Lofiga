@@ -63,16 +63,10 @@ fun PlayerScreen(
     val currentTrack by viewModel.currentTrack.collectAsState()
     val currentValues by viewModel.currentValues.collectAsState()
     val currentPreset by viewModel.currentPreset.collectAsState()
-    val isPlaying by viewModel.audioEngine.isPlaying.collectAsState()
-    val position by viewModel.audioEngine.position.collectAsState()
-    val duration by viewModel.audioEngine.duration.collectAsState()
-    val isLooping by viewModel.audioEngine.isLooping.collectAsState()
-    val isExporting by viewModel.isExporting.collectAsState()
+                    val isExporting by viewModel.isExporting.collectAsState()
     val customPresets by viewModel.customPresets.collectAsState()
     val selectedCustomPresetId by viewModel.selectedCustomPresetId.collectAsState()
-    val waveformSnapshot by viewModel.audioEngine.waveformData.collectAsState()
-    val fftData by viewModel.audioEngine.fftData.collectAsState()
-    val audioError by viewModel.audioEngine.error.collectAsState()
+            val audioError by viewModel.audioEngine.error.collectAsState()
     val exportedFilePath by viewModel.exportedFilePath.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
@@ -92,11 +86,8 @@ fun PlayerScreen(
     var selectedEffectType by remember { mutableStateOf("all") }
 
     // Slider drag state - local to prevent fighting with position updates
-    var isDragging by remember { mutableStateOf(false) }
-    var dragPosition by remember { mutableStateOf(0f) }
-    // Use engine position at all times - preserves position on pause
-    val sliderDisplayValue = if (isDragging) dragPosition else position.toFloat()
-
+            // Use engine position at all times - preserves position on pause
+    
     LaunchedEffect(viewModel) {
         viewModel.snackbarMessage.collect { snackbarHostState.showSnackbar(it) }
     }
@@ -326,25 +317,7 @@ fun PlayerScreen(
                     Spacer(Modifier.height(4.dp))
 
                     // --- Waveform Visualizer (moved up, smaller) ---
-                    Canvas(modifier = Modifier.fillMaxWidth().height(72.dp)) {
-                        val width = size.width
-                        val height = size.height
-                        val barCount = fftData.size
-                        val barWidth = width / barCount
-                        for (i in 0 until barCount) {
-                            val barHeight = fftData[i] * height * 0.5f
-                            drawRect(
-                                brush = Brush.verticalGradient(
-                                    listOf(
-                                        colors.textPrimary.copy(alpha = 0.8f),
-                                        colors.textPrimary.copy(alpha = 0.3f)
-                                    )
-                                ),
-                                topLeft = Offset(x = i * barWidth, y = height - barHeight),
-                                size = Size(width = barWidth, height = barHeight)
-                            )
-                        }
-                    }
+                    WaveformVisualizer(viewModel)
 
                     Spacer(Modifier.height(10.dp))
 
@@ -480,7 +453,7 @@ fun PlayerScreen(
                                         // Tempo Card
                                         EffectCard(
                                             modifier = Modifier.weight(1f),
-                                            icon = { Icon(Icons.Outlined.Speed, contentDescription = null, tint = colors.surface, modifier = Modifier.size(18.dp)) },
+                                            icon = Icons.Outlined.Speed,
                                             label = "Tempo",
                                             value = "${(currentValues.tempo * 100).toInt()}%",
                                             sliderValue = currentValues.tempo,
@@ -491,7 +464,7 @@ fun PlayerScreen(
                                         val pitchLabel = if (semitones >= 0) "+" + "%.1f".format(semitones) + " st" else "%.1f".format(semitones) + " st"
                                         EffectCard(
                                             modifier = Modifier.weight(1f),
-                                            icon = { Icon(Icons.Outlined.Tune, contentDescription = null, tint = colors.surface, modifier = Modifier.size(18.dp)) },
+                                            icon = Icons.Outlined.Tune,
                                             label = "Pitch",
                                             value = pitchLabel,
                                             sliderValue = (currentValues.pitch + 5f) / 10f,
@@ -506,7 +479,7 @@ fun PlayerScreen(
                                         // Reverb Card
                                         EffectCard(
                                             modifier = Modifier.weight(1f),
-                                            icon = { Icon(Icons.Outlined.Forward30, contentDescription = null, tint = colors.surface, modifier = Modifier.size(18.dp)) },
+                                            icon = Icons.Outlined.Forward30,
                                             label = "Reverb",
                                             value = "${(currentValues.reverb * 100).toInt()}%",
                                             sliderValue = currentValues.reverb,
@@ -515,7 +488,7 @@ fun PlayerScreen(
                                         // Delay Card
                                         EffectCard(
                                             modifier = Modifier.weight(1f),
-                                            icon = { Icon(Icons.Outlined.Timeline, contentDescription = null, tint = colors.surface, modifier = Modifier.size(18.dp)) },
+                                            icon = Icons.Outlined.Timeline,
                                             label = "Delay",
                                             value = "${(currentValues.delay * 100).toInt()}%",
                                             sliderValue = currentValues.delay,
@@ -530,7 +503,7 @@ fun PlayerScreen(
                                         // Bass Card
                                         EffectCard(
                                             modifier = Modifier.weight(1f),
-                                            icon = { Icon(Icons.Outlined.Equalizer, contentDescription = null, tint = colors.surface, modifier = Modifier.size(18.dp)) },
+                                            icon = Icons.Outlined.Equalizer,
                                             label = "Bass",
                                             value = "${(currentValues.bass * 100).toInt()}%",
                                             sliderValue = currentValues.bass,
@@ -539,7 +512,7 @@ fun PlayerScreen(
                                         // Treble Card
                                         EffectCard(
                                             modifier = Modifier.weight(1f),
-                                            icon = { Icon(Icons.Outlined.GraphicEq, contentDescription = null, tint = colors.surface, modifier = Modifier.size(18.dp)) },
+                                            icon = Icons.Outlined.GraphicEq,
                                             label = "Treble Cut",
                                             value = "${(currentValues.trebleCut * 100).toInt()}%",
                                             sliderValue = currentValues.trebleCut,
@@ -594,12 +567,12 @@ fun PlayerScreen(
                                     )
 
                                     // Atmosphere sliders - each with proper label & icon
-                                    listOf(
+                                    remember { listOf(
                                         Triple("rain", "Rain", Icons.Outlined.WaterDrop),
                                         Triple("vinyl", "Vinyl", Icons.Outlined.DiscFull),
                                         Triple("wind", "Wind", Icons.Outlined.Air),
                                         Triple("tape", "Tape", Icons.Outlined.FiberManualRecord)
-                                    ).forEach { (key, label, icon) ->
+                                    ) }.forEach { (key, label, icon) ->
                                         val volume = when (key) {
                                             "rain" -> currentValues.rainVolume
                                             "vinyl" -> currentValues.vinylVolume
@@ -723,123 +696,8 @@ fun PlayerScreen(
                 // ========================
                 // FIXED BOTTOM CONTROLS (never scrolls)
                 // ========================
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    color = colors.surface.copy(alpha = 0.95f),
-                    tonalElevation = 8.dp,
-                    shadowElevation = 16.dp
-                ) {
-                    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
-
-                        // --- Seek Bar ---
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                formatDuration(sliderDisplayValue.toLong()),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = colors.textTertiary,
-                                modifier = Modifier.width(40.dp)
-                            )
-                            Slider(
-                                value = sliderDisplayValue,
-                                onValueChange = { newValue ->
-                                    dragPosition = newValue
-                                    isDragging = true
-                                },
-                                onValueChangeFinished = {
-                                    viewModel.audioEngine.seekTo(dragPosition.toLong())
-                                    isDragging = false
-                                },
-                                valueRange = 0f..if (duration > 0) duration.toFloat() else 1f,
-                                modifier = Modifier.weight(1f).height(24.dp),
-                                colors = SliderDefaults.colors(
-                                    thumbColor = colors.textPrimary,
-                                    activeTrackColor = colors.textPrimary,
-                                    inactiveTrackColor = colors.outline
-                                )
-                            )
-                            Text(
-                                formatDuration(duration),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = colors.textTertiary,
-                                modifier = Modifier.width(40.dp)
-                            )
-                        }
-
-                        // --- Playback Controls ---
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                            horizontalArrangement = Arrangement.Center,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            // Rewind 10s
-                            IconButton(
-                                onClick = { viewModel.audioEngine.seekTo((position - 10000).coerceAtLeast(0)) },
-                                modifier = Modifier.size(40.dp)
-                            ) {
-                                Icon(Icons.Filled.Replay10, contentDescription = "-10s", tint = colors.textSecondary, modifier = Modifier.size(24.dp))
-                            }
-                            Spacer(Modifier.width(4.dp))
-                            // Previous
-                            IconButton(
-                                onClick = { viewModel.previousTrack() },
-                                modifier = Modifier.size(40.dp)
-                            ) {
-                                Icon(Icons.Filled.SkipPrevious, contentDescription = "Previous", tint = colors.textSecondary, modifier = Modifier.size(24.dp))
-                            }
-                            Spacer(Modifier.width(12.dp))
-                            // Play/Pause - Big button
-                            Surface(
-                                modifier = Modifier.size(64.dp),
-                                shape = CircleShape,
-                                color = colors.textPrimary
-                            ) {
-                                IconButton(
-                                    onClick = { viewModel.audioEngine.togglePlayPause() },
-                                    modifier = Modifier.fillMaxSize()
-                                ) {
-                                    Icon(
-                                        if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                                        contentDescription = if (isPlaying) "Pause" else "Play",
-                                        tint = colors.surface,
-                                        modifier = Modifier.size(36.dp)
-                                    )
-                                }
-                            }
-                            Spacer(Modifier.width(12.dp))
-                            // Next
-                            IconButton(
-                                onClick = { viewModel.nextTrack() },
-                                modifier = Modifier.size(40.dp)
-                            ) {
-                                Icon(Icons.Filled.SkipNext, contentDescription = "Next", tint = colors.textSecondary, modifier = Modifier.size(24.dp))
-                            }
-                            Spacer(Modifier.width(4.dp))
-                            // Forward 10s
-                            IconButton(
-                                onClick = { viewModel.audioEngine.seekTo((position + 10000).coerceAtMost(duration)) },
-                                modifier = Modifier.size(40.dp)
-                            ) {
-                                Icon(Icons.Filled.Forward10, contentDescription = "+10s", tint = colors.textSecondary, modifier = Modifier.size(24.dp))
-                            }
-                            Spacer(Modifier.width(8.dp))
-                            // Loop
-                            IconButton(
-                                onClick = { viewModel.audioEngine.toggleLoop() },
-                                modifier = Modifier.size(40.dp)
-                            ) {
-                                Icon(
-                                    if (isLooping) Icons.Filled.RepeatOne else Icons.Outlined.Repeat,
-                                    contentDescription = "Loop",
-                                    tint = if (isLooping) colors.textPrimary else colors.textTertiary,
-                                    modifier = Modifier.size(22.dp)
-                                )
-                            }
-                        }
-                    }
-                }
+                PlaybackControls(viewModel)
+            }
             }
 
             // ========================
@@ -1043,5 +901,103 @@ fun PlayerScreen(
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 140.dp, start = 16.dp, end = 16.dp)
         )
+    }
+}
+
+@Composable
+private fun WaveformVisualizer(viewModel: MainViewModel) {
+        val colors = LocalAppColors.current
+    WaveformVisualizer(viewModel),
+                    onValueChangeFinished = {
+                        viewModel.audioEngine.seekTo(dragPosition.toLong())
+                        isDragging = false
+                    },
+                    valueRange = 0f..if (duration > 0) duration.toFloat() else 1f,
+                    modifier = Modifier.weight(1f).height(24.dp),
+                    colors = SliderDefaults.colors(
+                        thumbColor = colors.textPrimary,
+                        activeTrackColor = colors.textPrimary,
+                        inactiveTrackColor = colors.outline
+                    )
+                )
+                Text(
+                    formatDuration(duration),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.textTertiary,
+                    modifier = Modifier.width(40.dp)
+                )
+            }
+
+            // --- Playback Controls ---
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Rewind 10s
+                IconButton(
+                    onClick = { viewModel.audioEngine.seekTo((position - 10000).coerceAtLeast(0)) },
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    Icon(Icons.Filled.Replay10, contentDescription = "-10s", tint = colors.textSecondary, modifier = Modifier.size(24.dp))
+                }
+                Spacer(Modifier.width(4.dp))
+                // Previous
+                IconButton(
+                    onClick = { viewModel.previousTrack() },
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    Icon(Icons.Filled.SkipPrevious, contentDescription = "Previous", tint = colors.textSecondary, modifier = Modifier.size(24.dp))
+                }
+                Spacer(Modifier.width(12.dp))
+                // Play/Pause - Big button
+                Surface(
+                    modifier = Modifier.size(64.dp),
+                    shape = CircleShape,
+                    color = colors.textPrimary
+                ) {
+                    IconButton(
+                        onClick = { viewModel.audioEngine.togglePlayPause() },
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        Icon(
+                            if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                            contentDescription = if (isPlaying) "Pause" else "Play",
+                            tint = colors.surface,
+                            modifier = Modifier.size(36.dp)
+                        )
+                    }
+                }
+                Spacer(Modifier.width(12.dp))
+                // Next
+                IconButton(
+                    onClick = { viewModel.nextTrack() },
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    Icon(Icons.Filled.SkipNext, contentDescription = "Next", tint = colors.textSecondary, modifier = Modifier.size(24.dp))
+                }
+                Spacer(Modifier.width(4.dp))
+                // Forward 10s
+                IconButton(
+                    onClick = { viewModel.audioEngine.seekTo((position + 10000).coerceAtMost(duration)) },
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    Icon(Icons.Filled.Forward10, contentDescription = "+10s", tint = colors.textSecondary, modifier = Modifier.size(24.dp))
+                }
+                Spacer(Modifier.width(8.dp))
+                // Loop
+                IconButton(
+                    onClick = { viewModel.audioEngine.toggleLoop() },
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    Icon(
+                        if (isLooping) Icons.Filled.RepeatOne else Icons.Outlined.Repeat,
+                        contentDescription = "Loop",
+                        tint = if (isLooping) colors.textPrimary else colors.textTertiary,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+            }
+        }
     }
 }

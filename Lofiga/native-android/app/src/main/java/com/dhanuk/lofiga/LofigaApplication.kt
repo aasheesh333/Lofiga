@@ -7,6 +7,10 @@ import com.dhanuk.lofiga.ads.AdManager
 import com.dhanuk.lofiga.media.MediaNotificationManager
 import com.dhanuk.lofiga.media.MediaSessionManager
 import com.onesignal.OneSignal
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 class LofigaApplication : Application() {
 
@@ -17,19 +21,17 @@ class LofigaApplication : Application() {
 
     private var foregroundActivityCount = 0
 
+    private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     override fun onCreate() {
         super.onCreate()
 
-        OneSignal.initWithContext(this, BuildConfig.ONESIGNAL_APP_ID)
-
+        // Main thread: media managers and notification channel (required early / by Android)
         mediaSessionManager = MediaSessionManager(this)
         mediaNotificationManager = MediaNotificationManager(this)
         mediaNotificationManager.createChannel()
 
-        AdManager.initialize(this)
-        AdManager.loadInterstitial(this)
-        AdManager.loadRewarded(this)
-
+        // Main thread: lifecycle callbacks
         registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
             override fun onActivityStarted(activity: Activity) {
                 if (foregroundActivityCount == 0) {
@@ -46,5 +48,14 @@ class LofigaApplication : Application() {
             override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {}
             override fun onActivityDestroyed(activity: Activity) {}
         })
+
+        // Background thread: heavy SDK initialisation to avoid ANR on cold start
+        applicationScope.launch {
+            OneSignal.initWithContext(this@LofigaApplication, BuildConfig.ONESIGNAL_APP_ID)
+
+            AdManager.initialize(this@LofigaApplication)
+            AdManager.loadInterstitial(this@LofigaApplication)
+            AdManager.loadRewarded(this@LofigaApplication)
+        }
     }
 }

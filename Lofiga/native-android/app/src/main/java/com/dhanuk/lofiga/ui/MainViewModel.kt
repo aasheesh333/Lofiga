@@ -16,8 +16,10 @@ import com.dhanuk.lofiga.media.MediaPlaybackService
 import com.dhanuk.lofiga.model.*
 import com.dhanuk.lofiga.util.AudioQueryHelper
 import com.dhanuk.lofiga.util.SettingsManager
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.UUID
 
 class MainViewModel(application: Application) : AndroidViewModel(application) { // Updated for playback and UI fixes
@@ -113,11 +115,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) { 
                 val intent = Intent(app, MediaPlaybackService::class.java).apply {
                     action = MediaPlaybackService.ACTION_STOP
                 }
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    app.startForegroundService(intent)
-                } else {
-                    app.startService(intent)
-                }
+                app.startService(intent)
             } else {
                 sessionManager.updatePlaybackState(false, audioEngine.position.value, audioEngine.duration.value)
                 val intent = Intent(app, MediaPlaybackService::class.java).apply {
@@ -154,7 +152,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) { 
             return
         }
         viewModelScope.launch {
-            val songs = AudioQueryHelper.queryAllSongs(getApplication())
+            val songs = withContext(Dispatchers.IO) {
+                AudioQueryHelper.queryAllSongs(getApplication())
+            }
             _allSongs.value = songs
         }
     }
@@ -181,12 +181,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) { 
     fun loadTrackFromFile(filePath: String, fileName: String): Boolean {
         audioEngine.currentTrackTitle = fileName
         audioEngine.currentTrackArtist = ""
-        _currentTrack.value = AudioTrack(
-            title = fileName,
-            dataPath = filePath
-        )
         val success = audioEngine.loadTrackFromFile(filePath, autoPlay = true)
         if (success) {
+            _currentTrack.value = AudioTrack(
+                title = fileName,
+                dataPath = filePath
+            )
             applyPreset(LofiPreset.LofiSlow)
             return true
         } else {
@@ -302,7 +302,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) { 
 
     fun loadRecentEdits() {
         viewModelScope.launch {
-            _recentEdits.value = repository.getAllConfigs()
+            _recentEdits.value = withContext(Dispatchers.IO) {
+                repository.getAllConfigs()
+            }
         }
     }
 
@@ -369,7 +371,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) { 
 
     fun loadCustomPresets() {
         viewModelScope.launch {
-            _customPresets.value = repository.getAllCustomPresets()
+            _customPresets.value = withContext(Dispatchers.IO) {
+                repository.getAllCustomPresets()
+            }
         }
     }
 

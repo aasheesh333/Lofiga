@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.*
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.unit.dp
@@ -292,7 +293,7 @@ fun GradientThumbnail(
 @Composable
 fun EffectCard(
     modifier: Modifier = Modifier,
-    icon: @Composable () -> Unit,
+    icon: ImageVector,
     label: String,
     value: String,
     sliderValue: Float,
@@ -317,7 +318,7 @@ fun EffectCard(
                     color = Purple500.copy(alpha = if (isActive) 0.8f else 0.3f)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
-                        icon()
+                        Icon(icon, contentDescription = null, tint = colors.surface, modifier = Modifier.size(18.dp))
                     }
                 }
                 Spacer(Modifier.width(8.dp))

@@ -12,6 +12,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -36,27 +38,29 @@ fun LibraryScreen(
     var isLoading by remember { mutableStateOf(true) }
 
     LaunchedEffect(Unit) {
-        val files = mutableListOf<File>()
-        val musDir = appContext.getExternalFilesDir(Environment.DIRECTORY_MUSIC)
-        val dirs = mutableListOf<File>()
-        if (musDir != null) {
-            dirs.add(File(musDir, "Lofiga"))
-        }
-        try {
-            dirs.add(File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC), "Lofiga"))
-            dirs.add(File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "Lofiga"))
-        } catch (_: Exception) {
-        }
-        dirs.forEach { dir ->
-            if (dir.exists()) {
-                files.addAll(
-                    dir.listFiles { f -> f.extension in listOf("wav", "m4a", "aac") }
-                        ?.sortedByDescending { it.lastModified() }
-                        ?: emptyList()
-                )
+        val files = withContext(Dispatchers.IO) {
+            val fileList = mutableListOf<File>()
+            val musDir = appContext.getExternalFilesDir(Environment.DIRECTORY_MUSIC)
+            val dirs = mutableListOf<File>()
+            if (musDir != null) {
+                dirs.add(File(musDir, "Lofiga"))
             }
+            try {
+                dirs.add(File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC), "Lofiga"))
+                dirs.add(File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "Lofiga"))
+            } catch (_: Exception) {}
+            dirs.forEach { dir ->
+                if (dir.exists()) {
+                    fileList.addAll(
+                        dir.listFiles { f -> f.extension in listOf("wav", "m4a", "aac") }
+                            ?.sortedByDescending { it.lastModified() }
+                            ?: emptyList()
+                    )
+                }
+            }
+            fileList.distinctBy { it.absolutePath }
         }
-        exportedFiles = files.distinctBy { it.absolutePath }
+        exportedFiles = files
         isLoading = false
     }
 

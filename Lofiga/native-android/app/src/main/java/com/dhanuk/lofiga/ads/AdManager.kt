@@ -42,6 +42,7 @@ object AdManager {
     private var lastInterstitialTime = 0L
     private var consecutiveInterstitialFailures = 0
     private var consecutiveRewardedFailures = 0
+    private var consentFormAttempts = 0
 
     private val _isConsentObtained = MutableStateFlow(false)
     val isConsentObtained: StateFlow<Boolean> = _isConsentObtained.asStateFlow()
@@ -67,6 +68,7 @@ object AdManager {
     }
 
     fun requestConsent(activity: Activity) {
+        consentFormAttempts = 0
         val params = ConsentRequestParameters.Builder().build()
         val consentInformation = UserMessagingPlatform.getConsentInformation(activity)
 
@@ -88,6 +90,12 @@ object AdManager {
     }
 
     private fun loadAndShowConsentForm(activity: Activity) {
+        consentFormAttempts++
+        if (consentFormAttempts >= 2) {
+            Log.w(TAG, "Consent form max attempts reached, treating as obtained")
+            _isConsentObtained.value = true
+            return
+        }
         UserMessagingPlatform.loadConsentForm(activity,
             { consentForm ->
                 val consentInformation = UserMessagingPlatform.getConsentInformation(activity)
@@ -137,7 +145,12 @@ object AdManager {
                     consecutiveInterstitialFailures++
                     Log.e(TAG, "Interstitial failed to load: code=${error.code} - ${error.message}")
                     if (consecutiveInterstitialFailures < MAX_FAILED_LOADS) {
-                        loadInterstitial(context)
+                        val retryDelay = 2000L * consecutiveInterstitialFailures
+                        Log.d(TAG, "Retrying interstitial load in ${retryDelay}ms")
+                        refreshScope.launch {
+                            delay(retryDelay)
+                            loadInterstitial(context)
+                        }
                     }
                 }
             }
@@ -159,7 +172,6 @@ object AdManager {
 
         if (interstitialAd != null) {
             lastInterstitialTime = now
-            interstitialAd?.show(activity)
             interstitialAd?.fullScreenContentCallback = object : FullScreenContentCallback() {
                 override fun onAdDismissedFullScreenContent() {
                     interstitialAd = null
@@ -170,6 +182,7 @@ object AdManager {
                     onDismissed?.invoke()
                 }
             }
+            interstitialAd?.show(activity)
         } else {
             Log.d(TAG, "Interstitial skipped - no ad ready (fill=0 or load failed)")
             onDismissed?.invoke()
@@ -205,7 +218,12 @@ object AdManager {
                     consecutiveRewardedFailures++
                     Log.e(TAG, "Rewarded failed to load: code=${error.code} - ${error.message}")
                     if (consecutiveRewardedFailures < MAX_FAILED_LOADS) {
-                        loadRewarded(context)
+                        val retryDelay = 2000L * consecutiveRewardedFailures
+                        Log.d(TAG, "Retrying rewarded load in ${retryDelay}ms")
+                        refreshScope.launch {
+                            delay(retryDelay)
+                            loadRewarded(context)
+                        }
                     }
                 }
             }
@@ -218,9 +236,6 @@ object AdManager {
         onDismissed: () -> Unit
     ) {
         if (rewardedAd != null) {
-            rewardedAd?.show(activity) {
-                onRewarded()
-            }
             rewardedAd?.fullScreenContentCallback = object : FullScreenContentCallback() {
                 override fun onAdDismissedFullScreenContent() {
                     rewardedAd = null
@@ -230,6 +245,9 @@ object AdManager {
                     rewardedAd = null
                     onDismissed()
                 }
+            }
+            rewardedAd?.show(activity) {
+                onRewarded()
             }
         } else {
             onDismissed()

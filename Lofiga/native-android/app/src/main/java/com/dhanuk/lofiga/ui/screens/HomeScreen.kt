@@ -183,7 +183,7 @@ fun HomeScreen(
                         item {
                             SectionHeader("RECENT EDITS")
                         }
-                        items(recentEdits.take(3)) { edit ->
+                        items(recentEdits.take(3), key = { it.id }) { edit ->
                             RecentEditItem(
                                 edit = edit,
                                 onClick = { onEditConfig(edit) },
@@ -295,7 +295,7 @@ fun HomeScreen(
                             }
                         }
                     } else {
-                        items(sortedSongs) { song ->
+                        items(sortedSongs, key = { it.dataPath ?: it.uri?.toString() ?: it.title }) { song ->
                             SongItem(
                                 title = song.title,
                                 artist = song.artist,
