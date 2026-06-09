@@ -216,25 +216,33 @@ class AudioEngine(private val context: Context) {
                 setOnPreparedListener { mediaPlayer ->
                     val dur = mediaPlayer.duration.toLong()
                     _duration.value = dur
-                    if (autoPlayOnPrepared) {
-                        try {
-                            mediaPlayer.start()
-                            _isPlaying.value = true
-                            _position.value = mediaPlayer.currentPosition.toLong()
-                            startPositionPolling()
-                            syncAtmospheres()
-                            applyStoredPlaybackParams()
-                            onPlaybackStateChanged?.invoke(true)
-                            Log.i("AudioEngine", "Auto-play started, position: ${_position.value}")
-                        } catch (e: Exception) {
-                            Log.e("AudioEngine", "Auto-play failed: ${e.message}")
-                        }
-                    }
-                    scope.launch(Dispatchers.Default) {
+                    
+                    // Initialize effects on a background thread BEFORE starting the player
+                    // Calling attachAuxEffect while the player is STARTED causes native crashes on many devices!
+                    scope.launch(Dispatchers.IO) {
                         try {
                             initEffects(mediaPlayer.audioSessionId)
                         } catch (e: Exception) {
                             Log.e("AudioEngine", "Effects init failed: ${e.message}")
+                        }
+                        
+                        // Now it is safe to start the player
+                        val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+                        mainHandler.post {
+                            if (autoPlayOnPrepared) {
+                                try {
+                                    mediaPlayer.start()
+                                    _isPlaying.value = true
+                                    _position.value = mediaPlayer.currentPosition.toLong()
+                                    startPositionPolling()
+                                    syncAtmospheres()
+                                    applyStoredPlaybackParams()
+                                    onPlaybackStateChanged?.invoke(true)
+                                    Log.i("AudioEngine", "Auto-play started safely, position: ${_position.value}")
+                                } catch (e: Exception) {
+                                    Log.e("AudioEngine", "Auto-play failed: ${e.message}")
+                                }
+                            }
                         }
                     }
                     fftJob = scope.launch(Dispatchers.IO) {
