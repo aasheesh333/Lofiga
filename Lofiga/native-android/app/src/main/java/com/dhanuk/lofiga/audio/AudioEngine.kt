@@ -213,65 +213,47 @@ class AudioEngine(private val context: Context) {
                         .build()
                 )
                 setupSource(this)
+                setOnPreparedListener { mediaPlayer ->
+                    val dur = mediaPlayer.duration.toLong()
+                    _duration.value = dur
+                    if (autoPlayOnPrepared) {
+                        try {
+                            mediaPlayer.start()
+                            _isPlaying.value = true
+                            _position.value = mediaPlayer.currentPosition.toLong()
+                            startPositionPolling()
+                            syncAtmospheres()
+                            applyStoredPlaybackParams()
+                            onPlaybackStateChanged?.invoke(true)
+                            Log.i("AudioEngine", "Auto-play started, position: ${_position.value}")
+                        } catch (e: Exception) {
+                            Log.e("AudioEngine", "Auto-play failed: ${e.message}")
+                        }
+                    }
+                    scope.launch(Dispatchers.Default) {
+                        try {
+                            initEffects(mediaPlayer.audioSessionId)
+                        } catch (e: Exception) {
+                            Log.e("AudioEngine", "Effects init failed: ${e.message}")
+                        }
+                    }
+                    fftJob = scope.launch(Dispatchers.IO) {
+                        fftCancelled = false
+                        initFft()
+                    }
+                    startAnimatingWaveform()
+                    Log.i("AudioEngine", "Track loaded, duration: ${dur}ms")
+                }
+                setOnCompletionListener {
+                    _isPlaying.value = false
+                    positionJob?.cancel()
+                    pauseAtmospheres()
+                    onPlaybackStateChanged?.invoke(false)
+                    Log.i("AudioEngine", "Track playback completed")
+                }
+                prepareAsync()
             }
             mainPlayer = player
-            
-            // CRITICAL FIX: Initialize effects on background thread BEFORE prepareAsync()!
-            // Calling attachAuxEffect after prepare/start causes fatal MediaPlayer crashes on many OEM ROMs.
-            scope.launch(Dispatchers.IO) {
-                try {
-                    initEffects(player.audioSessionId)
-                    // Attach aux effect safely in INITIALIZED state
-                    reverb?.let { r ->
-                        player.attachAuxEffect(r.id)
-                        player.setAuxEffectSendLevel(pendingReverb.coerceIn(0f, 1f))
-                    }
-                } catch (e: Exception) {
-                    Log.e("AudioEngine", "Effects init failed: ${e.message}")
-                }
-                
-                // Once effects are attached safely, move to Main Thread to prepare and start
-                val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
-                mainHandler.post {
-                    player.setOnPreparedListener { mediaPlayer ->
-                        val dur = mediaPlayer.duration.toLong()
-                        _duration.value = dur
-                        if (autoPlayOnPrepared) {
-                            try {
-                                mediaPlayer.start()
-                                _isPlaying.value = true
-                                _position.value = mediaPlayer.currentPosition.toLong()
-                                startPositionPolling()
-                                syncAtmospheres()
-                                applyStoredPlaybackParams()
-                                onPlaybackStateChanged?.invoke(true)
-                                Log.i("AudioEngine", "Auto-play started, position: ${_position.value}")
-                            } catch (e: Exception) {
-                                Log.e("AudioEngine", "Auto-play failed: ${e.message}")
-                            }
-                        }
-                        
-                        fftJob = scope.launch(Dispatchers.IO) {
-                            fftCancelled = false
-                            initFft()
-                        }
-                        startAnimatingWaveform()
-                        Log.i("AudioEngine", "Track loaded, duration: ${dur}ms")
-                    }
-                    player.setOnCompletionListener {
-                        _isPlaying.value = false
-                        positionJob?.cancel()
-                        pauseAtmospheres()
-                        onPlaybackStateChanged?.invoke(false)
-                        Log.i("AudioEngine", "Track playback completed")
-                    }
-                    try {
-                        player.prepareAsync()
-                    } catch (e: Exception) {
-                        Log.e("AudioEngine", "prepareAsync failed", e)
-                    }
-                }
-            }
             storedTempo = pendingTempo
             storedPitch = pendingPitch
             return true
