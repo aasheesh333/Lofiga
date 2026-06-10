@@ -589,7 +589,7 @@ class AudioEngine(private val context: Context) {
                     base.coerceIn(0f, 1f)
                 }
                 synchronized(framesLock) {
-                    if (precomputedFrames.isEmpty()) {
+                    if (animatingWaveform) {
                         _fftData.value = animated
                         _waveformData.value = WaveformSnapshot(animated, ++waveformSeq)
                     }
@@ -871,7 +871,7 @@ class AudioEngine(private val context: Context) {
                         val dur = _duration.value
                         synchronized(framesLock) {
                             val frameCount = precomputedFrames.size
-                            if (frameCount > 0 && dur > 0 && pos >= 0) {
+                            if (!animatingWaveform && frameCount > 0 && dur > 0 && pos >= 0) {
                                 val maxFrame = ((pos.toFloat() / dur.toFloat()) * frameCount).toInt()
                                     .coerceIn(0, frameCount - 1)
                                 val frame = precomputedFrames[maxFrame]
