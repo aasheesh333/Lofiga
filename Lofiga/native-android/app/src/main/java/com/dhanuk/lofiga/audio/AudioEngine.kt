@@ -466,50 +466,36 @@ class AudioEngine(private val context: Context) {
                         override fun onWaveFormDataCapture(visualizer: Visualizer?, waveform: ByteArray?, samplingRate: Int) {}
                         override fun onFftDataCapture(visualizer: Visualizer?, fft: ByteArray?, samplingRate: Int) {
                             if (fft == null) return
-                            // Only update if not using precomputed frames
-                            if (animatingWaveform) {
-                                val n = fft.size
-                                val bands = 16
-                                val result = MutableList(bands) { 0f }
-                                val maxMagnitude = 128f // Approximate max magnitude for normalization
-                                
-                                // Simplified FFT magnitude extraction (using just a few bins per band)
-                                // The FFT array contains real and imaginary parts:
-                                // fft[0] is DC, fft[1] is Nyquist
-                                // fft[2k] is real, fft[2k+1] is imaginary for k > 0
-                                
-                                val usableBins = (n / 2) - 1
-                                val binsPerBand = usableBins / bands
-                                
-                                if (binsPerBand > 0) {
-                                    for (i in 0 until bands) {
-                                        var maxBandMag = 0f
-                                        val startBin = i * binsPerBand + 1
-                                        val endBin = startBin + binsPerBand
-                                        
-                                        for (k in startBin until endBin) {
-                                            if (k * 2 + 1 < n) {
-                                                val real = fft[k * 2].toFloat()
-                                                val imag = fft[k * 2 + 1].toFloat()
-                                                val mag = kotlin.math.sqrt((real * real + imag * imag).toDouble()).toFloat()
-                                                if (mag > maxBandMag) maxBandMag = mag
-                                            }
+                            val n = fft.size
+                            val bands = 16
+                            val result = MutableList(bands) { 0f }
+                            val maxMagnitude = 128f
+                            
+                            val usableBins = (n / 2) - 1
+                            val binsPerBand = usableBins / bands
+                            
+                            if (binsPerBand > 0) {
+                                for (i in 0 until bands) {
+                                    var maxBandMag = 0f
+                                    val startBin = i * binsPerBand + 1
+                                    val endBin = startBin + binsPerBand
+                                    
+                                    for (k in startBin until endBin) {
+                                        if (k * 2 + 1 < n) {
+                                            val real = fft[k * 2].toFloat()
+                                            val imag = fft[k * 2 + 1].toFloat()
+                                            val mag = kotlin.math.sqrt((real * real + imag * imag).toDouble()).toFloat()
+                                            if (mag > maxBandMag) maxBandMag = mag
                                         }
-                                        
-                                        // Normalize and coerce
-                                        val normalizedMag = (maxBandMag / maxMagnitude).coerceIn(0f, 1f)
-                                        // Add a small curve to make lower volumes visible
-                                        result[i] = kotlin.math.sqrt(normalizedMag.toDouble()).toFloat()
                                     }
-                                }
-                                
-                                synchronized(framesLock) {
-                                    if (animatingWaveform) { // Check again inside lock
-                                        _fftData.value = result
-                                        _waveformData.value = WaveformSnapshot(result, ++waveformSeq)
-                                    }
+                                    
+                                    val normalizedMag = (maxBandMag / maxMagnitude).coerceIn(0f, 1f)
+                                    result[i] = kotlin.math.sqrt(normalizedMag.toDouble()).toFloat()
                                 }
                             }
+                            
+                            _fftData.value = result
+                            _waveformData.value = WaveformSnapshot(result, ++waveformSeq)
                         }
                     }, Visualizer.getMaxCaptureRate() / 2, false, true)
                     enabled = true
@@ -640,23 +626,25 @@ class AudioEngine(private val context: Context) {
 
     private fun startAnimatingWaveform() {
         animatingWaveform = true
-        // Show a gentle pulsing animation while FFT is computing
         scope.launch {
             var phase = 0f
             while (animatingWaveform && isActive) {
-                // Only generate pulsing pattern if visualizer is not active
-                if (visualizer == null || visualizer?.enabled != true) {
-                    // Produce a subtle animated pattern
-                    phase += 0.15f
-                    val animated = List(16) { i ->
-                        val base = 0.05f + 0.15f * (kotlin.math.sin(phase + i * 0.5f) * 0.5f + 0.5f)
-                        base.coerceIn(0f, 1f)
-                    }
-                    synchronized(framesLock) {
-                        if (animatingWaveform) {
-                            _fftData.value = animated
-                            _waveformData.value = WaveformSnapshot(animated, ++waveformSeq)
-                        }
+                // If visualizer becomes active, stop animation loop - visualizer callback handles data now
+                val visualizerActive = visualizer != null && visualizer?.enabled == true
+                if (visualizerActive) {
+                    animatingWaveform = false
+                    break
+                }
+                // Produce a subtle animated pattern while waiting for visualizer
+                phase += 0.15f
+                val animated = List(16) { i ->
+                    val base = 0.05f + 0.15f * (kotlin.math.sin(phase + i * 0.5f) * 0.5f + 0.5f)
+                    base.coerceIn(0f, 1f)
+                }
+                synchronized(framesLock) {
+                    if (animatingWaveform) {
+                        _fftData.value = animated
+                        _waveformData.value = WaveformSnapshot(animated, ++waveformSeq)
                     }
                 }
                 delay(80)
@@ -936,7 +924,8 @@ class AudioEngine(private val context: Context) {
                         val dur = _duration.value
                         synchronized(framesLock) {
                             val frameCount = precomputedFrames.size
-                            if (!animatingWaveform && frameCount > 0 && dur > 0 && pos >= 0) {
+                            val visualizerActive = visualizer != null && visualizer?.enabled == true
+                            if (!animatingWaveform && !visualizerActive && frameCount > 0 && dur > 0 && pos >= 0) {
                                 val maxFrame = ((pos.toFloat() / dur.toFloat()) * frameCount).toInt()
                                     .coerceIn(0, frameCount - 1)
                                 val frame = precomputedFrames[maxFrame]
