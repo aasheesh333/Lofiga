@@ -15,6 +15,7 @@ import android.util.Log
 import android.media.audiofx.BassBoost
 import android.media.audiofx.Equalizer
 import android.media.audiofx.PresetReverb
+import android.media.audiofx.Visualizer
 import com.dhanuk.lofiga.model.PresetValues
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -60,6 +61,7 @@ class AudioEngine(private val context: Context) {
     private var reverb: PresetReverb? = null
     private var bassBoost: BassBoost? = null
     private var equalizer: Equalizer? = null
+    private var visualizer: Visualizer? = null
     private var precomputedFrames = mutableListOf<List<Float>>()
     private val framesLock = Any()
 
@@ -456,6 +458,66 @@ class AudioEngine(private val context: Context) {
                     setBandLevel(i.toShort(), 0.toShort())
                 }
             }
+            
+            try {
+                visualizer = Visualizer(audioSessionId).apply {
+                    captureSize = Visualizer.getCaptureSizeRange()[1] // Max capture size
+                    setDataCaptureListener(object : Visualizer.OnDataCaptureListener {
+                        override fun onWaveFormDataCapture(visualizer: Visualizer?, waveform: ByteArray?, samplingRate: Int) {}
+                        override fun onFftDataCapture(visualizer: Visualizer?, fft: ByteArray?, samplingRate: Int) {
+                            if (fft == null) return
+                            // Only update if not using precomputed frames
+                            if (animatingWaveform) {
+                                val n = fft.size
+                                val bands = 16
+                                val result = MutableList(bands) { 0f }
+                                val maxMagnitude = 128f // Approximate max magnitude for normalization
+                                
+                                // Simplified FFT magnitude extraction (using just a few bins per band)
+                                // The FFT array contains real and imaginary parts:
+                                // fft[0] is DC, fft[1] is Nyquist
+                                // fft[2k] is real, fft[2k+1] is imaginary for k > 0
+                                
+                                val usableBins = (n / 2) - 1
+                                val binsPerBand = usableBins / bands
+                                
+                                if (binsPerBand > 0) {
+                                    for (i in 0 until bands) {
+                                        var maxBandMag = 0f
+                                        val startBin = i * binsPerBand + 1
+                                        val endBin = startBin + binsPerBand
+                                        
+                                        for (k in startBin until endBin) {
+                                            if (k * 2 + 1 < n) {
+                                                val real = fft[k * 2].toFloat()
+                                                val imag = fft[k * 2 + 1].toFloat()
+                                                val mag = kotlin.math.sqrt((real * real + imag * imag).toDouble()).toFloat()
+                                                if (mag > maxBandMag) maxBandMag = mag
+                                            }
+                                        }
+                                        
+                                        // Normalize and coerce
+                                        val normalizedMag = (maxBandMag / maxMagnitude).coerceIn(0f, 1f)
+                                        // Add a small curve to make lower volumes visible
+                                        result[i] = kotlin.math.sqrt(normalizedMag.toDouble()).toFloat()
+                                    }
+                                }
+                                
+                                synchronized(framesLock) {
+                                    if (animatingWaveform) { // Check again inside lock
+                                        _fftData.value = result
+                                        _waveformData.value = WaveformSnapshot(result, ++waveformSeq)
+                                    }
+                                }
+                            }
+                        }
+                    }, Visualizer.getMaxCaptureRate() / 2, false, true)
+                    enabled = true
+                }
+                android.util.Log.i("AudioEngine", "Visualizer initialized on session $audioSessionId")
+            } catch (e: Exception) {
+                android.util.Log.e("AudioEngine", "Failed to init visualizer: ${e.message}")
+            }
 
             android.util.Log.i("AudioEngine", "Effects initialized on session $audioSessionId")
             
@@ -582,16 +644,19 @@ class AudioEngine(private val context: Context) {
         scope.launch {
             var phase = 0f
             while (animatingWaveform && isActive) {
-                // Produce a subtle animated pattern
-                phase += 0.15f
-                val animated = List(16) { i ->
-                    val base = 0.05f + 0.15f * (kotlin.math.sin(phase + i * 0.5f) * 0.5f + 0.5f)
-                    base.coerceIn(0f, 1f)
-                }
-                synchronized(framesLock) {
-                    if (animatingWaveform) {
-                        _fftData.value = animated
-                        _waveformData.value = WaveformSnapshot(animated, ++waveformSeq)
+                // Only generate pulsing pattern if visualizer is not active
+                if (visualizer == null || visualizer?.enabled != true) {
+                    // Produce a subtle animated pattern
+                    phase += 0.15f
+                    val animated = List(16) { i ->
+                        val base = 0.05f + 0.15f * (kotlin.math.sin(phase + i * 0.5f) * 0.5f + 0.5f)
+                        base.coerceIn(0f, 1f)
+                    }
+                    synchronized(framesLock) {
+                        if (animatingWaveform) {
+                            _fftData.value = animated
+                            _waveformData.value = WaveformSnapshot(animated, ++waveformSeq)
+                        }
                     }
                 }
                 delay(80)
@@ -926,6 +991,8 @@ class AudioEngine(private val context: Context) {
     }
 
     private fun releaseEffects() {
+        visualizer?.release()
+        visualizer = null
         reverb?.release()
         bassBoost?.release()
         equalizer?.release()
