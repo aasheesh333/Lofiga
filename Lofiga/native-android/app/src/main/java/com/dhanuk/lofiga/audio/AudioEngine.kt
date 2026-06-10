@@ -15,7 +15,6 @@ import android.util.Log
 import android.media.audiofx.BassBoost
 import android.media.audiofx.Equalizer
 import android.media.audiofx.PresetReverb
-import android.media.audiofx.Visualizer
 import com.dhanuk.lofiga.model.PresetValues
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -61,8 +60,8 @@ class AudioEngine(private val context: Context) {
     private var reverb: PresetReverb? = null
     private var bassBoost: BassBoost? = null
     private var equalizer: Equalizer? = null
-    private var visualizer: Visualizer? = null
-    private var precomputedFrames = mutableListOf<List<Float>>()
+        data class FrameData(val timeMs: Long, val magnitudes: List<Float>)
+    private var precomputedFrames = mutableListOf<FrameData>()
     private val framesLock = Any()
 
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
@@ -458,55 +457,6 @@ class AudioEngine(private val context: Context) {
                     setBandLevel(i.toShort(), 0.toShort())
                 }
             }
-            
-            try {
-                visualizer = Visualizer(audioSessionId).apply {
-                    captureSize = Visualizer.getCaptureSizeRange()[1] // Max capture size
-                    setDataCaptureListener(object : Visualizer.OnDataCaptureListener {
-                        override fun onWaveFormDataCapture(visualizer: Visualizer?, waveform: ByteArray?, samplingRate: Int) {}
-                        override fun onFftDataCapture(visualizer: Visualizer?, fft: ByteArray?, samplingRate: Int) {
-                            if (fft == null) return
-                            android.util.Log.d("AudioEngine", "Visualizer FFT callback: size=${fft.size}, samplingRate=$samplingRate")
-                            val n = fft.size
-                            val bands = 16
-                            val result = MutableList(bands) { 0f }
-                            val maxMagnitude = 128f
-                            
-                            val usableBins = (n / 2) - 1
-                            val binsPerBand = usableBins / bands
-                            
-                            if (binsPerBand > 0) {
-                                for (i in 0 until bands) {
-                                    var maxBandMag = 0f
-                                    val startBin = i * binsPerBand + 1
-                                    val endBin = startBin + binsPerBand
-                                    
-                                    for (k in startBin until endBin) {
-                                        if (k * 2 + 1 < n) {
-                                            val real = fft[k * 2].toFloat()
-                                            val imag = fft[k * 2 + 1].toFloat()
-                                            val mag = kotlin.math.sqrt((real * real + imag * imag).toDouble()).toFloat()
-                                            if (mag > maxBandMag) maxBandMag = mag
-                                        }
-                                    }
-                                    
-                                    val normalizedMag = (maxBandMag / maxMagnitude).coerceIn(0f, 1f)
-                                    result[i] = kotlin.math.sqrt(normalizedMag.toDouble()).toFloat()
-                                }
-                            }
-                            
-                            _fftData.value = result
-                            _waveformData.value = WaveformSnapshot(result, ++waveformSeq)
-                            android.util.Log.d("AudioEngine", "Visualizer FFT result: $result")
-                        }
-                    }, Visualizer.getMaxCaptureRate() / 2, false, true)
-                    enabled = true
-                    android.util.Log.i("AudioEngine", "Visualizer enabled: ${this.enabled}, captureSize=${this.captureSize}")
-                }
-                android.util.Log.i("AudioEngine", "Visualizer initialized on session $audioSessionId")
-            } catch (e: Exception) {
-                android.util.Log.e("AudioEngine", "Failed to init visualizer: ${e.message}", e)
-            }
 
             android.util.Log.i("AudioEngine", "Effects initialized on session $audioSessionId")
             
@@ -629,19 +579,10 @@ class AudioEngine(private val context: Context) {
 
     private fun startAnimatingWaveform() {
         animatingWaveform = true
-        android.util.Log.i("AudioEngine", "startAnimatingWaveform: animatingWaveform=true")
         scope.launch {
             var phase = 0f
             while (animatingWaveform && isActive) {
-                // If visualizer becomes active, stop animation loop - visualizer callback handles data now
-                val visualizerActive = visualizer != null && visualizer?.enabled == true
-                if (visualizerActive) {
-                    android.util.Log.i("AudioEngine", "Animation loop: visualizerActive=true, stopping animation")
-                    animatingWaveform = false
-                    break
-                }
-                android.util.Log.d("AudioEngine", "Animation loop: visualizerActive=false, generating animated pattern")
-                // Produce a subtle animated pattern while waiting for visualizer
+                // Produce a subtle animated pattern while waiting for FFT
                 phase += 0.15f
                 val animated = List(16) { i ->
                     val base = 0.05f + 0.15f * (kotlin.math.sin(phase + i * 0.5f) * 0.5f + 0.5f)
@@ -655,7 +596,6 @@ class AudioEngine(private val context: Context) {
                 }
                 delay(80)
             }
-            android.util.Log.i("AudioEngine", "Animation loop exited, animatingWaveform=$animatingWaveform")
         }
     }
 
@@ -720,7 +660,7 @@ class AudioEngine(private val context: Context) {
         }
     }
 
-    private fun decodeAndComputeFFTFast(extractor: MediaExtractor, onBatch: (List<List<Float>>) -> Unit) {
+    private fun decodeAndComputeFFTFast(extractor: MediaExtractor, onBatch: (List<FrameData>) -> Unit) {
         for (i in 0 until extractor.trackCount) {
             val format = extractor.getTrackFormat(i)
             val mime = format.getString(MediaFormat.KEY_MIME) ?: continue
@@ -734,7 +674,8 @@ class AudioEngine(private val context: Context) {
 
             try {
                 val bufferInfo = MediaCodec.BufferInfo()
-            val batch = mutableListOf<List<Float>>()
+            val batch = mutableListOf<FrameData>()
+            val sampleRate = format.getInteger(MediaFormat.KEY_SAMPLE_RATE)
             var sawInputEOS = false
             var sawOutputEOS = false
             var frameCount = 0
@@ -773,10 +714,12 @@ class AudioEngine(private val context: Context) {
                         // Use larger window and hop for speed
                         val windowSize = 512
                         val hopSize = windowSize * 2  // Bigger hop = 4x fewer FFTs than before
+                        val timeMsBase = bufferInfo.presentationTimeUs / 1000
                         var start = 0
                         while (start + windowSize <= shorts.size) {
                             val window = shorts.sliceArray(start until start + windowSize)
-                            batch.add(computeFFTMagnitudesFast(window))
+                            val offsetMs = (start.toFloat() / sampleRate.toFloat() * 1000f).toLong()
+                            batch.add(FrameData(timeMsBase + offsetMs, computeFFTMagnitudesFast(window)))
                             start += hopSize
                             frameCount++
                         }
@@ -931,18 +874,27 @@ class AudioEngine(private val context: Context) {
                         val dur = _duration.value
                         synchronized(framesLock) {
                             val frameCount = precomputedFrames.size
-                            val visualizerActive = visualizer != null && visualizer?.enabled == true
-                            if (!animatingWaveform && !visualizerActive && frameCount > 0 && dur > 0 && pos >= 0) {
-                                val maxFrame = ((pos.toFloat() / dur.toFloat()) * frameCount).toInt()
-                                    .coerceIn(0, frameCount - 1)
-                                val frame = precomputedFrames[maxFrame]
+                            if (!animatingWaveform && frameCount > 0 && dur > 0 && pos >= 0) {
+                                var left = 0
+                                var right = frameCount - 1
+                                var bestIdx = 0
+                                while (left <= right) {
+                                    val mid = (left + right) / 2
+                                    if (precomputedFrames[mid].timeMs <= pos) {
+                                        bestIdx = mid
+                                        left = mid + 1
+                                    } else {
+                                        right = mid - 1
+                                    }
+                                }
+                                val frame = precomputedFrames[bestIdx].magnitudes
                                 _fftData.value = frame
                                 _waveformData.value = WaveformSnapshot(frame, ++waveformSeq)
                             }
                         }
                     } catch (_: Exception) {}
                 }
-                delay(100) // Faster polling for smoother position updates
+                delay(32) // Smooth ~30fps live visualization mapping
             }
         }
     }
@@ -987,8 +939,6 @@ class AudioEngine(private val context: Context) {
     }
 
     private fun releaseEffects() {
-        visualizer?.release()
-        visualizer = null
         reverb?.release()
         bassBoost?.release()
         equalizer?.release()
