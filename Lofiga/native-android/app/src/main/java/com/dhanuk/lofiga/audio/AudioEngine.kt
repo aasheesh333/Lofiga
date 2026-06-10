@@ -620,6 +620,7 @@ class AudioEngine(private val context: Context) {
                 decodeAndComputeFFTFast(extractor) { newFrames ->
                     synchronized(framesLock) {
                         precomputedFrames.addAll(newFrames)
+                        animatingWaveform = false // Switch to live data instantly on first batch
                     }
                 }
             } finally {
@@ -644,6 +645,7 @@ class AudioEngine(private val context: Context) {
                 decodeAndComputeFFTFast(extractor) { newFrames ->
                     synchronized(framesLock) {
                         precomputedFrames.addAll(newFrames)
+                        animatingWaveform = false // Switch to live data instantly on first batch
                     }
                 }
             } finally {
@@ -887,7 +889,15 @@ class AudioEngine(private val context: Context) {
                                         right = mid - 1
                                     }
                                 }
-                                val frame = precomputedFrames[bestIdx].magnitudes
+                                
+                                val bestFrame = precomputedFrames[bestIdx]
+                                // If the user skipped ahead of the background decoder, show silence until it catches up
+                                val frame = if (pos - bestFrame.timeMs > 1000) {
+                                    List(16) { 0f }
+                                } else {
+                                    bestFrame.magnitudes
+                                }
+                                
                                 _fftData.value = frame
                                 _waveformData.value = WaveformSnapshot(frame, ++waveformSeq)
                             }
