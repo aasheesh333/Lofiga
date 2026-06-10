@@ -466,6 +466,7 @@ class AudioEngine(private val context: Context) {
                         override fun onWaveFormDataCapture(visualizer: Visualizer?, waveform: ByteArray?, samplingRate: Int) {}
                         override fun onFftDataCapture(visualizer: Visualizer?, fft: ByteArray?, samplingRate: Int) {
                             if (fft == null) return
+                            android.util.Log.d("AudioEngine", "Visualizer FFT callback: size=${fft.size}, samplingRate=$samplingRate")
                             val n = fft.size
                             val bands = 16
                             val result = MutableList(bands) { 0f }
@@ -496,13 +497,15 @@ class AudioEngine(private val context: Context) {
                             
                             _fftData.value = result
                             _waveformData.value = WaveformSnapshot(result, ++waveformSeq)
+                            android.util.Log.d("AudioEngine", "Visualizer FFT result: $result")
                         }
                     }, Visualizer.getMaxCaptureRate() / 2, false, true)
                     enabled = true
+                    android.util.Log.i("AudioEngine", "Visualizer enabled: ${this.enabled}, captureSize=${this.captureSize}")
                 }
                 android.util.Log.i("AudioEngine", "Visualizer initialized on session $audioSessionId")
             } catch (e: Exception) {
-                android.util.Log.e("AudioEngine", "Failed to init visualizer: ${e.message}")
+                android.util.Log.e("AudioEngine", "Failed to init visualizer: ${e.message}", e)
             }
 
             android.util.Log.i("AudioEngine", "Effects initialized on session $audioSessionId")
@@ -626,15 +629,18 @@ class AudioEngine(private val context: Context) {
 
     private fun startAnimatingWaveform() {
         animatingWaveform = true
+        android.util.Log.i("AudioEngine", "startAnimatingWaveform: animatingWaveform=true")
         scope.launch {
             var phase = 0f
             while (animatingWaveform && isActive) {
                 // If visualizer becomes active, stop animation loop - visualizer callback handles data now
                 val visualizerActive = visualizer != null && visualizer?.enabled == true
                 if (visualizerActive) {
+                    android.util.Log.i("AudioEngine", "Animation loop: visualizerActive=true, stopping animation")
                     animatingWaveform = false
                     break
                 }
+                android.util.Log.d("AudioEngine", "Animation loop: visualizerActive=false, generating animated pattern")
                 // Produce a subtle animated pattern while waiting for visualizer
                 phase += 0.15f
                 val animated = List(16) { i ->
@@ -649,6 +655,7 @@ class AudioEngine(private val context: Context) {
                 }
                 delay(80)
             }
+            android.util.Log.i("AudioEngine", "Animation loop exited, animatingWaveform=$animatingWaveform")
         }
     }
 
