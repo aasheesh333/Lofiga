@@ -23,6 +23,7 @@ import com.dhanuk.lofiga.ui.components.*
 import com.dhanuk.lofiga.ui.theme.*
 import com.dhanuk.lofiga.ui.theme.LocalAppColors
 import com.dhanuk.lofiga.util.SettingsManager
+import com.dhanuk.lofiga.BuildConfig
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -88,7 +89,7 @@ fun SettingsScreen(
 
             SettingItem(
                 title = "Version",
-                subtitle = "2.0.0 (Native)",
+                subtitle = "${BuildConfig.VERSION_NAME} (Native)",
                 icon = Icons.Outlined.Info,
                 onClick = {}
             )
