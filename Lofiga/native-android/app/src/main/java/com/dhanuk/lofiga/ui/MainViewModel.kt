@@ -13,6 +13,7 @@ import com.dhanuk.lofiga.audio.AudioEngine
 import com.dhanuk.lofiga.data.AppRepository
 import com.dhanuk.lofiga.LofigaApplication
 import com.dhanuk.lofiga.media.MediaPlaybackService
+import com.dhanuk.lofiga.media.MediaSessionManagerHolder
 import com.dhanuk.lofiga.model.*
 import com.dhanuk.lofiga.util.AudioQueryHelper
 import com.dhanuk.lofiga.util.SettingsManager
@@ -87,47 +88,33 @@ class MainViewModel(application: Application) : AndroidViewModel(application) { 
 
         val app = getApplication<LofigaApplication>()
         val sessionManager = app.mediaSessionManager
-        val notificationManager = app.mediaNotificationManager
-
-        sessionManager.attach(audioEngine)
-
-        MediaPlaybackService.notificationManager = notificationManager
-        MediaPlaybackService.sessionManager = sessionManager
 
         audioEngine.onPlaybackStateChanged = { isPlaying ->
-            MediaPlaybackService.currentTitle = audioEngine.currentTrackTitle
-            MediaPlaybackService.currentArtist = audioEngine.currentTrackArtist
-            sessionManager.updateMetadata(audioEngine.currentTrackTitle, audioEngine.currentTrackArtist)
+            // Connect (or re-connect) the Media3 session to the current ExoPlayer
+            // the first time playback begins, and surface the session to the
+            // MediaSessionService via the process holder.
+            val player = audioEngine.playerForSession
+            if (player != null) {
+                sessionManager.connect(player)
+                MediaSessionManagerHolder.mediaSession = sessionManager.session
+            }
 
             if (isPlaying) {
-                sessionManager.updatePlaybackState(true, audioEngine.position.value, audioEngine.duration.value)
-                val intent = Intent(app, MediaPlaybackService::class.java).apply {
-                    action = MediaPlaybackService.ACTION_START
-                    putExtra("is_playing", true)
-                }
+                val intent = Intent(app, MediaPlaybackService::class.java)
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     app.startForegroundService(intent)
                 } else {
                     app.startService(intent)
                 }
             } else if (audioEngine.currentTrackTitle.isEmpty()) {
-                sessionManager.updatePlaybackState(false, 0, 0)
-                val intent = Intent(app, MediaPlaybackService::class.java).apply {
-                    action = MediaPlaybackService.ACTION_STOP
-                }
-                app.startService(intent)
-            } else {
-                sessionManager.updatePlaybackState(false, audioEngine.position.value, audioEngine.duration.value)
-                val intent = Intent(app, MediaPlaybackService::class.java).apply {
-                    action = MediaPlaybackService.ACTION_START
-                    putExtra("is_playing", false)
-                }
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    app.startForegroundService(intent)
-                } else {
-                    app.startService(intent)
-                }
+                // Nothing loaded — stop the foreground service entirely.
+                val intent = Intent(app, MediaPlaybackService::class.java)
+                app.stopService(intent)
+                sessionManager.release()
+                MediaSessionManagerHolder.mediaSession = null
             }
+            // When paused with a track still loaded, leave the service running so
+            // the persistent media notification stays usable.
         }
 
         loadSongs()

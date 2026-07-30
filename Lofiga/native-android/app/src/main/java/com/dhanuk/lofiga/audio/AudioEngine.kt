@@ -992,6 +992,14 @@ class AudioEngine(private val context: Context) {
         }
     }
 
+    /**
+     * The underlying ExoPlayer-backed [Player], exposed ONLY so the Media3
+     * [MediaSession] / [MediaSessionService] can be bound to the same instance.
+     * Callers must NOT mutate it directly; all playback control goes through
+     * this engine's public methods.
+     */
+    val playerForSession: androidx.media3.common.Player? get() = exoPlayer
+
     private fun releaseAtmospherePlayers() {
         atmospherePlayers.values.forEach {
             try {

@@ -116,9 +116,6 @@ dependencies {
     // Pin to a fixed version for reproducible builds (was a floating range).
     implementation("com.onesignal:OneSignal:5.1.31")
 
-    // Legacy support-v4 media session (kept until Phase B full Media3 session migration).
-    implementation("androidx.media:media:1.7.0")
-
     // Media3: modern playback, session, and offline export (Transformer).
     val media3Version = "1.5.1"
     implementation("androidx.media3:media3-exoplayer:$media3Version")

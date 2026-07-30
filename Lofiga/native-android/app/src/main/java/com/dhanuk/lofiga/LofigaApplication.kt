@@ -4,8 +4,7 @@ import android.app.Activity
 import android.app.Application
 import android.os.Bundle
 import com.dhanuk.lofiga.ads.AdManager
-import com.dhanuk.lofiga.media.MediaNotificationManager
-import com.dhanuk.lofiga.media.MediaSessionManager
+import com.dhanuk.lofiga.media.Media3MediaSessionManager
 import com.onesignal.OneSignal
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -14,9 +13,7 @@ import kotlinx.coroutines.launch
 
 class LofigaApplication : Application() {
 
-    lateinit var mediaSessionManager: MediaSessionManager
-        private set
-    lateinit var mediaNotificationManager: MediaNotificationManager
+    lateinit var mediaSessionManager: Media3MediaSessionManager
         private set
 
     private var foregroundActivityCount = 0
@@ -26,10 +23,9 @@ class LofigaApplication : Application() {
     override fun onCreate() {
         super.onCreate()
 
-        // Main thread: media managers and notification channel (required early / by Android)
-        mediaSessionManager = MediaSessionManager(this)
-        mediaNotificationManager = MediaNotificationManager(this)
-        mediaNotificationManager.createChannel()
+        // Main thread: media session manager (Media3) and notification channel (required early / by Android)
+        mediaSessionManager = Media3MediaSessionManager(this)
+        mediaSessionManager.ensureChannel("lofiga_playback", "Music Playback")
 
         // Main thread: lifecycle callbacks
         registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {

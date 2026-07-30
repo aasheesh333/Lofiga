@@ -1,101 +1,48 @@
 package com.dhanuk.lofiga.media
 
-import android.app.Notification
-import android.app.PendingIntent
-import android.app.Service
 import android.content.Intent
-import android.os.Build
-import android.os.IBinder
-import androidx.core.app.NotificationCompat
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.session.MediaSession
+import androidx.media3.session.MediaSessionService
 
-class MediaPlaybackService : Service() {
+/**
+ * Foreground service that hosts the Media3 [MediaSession] for background-playback
+ * controls and lock-screen/notification media buttons.
+ *
+ * Replaces the legacy hand-rolled Service + static-companion state. Because this
+ * is a [MediaSessionService], the framework produces the media notification and
+ * binds controller connections here automatically; playback itself still lives in
+ * [com.dhanuk.lofiga.audio.AudioEngine]'s ExoPlayer, owned by MainViewModel.
+ */
+@OptIn(UnstableApi::class)
+class MediaPlaybackService : MediaSessionService() {
 
-    companion object {
-        var notificationManager: MediaNotificationManager? = null
-        var sessionManager: MediaSessionManager? = null
-        var currentTitle: String = ""
-        var currentArtist: String = ""
-
-        const val ACTION_START = "com.dhanuk.lofiga.START"
-        const val ACTION_STOP = "com.dhanuk.lofiga.STOP"
-        const val ACTION_PLAY = "com.dhanuk.lofiga.PLAY"
-        const val ACTION_PAUSE = "com.dhanuk.lofiga.PAUSE"
+    override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? {
+        // The session is owned by MediaSessionManagerHolder, set up once the
+        // ViewModel creates the player.
+        return MediaSessionManagerHolder.mediaSession
     }
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        when (intent?.action) {
-            ACTION_START -> {
-                val isPlaying = intent.getBooleanExtra("is_playing", true)
-                showAsForeground(isPlaying)
-            }
-            ACTION_STOP -> {
-                sessionManager?.stopPlayback()
-                stopForeground(STOP_FOREGROUND_REMOVE)
-                notificationManager?.dismiss()
-                stopSelf()
-                return START_NOT_STICKY
-            }
-            ACTION_PLAY -> {
-                sessionManager?.playPlayback()
-                showAsForeground(true)
-            }
-            ACTION_PAUSE -> {
-                sessionManager?.pausePlayback()
-                showAsForeground(false)
-            }
-            else -> {
-                // Null intent (system restart) or unrecognized action.
-                // We use START_NOT_STICKY so this shouldn't normally happen,
-                // but guard against ANR by stopping immediately.
-                stopSelf()
-                return START_NOT_STICKY
-            }
-        }
-        return START_NOT_STICKY
-    }
-
-    override fun onBind(intent: Intent?): IBinder? = null
-
-    fun showAsForeground(isPlaying: Boolean) {
-        val nm = notificationManager
-        val sm = sessionManager
-
-        val notification: Notification = if (nm != null && sm != null) {
-            nm.buildNotification(
-                sm.token,
-                currentTitle,
-                currentArtist,
-                isPlaying
-            )
-        } else {
-            // Managers not yet initialized — build a minimal fallback notification
-            // so startForeground() is still called, avoiding an ANR on Android 12+.
-            NotificationCompat.Builder(this, MediaNotificationManager.CHANNEL_ID)
-                .setContentTitle("Lofiga")
-                .setSmallIcon(android.R.drawable.ic_media_play)
-                .setPriority(NotificationCompat.PRIORITY_LOW)
-                .build()
-        }
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            startForeground(
-                MediaNotificationManager.NOTIFICATION_ID,
-                notification,
-                android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
-            )
-        } else {
-            startForeground(MediaNotificationManager.NOTIFICATION_ID, notification)
-        }
-
-        // If managers were null we showed a fallback just to satisfy startForeground;
-        // stop immediately since we can't do anything useful without them.
-        if (nm == null || sm == null) {
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        val session = MediaSessionManagerHolder.mediaSession
+        val player = session?.player
+        if (player == null || !player.playWhenReady || player.mediaItemCount == 0) {
             stopSelf()
         }
+        super.onTaskRemoved(rootIntent)
     }
 
     override fun onDestroy() {
-        notificationManager?.dismiss()
+        // Don't release the player here — AudioEngine owns it via the ViewModel.
         super.onDestroy()
     }
+}
+
+/**
+ * Process-wide holder for the current Media3 [MediaSession]. Set by MainViewModel
+ * once the player/session is created. Far smaller surface than the prior static
+ * state holding titles/managers byte-for-byte.
+ */
+object MediaSessionManagerHolder {
+    @Volatile var mediaSession: MediaSession? = null
 }
