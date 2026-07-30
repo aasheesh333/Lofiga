@@ -88,7 +88,7 @@ object AdManager {
         // region (e.g. users outside EEA/UK/CH). We poll it after every step
         // rather than synthesising "obtained" from error paths.
         fun syncCanRequestAds() {
-            val canRequest = consentInformation.canRequestAds
+            val canRequest = consentInformation.canRequestAds()
             if (canRequest && !_isConsentObtained.value) {
                 _isConsentObtained.value = true
             }
@@ -131,31 +131,31 @@ object AdManager {
                         // After form dismissed, refresh canRequestAds and recurse
                         // in case the form re-shows (REQUIRED can persist briefly).
                         val ci = UserMessagingPlatform.getConsentInformation(activity)
-                        if (ci.canRequestAds) _isConsentObtained.value = true
+                        if (ci.canRequestAds()) _isConsentObtained.value = true
                         if (ci.consentStatus == ConsentInformation.ConsentStatus.REQUIRED
                             && consentFormAttempts < 2) {
                             loadAndShowConsentForm(activity)
                         } else {
-                            _isConsentObtained.value = ci.canRequestAds
+                            _isConsentObtained.value = ci.canRequestAds()
                         }
                     }
                 } else {
                     val ci = UserMessagingPlatform.getConsentInformation(activity)
-                    _isConsentObtained.value = ci.canRequestAds
+                    _isConsentObtained.value = ci.canRequestAds()
                 }
             },
             { error ->
                 Log.e(TAG, "Consent form load failed: ${error.message}")
                 // Don't synthesise obtained — let canRequestAds decide.
                 val ci = UserMessagingPlatform.getConsentInformation(activity)
-                _isConsentObtained.value = ci.canRequestAds
+                _isConsentObtained.value = ci.canRequestAds()
             }
         )
     }
 
     private fun syncCanRequestAdsFromActivity(activity: Activity) {
         val ci = UserMessagingPlatform.getConsentInformation(activity)
-        _isConsentObtained.value = ci.canRequestAds
+        _isConsentObtained.value = ci.canRequestAds()
     }
 
     // ========================
