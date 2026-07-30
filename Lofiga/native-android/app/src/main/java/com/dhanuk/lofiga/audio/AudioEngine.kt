@@ -80,7 +80,6 @@ class AudioEngine(private val context: Context) {
     @Volatile private var autoPlayOnPrepared = false
 
     // Animation for visualization while FFT is computing
-    private var visualAnimSeq = 0L
     @Volatile private var animatingWaveform = false
 
     private var audioFocusRequest: AudioFocusRequest? = null
@@ -181,7 +180,7 @@ class AudioEngine(private val context: Context) {
             autoPlay = autoPlay,
             sourceUri = uri,
             filePath = null,
-            initFft = { precomputeFFTFast(context, uri) },
+            initFft = { precomputeFFT(context, uri) },
             errorPrefix = "Failed to load track"
         )
     }
@@ -191,7 +190,7 @@ class AudioEngine(private val context: Context) {
             autoPlay = autoPlay,
             sourceUri = Uri.fromFile(File(filePath)),
             filePath = filePath,
-            initFft = { precomputeFFTFast(filePath) },
+            initFft = { precomputeFFT(filePath) },
             errorPrefix = "Failed to load file"
         )
     }
@@ -596,7 +595,7 @@ class AudioEngine(private val context: Context) {
         }
     }
 
-    // --- Fast FFT Visualization (lower resolution, much faster) ---
+    // --- Real FFT Visualization (radix-2 FFT, log-spaced bands) ---
 
     private fun startAnimatingWaveform() {
         animatingWaveform = true
@@ -630,15 +629,17 @@ class AudioEngine(private val context: Context) {
     }
 
     /**
-     * Fast FFT precomputation using larger hop and simpler FFT.
-     * Processes only ~1/4 the frames for much faster computation.
+     * FFT precomputation: full-decode the track via MediaExtractor + MediaCodec,
+     * then run a real radix-2 FFT over 1024-sample Hann-windowed hops and store
+     * 16 log-spaced magnitude bands per timestamp. The polling loop then
+     * binary-searches the result by current playback position.
      */
-    private fun precomputeFFTFast(context: Context, uri: Uri): Boolean {
+    private fun precomputeFFT(context: Context, uri: Uri): Boolean {
         return try {
             val extractor = MediaExtractor()
             try {
                 extractor.setDataSource(context, uri, null)
-                decodeAndComputeFFTFast(extractor) { newFrames ->
+                decodeAndPrecomputeFFT(extractor) { newFrames ->
                     synchronized(framesLock) {
                         precomputedFrames.addAll(newFrames)
                         animatingWaveform = false // Switch to live data instantly on first batch
@@ -648,22 +649,22 @@ class AudioEngine(private val context: Context) {
                 extractor.release()
             }
             animatingWaveform = false
-            android.util.Log.i("AudioEngine", "Fast FFT done: ${precomputedFrames.size} frames")
+            android.util.Log.i("AudioEngine", "FFT precompute done: ${precomputedFrames.size} frames")
             true
         } catch (e: Exception) {
-            android.util.Log.e("AudioEngine", "Fast FFT failed: ${e.message}")
+            android.util.Log.e("AudioEngine", "FFT precompute failed: ${e.message}")
             false
         } finally {
             animatingWaveform = false
         }
     }
 
-    private fun precomputeFFTFast(filePath: String): Boolean {
+    private fun precomputeFFT(filePath: String): Boolean {
         return try {
             val extractor = MediaExtractor()
             try {
                 extractor.setDataSource(filePath)
-                decodeAndComputeFFTFast(extractor) { newFrames ->
+                decodeAndPrecomputeFFT(extractor) { newFrames ->
                     synchronized(framesLock) {
                         precomputedFrames.addAll(newFrames)
                         animatingWaveform = false // Switch to live data instantly on first batch
@@ -673,17 +674,25 @@ class AudioEngine(private val context: Context) {
                 extractor.release()
             }
             animatingWaveform = false
-            android.util.Log.i("AudioEngine", "Fast FFT done: ${precomputedFrames.size} frames")
+            android.util.Log.i("AudioEngine", "FFT precompute done: ${precomputedFrames.size} frames")
             true
         } catch (e: Exception) {
-            android.util.Log.e("AudioEngine", "Fast FFT failed: ${e.message}")
+            android.util.Log.e("AudioEngine", "FFT precompute failed: ${e.message}")
             false
         } finally {
             animatingWaveform = false
         }
     }
 
-    private fun decodeAndComputeFFTFast(extractor: MediaExtractor, onBatch: (List<FrameData>) -> Unit) {
+    /**
+     * Cap on the number of precomputed FFT frames we keep.
+     * Beyond this we still decode (to let the codec exit cleanly) but
+     * stop adding frames so the binary-search index stays small and
+     * memory footprint stays bounded even on multi-hour mixes.
+     */
+    private val MAX_FFT_FRAMES = 8000
+
+    private fun decodeAndPrecomputeFFT(extractor: MediaExtractor, onBatch: (List<FrameData>) -> Unit) {
         for (i in 0 until extractor.trackCount) {
             val format = extractor.getTrackFormat(i)
             val mime = format.getString(MediaFormat.KEY_MIME) ?: continue
@@ -699,11 +708,20 @@ class AudioEngine(private val context: Context) {
                 val bufferInfo = MediaCodec.BufferInfo()
             val batch = mutableListOf<FrameData>()
             val sampleRate = format.getInteger(MediaFormat.KEY_SAMPLE_RATE)
+            val channels = if (format.containsKey(MediaFormat.KEY_CHANNEL_COUNT))
+                format.getInteger(MediaFormat.KEY_CHANNEL_COUNT) else 1
             var sawInputEOS = false
             var sawOutputEOS = false
             var frameCount = 0
 
+            val windowSize = 1024  // power of two (radix-2 FFT requirement)
+
+            // Adaptive hop: aim for ~16 frames/s so a 10-min track → ~9600 frames,
+            // then widen once we approach MAX_FFT_FRAMES so long tracks stay capped.
+            val baseHop = (sampleRate / 16).coerceIn(windowSize, windowSize * 8)
+
             while (!sawOutputEOS) {
+                if (fftCancelled) break
                 if (!sawInputEOS) {
                     val inputIndex = codec.dequeueInputBuffer(5000)
                     if (inputIndex >= 0) {
@@ -737,20 +755,39 @@ class AudioEngine(private val context: Context) {
                         continue
                     }
                     val size = bufferInfo.size
-                    if (size > 0) {
+                    if (size > 0 && frameCount < MAX_FFT_FRAMES) {
                         val shorts = ShortArray(size / 2)
                         outputBuffer.rewind()
                         outputBuffer.asShortBuffer().get(shorts)
-                        // Use larger window and hop for speed
-                        val windowSize = 512
-                        val hopSize = windowSize * 2  // Bigger hop = 4x fewer FFTs than before
+
                         val timeMsBase = bufferInfo.presentationTimeUs / 1000
-                        var start = 0
-                        while (start + windowSize <= shorts.size) {
-                            val window = shorts.sliceArray(start until start + windowSize)
-                            val offsetMs = (start.toFloat() / sampleRate.toFloat() * 1000f).toLong()
-                            batch.add(FrameData(timeMsBase + offsetMs, computeFFTMagnitudesFast(window)))
-                            start += hopSize
+                        // Adaptive hop: start at baseHop, double it once we're past 3/4 of the frame cap.
+                        val hopSize = if (frameCount < (MAX_FFT_FRAMES * 3) / 4) {
+                            baseHop
+                        } else {
+                            baseHop * 2
+                        }
+
+                        // Walk the output buffer in mono frames: one window is windowSize frames
+                        // (each frame = `channels` interleaved shorts).
+                        val frameSizeBytes = channels * 2
+                        val totalFrames = shorts.size / channels
+                        var frameStart = 0
+                        while (frameStart + windowSize <= totalFrames && frameCount < MAX_FFT_FRAMES) {
+                            // Downmix the window to mono (average all channels).
+                            val mono = ShortArray(windowSize)
+                            val srcBase = frameStart * channels
+                            for (w in 0 until windowSize) {
+                                val baseIdx = srcBase + w * channels
+                                var sum = 0
+                                for (ch in 0 until channels) {
+                                    sum += shorts[baseIdx + ch].toInt()
+                                }
+                                mono[w] = (sum / channels).coerceIn(-32768, 32767).toShort()
+                            }
+                            val offsetMs = (frameStart.toFloat() / sampleRate.toFloat() * 1000f).toLong()
+                            batch.add(FrameData(timeMsBase + offsetMs, computeFFTMagnitudes(mono)))
+                            frameStart += hopSize
                             frameCount++
                         }
                         if (batch.size >= 20) {
@@ -773,25 +810,132 @@ class AudioEngine(private val context: Context) {
         }
     }
 
-    private fun computeFFTMagnitudesFast(samples: ShortArray): List<Float> {
-        val n = samples.size
-        // Simple RMS-based magnitude estimation for each band - much faster than full FFT
-        val bands = 16
-        val samplesPerBand = n / bands
-        val result = MutableList(bands) { 0f }
-        for (band in 0 until bands) {
-            val start = band * samplesPerBand
-            val end = minOf(start + samplesPerBand, n)
-            if (start >= end) continue
-            var sumSq = 0f
-            for (k in start until end) {
-                val v = samples[k].toFloat() / 32768f
-                sumSq += v * v
+    /**
+     * Real radix-2 in-place FFT (Cooley–Tukey). Operates on [real] and [imag]
+     * arrays of length n (must be a power of two). Bit-reversal permutation,
+     * then the standard iterative butterfly. Pure-Kotlin, no allocations
+     * beyond the trivial locals — runs once per window during precompute.
+     */
+    private fun fftInPlace(real: FloatArray, imag: FloatArray) {
+        val n = real.size
+        // Bit-reversal permutation.
+        var j = 0
+        var i = 1
+        while (i < n) {
+            var bit = n shr 1
+            while (j and bit != 0) {
+                j = j xor bit
+                bit = bit shr 1
             }
-            val rms = kotlin.math.sqrt((sumSq / (end - start)).toDouble()).toFloat()
-            result[band] = (rms * 3.0f).coerceIn(0f, 1f)
+            j = j or bit
+            if (i < j) {
+                var t = real[i]; real[i] = real[j]; real[j] = t
+                t = imag[i]; imag[i] = imag[j]; imag[j] = t
+            }
+            i++
         }
-        return result
+        // Butterfly.
+        var len = 2
+        while (len <= n) {
+            val halfLen = len shr 1
+            val angStep = (-2.0 * Math.PI / len).toFloat()
+            for (i in 0 until halfLen) {
+                val ang = angStep * i
+                val wRe = Math.cos(ang.toDouble()).toFloat()
+                val wIm = Math.sin(ang.toDouble()).toFloat()
+                var k = i
+                while (k < n) {
+                    val kRe = real[k]
+                    val kIm = imag[k]
+                    val jRe = real[k + halfLen]
+                    val jIm = imag[k + halfLen]
+                    val tRe = wRe * jRe - wIm * jIm
+                    val tIm = wRe * jIm + wIm * jRe
+                    real[k] = kRe + tRe
+                    imag[k] = kIm + tIm
+                    real[k + halfLen] = kRe - tRe
+                    imag[k + halfLen] = kIm - tIm
+                    k += len
+                }
+            }
+            len = len shl 1
+        }
+    }
+
+    /**
+     * Compute 16 log-spaced magnitude bands from a window of mono PCM shorts
+     * via a real radix-2 FFT.
+     *
+     * The caller-specified [samples] length is required to be a power of two
+     * (we use 1024) so [fftInPlace] works without zero-padding logic.
+     * A Hann window is applied to reduce spectral leakage; the magnitude
+     * spectrum is then grouped into 16 log-distributed bins (matching how
+     * human hearing and typical equalizers divide the spectrum) and
+     * normalized to 0..1.
+     */
+    private fun computeFFTMagnitudes(samples: ShortArray): List<Float> {
+        val n = samples.size
+        if (n < 2 || n and (n - 1) != 0) {
+            // Not a power of two (shouldn't happen — caller pads to 1024);
+            // fall back to a flat-zero result so the UI stays safe.
+            return List(16) { 0f }
+        }
+
+        val real = FloatArray(n)
+        val imag = FloatArray(n)
+        // Hann window + float normalization, applied together.
+        for (i in 0 until n) {
+            val w = 0.5f - 0.5f * Math.cos(2.0 * Math.PI * i / (n - 1)).toFloat()
+            val v = (samples[i].toFloat() / 32768f) * w
+            real[i] = v
+            imag[i] = 0f
+        }
+
+        fftInPlace(real, imag)
+
+        // Magnitude spectrum — only the first n/2 bins are meaningful (Nyquist).
+        val mag = FloatArray(n / 2)
+        for (i in 0 until n / 2) {
+            val re = real[i]
+            val im = imag[i]
+            mag[i] = Math.sqrt((re * re + im * im).toDouble()).toFloat()
+        }
+
+        // 16 log-spaced bands over the meaningful spectrum.
+        // Bin 0 is DC; we start banding from bin 1 to skip it.
+        val bands = 16
+        val result = MutableList(bands) { 0f }
+        // Log scale: each band spans [lowHz..highHz] mapped onto bin indices.
+        // Use a logarithmic factor across bin range 1 .. (n/2 - 1).
+        val minBin = 1
+        val maxBin = n / 2 - 1
+        val logMin = Math.log(minBin.toDouble())
+        val logMax = Math.log(maxBin.toDouble())
+        var peak = 1e-6f
+        for (b in 0 until bands) {
+            val loLog = logMin + (logMax - logMin) * (b) / bands
+            val hiLog = logMin + (logMax - logMin) * (b + 1) / bands
+            val lo = Math.exp(loLog).toInt().coerceIn(minBin, maxBin)
+            val hi = Math.exp(hiLog).toInt().coerceIn(minBin, maxBin).coerceAtLeast(lo + 1)
+            // Take the max magnitude in the band (peak-hold) — visually punchier than mean.
+            var bandMax = 0f
+            for (k in lo until hi) {
+                if (mag[k] > bandMax) bandMax = mag[k]
+            }
+            // Normalize: divide by n/2 so a full-scale sine at a band's frequency → ~0.5.
+            // Then apply a perceptual scale (sqrt) and a mild gain so quiet tracks still show movement.
+            val norm = bandMax / (n / 2f)
+            val scaled = Math.sqrt(norm.toDouble()).toFloat() * 2.2f
+            result[b] = scaled
+            if (scaled > peak) peak = scaled
+        }
+        // Soft ceiling so occasional extreme peaks don't peg everything else to zero.
+        // We normalize against the in-window peak if it's above 1, but never attenuate below it.
+        if (peak > 1f) {
+            val inv = 1f / peak
+            for (b in 0 until bands) result[b] *= inv
+        }
+        return result.map { it.coerceIn(0f, 1f) }
     }
 
     // --- Atmosphere System ---
