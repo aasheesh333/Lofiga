@@ -74,7 +74,10 @@ class AudioEngine(private val context: Context) {
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     private var positionJob: Job? = null
     private var fftJob: Job? = null
-    @Volatile private var fftCancelled = false
+    /** Per-loaded-track generation token. The FFT loop bails if the live
+     *  generation changes, so rapid back-to-back loads can't interleave their
+     *  decoded frames (a flat `cancelled` flag races the new job's reset). */
+    @Volatile private var fftGeneration = 0L
     @Volatile private var wasPlayingBeforeFocusLoss = false
     @Volatile private var isDucked = false
     @Volatile private var autoPlayOnPrepared = false
@@ -210,7 +213,7 @@ class AudioEngine(private val context: Context) {
         _duration.value = 0
         resetWaveformData()
         fftJob?.cancel()
-        fftCancelled = true
+        fftGeneration++           // any in-flight decode loop will see this and bail
         animatingWaveform = false
         autoPlayOnPrepared = autoPlay
 
@@ -256,9 +259,9 @@ class AudioEngine(private val context: Context) {
                                 Log.e("AudioEngine", "Effects init failed: ${e.message}")
                             }
                         }
+                        val myGen = fftGeneration
                         fftJob = scope.launch(Dispatchers.IO) {
-                            fftCancelled = false
-                            initFft()
+                            if (myGen == fftGeneration) initFft()
                         }
                         startAnimatingWaveform()
                         Log.i("AudioEngine", "Track loaded, duration: ${player.duration}ms")
@@ -413,6 +416,7 @@ class AudioEngine(private val context: Context) {
     }
 
     fun release() {
+        fftGeneration++            // any in-flight FFT decode loop will see this and bail
         positionJob?.cancel()
         scope.cancel()
         releaseExoPlayer()
@@ -693,6 +697,7 @@ class AudioEngine(private val context: Context) {
     private val MAX_FFT_FRAMES = 8000
 
     private fun decodeAndPrecomputeFFT(extractor: MediaExtractor, onBatch: (List<FrameData>) -> Unit) {
+        val myGen = fftGeneration  // capture once; bail if a newer load bumps it
         for (i in 0 until extractor.trackCount) {
             val format = extractor.getTrackFormat(i)
             val mime = format.getString(MediaFormat.KEY_MIME) ?: continue
@@ -721,7 +726,7 @@ class AudioEngine(private val context: Context) {
             val baseHop = (sampleRate / 16).coerceIn(windowSize, windowSize * 8)
 
             while (!sawOutputEOS) {
-                if (fftCancelled) break
+                if (myGen != fftGeneration) break   // a newer load arrived — abandon this decode
                 if (!sawInputEOS) {
                     val inputIndex = codec.dequeueInputBuffer(5000)
                     if (inputIndex >= 0) {
