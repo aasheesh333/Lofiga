@@ -99,15 +99,21 @@ class AudioEngine(private val context: Context) {
     @Volatile private var animatingWaveform = false
 
     private var audioFocusRequest: AudioFocusRequest? = null
+    private var hasAudioFocus = false
     private val focusChangeListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
         when (focusChange) {
             AudioManager.AUDIOFOCUS_LOSS -> {
-                // Permanent focus loss - pause playback
+                // Permanent focus loss - pause playback and forget the focus
+                // we previously held, so the next user-initiated play() will
+                // re-request it rather than silently play without focus.
                 wasPlayingBeforeFocusLoss = _isPlaying.value
+                hasAudioFocus = false
+                audioFocusRequest = null
                 pause()
             }
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
-                // Temporary focus loss (e.g., phone call) - pause and remember state
+                // Temporary focus loss (e.g., phone call) - pause and remember state.
+                // Focus is still nominally ours; we'll get GAIN when it's back.
                 wasPlayingBeforeFocusLoss = _isPlaying.value
                 pause()
             }
@@ -119,6 +125,7 @@ class AudioEngine(private val context: Context) {
             }
             AudioManager.AUDIOFOCUS_GAIN -> {
                 // Focus regained - restore full volume on everything
+                hasAudioFocus = true
                 isDucked = false
                 exoPlayer?.volume = 1.0f
                 duckAtmospheres(false)
@@ -170,14 +177,18 @@ class AudioEngine(private val context: Context) {
                 )
                 .build()
             audioFocusRequest = request
-            audioManager.requestAudioFocus(request) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+            val granted = audioManager.requestAudioFocus(request) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+            hasAudioFocus = granted
+            granted
         } else {
             @Suppress("DEPRECATION")
-            audioManager.requestAudioFocus(
+            val granted = audioManager.requestAudioFocus(
                 focusChangeListener,
                 AudioManager.STREAM_MUSIC,
                 AudioManager.AUDIOFOCUS_GAIN
             ) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+            hasAudioFocus = granted
+            granted
         }
     }
 
@@ -189,6 +200,8 @@ class AudioEngine(private val context: Context) {
             @Suppress("DEPRECATION")
             audioManager.abandonAudioFocus(focusChangeListener)
         }
+        audioFocusRequest = null
+        hasAudioFocus = false
     }
 
     fun loadTrack(uri: Uri, autoPlay: Boolean = false): Boolean {
@@ -244,6 +257,11 @@ class AudioEngine(private val context: Context) {
                         .build(),
                     /* handleAudioFocus = */ false // we manage focus ourselves below
                 )
+                // Pause when headphones unplug or audio routes to a device the
+                // user doesn't expect (BT disconnect etc.) — Android UX/PPlay
+                // convention for media apps. handleAudioBecomingNoisy is
+                // independent of handleAudioFocus (which we manage manually).
+                .setHandleAudioBecomingNoisy(true)
                 .build()
 
             player.addListener(object : Player.Listener {
@@ -318,6 +336,18 @@ class AudioEngine(private val context: Context) {
         if (player == null) {
             _error.value = "No track loaded"
             return
+        }
+        // If we previously lost permanent audio focus (e.g. another media app
+        // took it), abandon cleared hasAudioFocus. Re-request before resuming
+        // play — otherwise the OS will silently re-duck us the instant the
+        // other app plays. Skip on the very first play() since loadTrack*
+        // already requested focus on our behalf.
+        if (!hasAudioFocus) {
+            if (!requestAudioFocus()) {
+                _error.value = "Another app is using audio"
+                Log.w("AudioEngine", "play(): audio focus denied")
+                return
+            }
         }
         try {
             if (!player.isPlaying) {
