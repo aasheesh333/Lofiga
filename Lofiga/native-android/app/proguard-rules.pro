@@ -31,6 +31,19 @@
 # ExportService reflection-safe
 -keep class com.dhanuk.lofiga.export.** { *; }
 
+# App-owned manifest-registered components (Application subclass, MediaSessionService
+# subclass, Activities). AAPT normally keeps manifest-referenced classes, but Media3
+# also dispatches callbacks into the MediaSessionService subclass via reflection, so
+# we keep the class + its public/onTaskRemoved overrides explicitly to be safe.
+-keep class com.dhanuk.lofiga.LofigaApplication
+-keep class com.dhanuk.lofiga.media.MediaPlaybackService { public *; }
+-keep class com.dhanuk.lofiga.media.Media3MediaSessionManager { *; }
+
+# Media3 1.5.x — library ships consumer rules, but Transformer touches some
+# Effect/MediaItem subclasses by name; override to be safe.
+-keep class androidx.media3.** { *; }
+-dontwarn androidx.media3.**
+
 # AdMob
 -keep public class com.google.android.gms.ads.** { public *; }
 -keep public class com.google.ads.** { public *; }
@@ -43,3 +56,12 @@
 # OneSignal
 -keep class com.onesignal.** { *; }
 -dontwarn com.onesignal.**
+
+# Keep BuildConfig (used at runtime for ad/OneSignal IDs).
+-keep class com.dhanuk.lofiga.BuildConfig { *; }
+
+# Kotlin metadata — keep enum names for MoodTag + other koordinate-aware code.
+-keepclassmembers enum com.dhanuk.lofiga.** {
+    public **[] values();
+    public ** valueOf(java.lang.String);
+}
