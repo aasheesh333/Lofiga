@@ -162,7 +162,11 @@ object ExportService {
         while (!sawEOS && !cancelFlag.get()) {
             val inputIdx = encoder.dequeueInputBuffer(10000)
             if (inputIdx >= 0) {
-                val inBuf = encoder.getInputBuffer(inputIdx)!!
+                val inBuf = encoder.getInputBuffer(inputIdx)
+                if (inBuf == null) {
+                    encoder.releaseInputBuffer(inputIdx)
+                    continue
+                }
                 inBuf.clear()
                 val maxFrames = inBuf.capacity() / (channels * 2)
                 val remaining = totalFrames - frameOffset
@@ -197,17 +201,19 @@ object ExportService {
                         muxer.start()
                         muxerStarted = true
                     }
-                    val outBuf = encoder.getOutputBuffer(outIdx)!!
-                    val safeSize = minOf(bufInfo.size, outBuf.capacity() - bufInfo.offset)
-                    if (safeSize > 0) {
-                        outBuf.position(bufInfo.offset)
-                        outBuf.limit(bufInfo.offset + safeSize)
-                        bufInfo.size = safeSize
-                        try {
-                            muxer.writeSampleData(trackIndex, outBuf, bufInfo)
-                        } catch (e: Exception) {
-                            Log.e("ExportService", "writeSampleData failed: ${e.javaClass.simpleName}: ${e.message}")
-                            throw e
+                    val outBuf = encoder.getOutputBuffer(outIdx)
+                    if (outBuf != null) {
+                        val safeSize = minOf(bufInfo.size, outBuf.capacity() - bufInfo.offset)
+                        if (safeSize > 0) {
+                            outBuf.position(bufInfo.offset)
+                            outBuf.limit(bufInfo.offset + safeSize)
+                            bufInfo.size = safeSize
+                            try {
+                                muxer.writeSampleData(trackIndex, outBuf, bufInfo)
+                            } catch (e: Exception) {
+                                Log.e("ExportService", "writeSampleData failed: ${e.javaClass.simpleName}: ${e.message}")
+                                throw e
+                            }
                         }
                     }
                 }
@@ -232,17 +238,19 @@ object ExportService {
                 bufInfo.size = 0
             }
             if (bufInfo.size > 0 && muxerStarted) {
-                val outBuf = encoder.getOutputBuffer(outIdx)!!
-                val safeSize = minOf(bufInfo.size, outBuf.capacity() - bufInfo.offset)
-                if (safeSize > 0) {
-                    outBuf.position(bufInfo.offset)
-                    outBuf.limit(bufInfo.offset + safeSize)
-                    bufInfo.size = safeSize
-                    try {
-                        muxer.writeSampleData(trackIndex, outBuf, bufInfo)
-                    } catch (e: Exception) {
-                        Log.e("ExportService", "writeSampleData (drain) failed: ${e.javaClass.simpleName}: ${e.message}")
-                        throw e
+                val outBuf = encoder.getOutputBuffer(outIdx)
+                if (outBuf != null) {
+                    val safeSize = minOf(bufInfo.size, outBuf.capacity() - bufInfo.offset)
+                    if (safeSize > 0) {
+                        outBuf.position(bufInfo.offset)
+                        outBuf.limit(bufInfo.offset + safeSize)
+                        bufInfo.size = safeSize
+                        try {
+                            muxer.writeSampleData(trackIndex, outBuf, bufInfo)
+                        } catch (e: Exception) {
+                            Log.e("ExportService", "writeSampleData (drain) failed: ${e.javaClass.simpleName}: ${e.message}")
+                            throw e
+                        }
                     }
                 }
             }
@@ -336,26 +344,38 @@ object ExportService {
             val accumulator = ShortArrayBuffer()
             var sawInputEOS = false
             var sawOutputEOS = false
-            var totalInputBytes = 0L
             var wasTruncated = false
 
-            while (!sawOutputEOS && !accumulator.isFull) {
+            // Safety escape: cap total decode iterations so a malformed stream or a
+            // misbehaving codec can never spin forever.
+            val maxIterations = 200_000
+            var iterations = 0
+
+            while (!sawOutputEOS && !accumulator.isFull && iterations < maxIterations) {
+                iterations++
                 if (cancelFlag.get()) { decoder.stop(); decoder.release(); extractor.release(); return null }
 
                 if (!sawInputEOS) {
                     val inIdx = decoder.dequeueInputBuffer(10000)
                     if (inIdx >= 0) {
-                        val inBuf = decoder.getInputBuffer(inIdx)!!
+                        val inBuf = decoder.getInputBuffer(inIdx)
+                        if (inBuf == null) {
+                            decoder.releaseInputBuffer(inIdx)
+                            continue
+                        }
                         val sampleSize = extractor.readSampleData(inBuf, 0)
                         if (sampleSize < 0) {
                             decoder.queueInputBuffer(inIdx, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
                             sawInputEOS = true
                         } else {
-                            decoder.queueInputBuffer(inIdx, 0, sampleSize, extractor.sampleTime, 0)
-                            totalInputBytes += sampleSize
+                            val sampleTimeUs = extractor.sampleTime
+                            decoder.queueInputBuffer(inIdx, 0, sampleSize, sampleTimeUs, 0)
                             extractor.advance()
+                            // Progress = current presentation time / total duration (both in µs),
+                            // mapped into the decode phase's 0..0.3 window.
                             if (inputDuration > 0) {
-                                val progress = (totalInputBytes.toFloat() / (inputDuration * 1000)).coerceIn(0f, 0.3f)
+                                val progress = (sampleTimeUs.toFloat() / inputDuration.toFloat())
+                                    .coerceIn(0f, 1f) * 0.3f
                                 onProgress?.invoke(progress)
                             }
                         }
@@ -369,25 +389,27 @@ object ExportService {
                         sawOutputEOS = true
                     }
                     if (decInfo.size > 0) {
-                        val outBuf = decoder.getOutputBuffer(decIdx)!!
-                        outBuf.position(decInfo.offset)
-                        outBuf.limit(decInfo.offset + decInfo.size)
+                        val outBuf = decoder.getOutputBuffer(decIdx)
+                        if (outBuf != null) {
+                            outBuf.position(decInfo.offset)
+                            outBuf.limit(decInfo.offset + decInfo.size)
 
-                        // Read shorts directly from the decoder output buffer
-                        val shortCount = decInfo.size / 2
-                        val tempShorts = ShortArray(shortCount)
-                        outBuf.order(ByteOrder.LITTLE_ENDIAN).asShortBuffer().get(tempShorts, 0, shortCount)
+                            // Read shorts directly from the decoder output buffer
+                            val shortCount = decInfo.size / 2
+                            val tempShorts = ShortArray(shortCount)
+                            outBuf.order(ByteOrder.LITTLE_ENDIAN).asShortBuffer().get(tempShorts, 0, shortCount)
 
-                        if (accumulator.size + shortCount > MAX_PCM_SAMPLES) {
-                            // Partial copy to stay within limit
-                            val allowed = MAX_PCM_SAMPLES - accumulator.size
-                            if (allowed > 0) {
-                                accumulator.addAll(tempShorts, allowed)
+                            if (accumulator.size + shortCount > MAX_PCM_SAMPLES) {
+                                // Partial copy to stay within limit
+                                val allowed = MAX_PCM_SAMPLES - accumulator.size
+                                if (allowed > 0) {
+                                    accumulator.addAll(tempShorts, allowed)
+                                }
+                                wasTruncated = true
+                                sawOutputEOS = true // Stop decoding once we hit the limit
+                            } else {
+                                accumulator.addAll(tempShorts, shortCount)
                             }
-                            wasTruncated = true
-                            sawOutputEOS = true // Stop decoding once we hit the limit
-                        } else {
-                            accumulator.addAll(tempShorts, shortCount)
                         }
                     }
                     decoder.releaseOutputBuffer(decIdx, false)
@@ -520,19 +542,118 @@ object ExportService {
     }
 
     /**
-     * Simplified speed/pitch for export using linear interpolation.
-     * Optimized for speed by reducing allocations.
+     * Apply tempo and pitch for export so the rendered file matches the live preview.
+     *
+     * The live player (PlaybackParams) changes TEMPO and PITCH independently:
+     *  - Tempo (speed) changes playback rate WITHOUT changing perceived pitch.
+     *  - Pitch shifts pitch WITHOUT changing duration.
+     *
+     * A naive resample couples them (slowing down also drops pitch). To decouple them
+     * offline we use a simple WSOLA-style time-domain approach:
+     *  1. changeDuration(): time-stretch/compress to the target tempo WITHOUT pitch change
+     *     (overlap-add of small grains).
+     *  2. resampleOnly(): shift pitch by resampling, then restore the original frame count
+     *     with the same grain stretch so duration is preserved.
+     *
+     * This is far more faithful to the preview than the previous coupled implementation.
      */
     private fun applySpeedPitch(pcm: ShortArray, tempo: Float, semitones: Float, channels: Int): ShortArray {
         if (tempo == 1.0f && semitones == 0f) return pcm
-        val pitchFactor = Math.pow(2.0, (semitones / 12.0)).toFloat()
-        val ratio = 1.0f / (tempo.coerceIn(0.25f, 2.0f) * pitchFactor.coerceIn(0.25f, 4.0f))
+        var result = pcm
+
+        // 1) Tempo: change duration, keep pitch.
+        val safeTempo = tempo.coerceIn(0.25f, 2.5f)
+        if (safeTempo != 1.0f) {
+            result = timeStretch(result, safeTempo, channels)
+        }
+
+        // 2) Pitch: shift pitch, keep duration.
+        if (semitones != 0f) {
+            val pitchFactor = Math.pow(2.0, (semitones / 12.0)).toFloat().coerceIn(0.25f, 4.0f)
+            result = pitchShift(result, pitchFactor, channels)
+        }
+        return result
+    }
+
+    /**
+     * Change duration by [tempo] (e.g. 0.8 = 20% slower/longer) without changing pitch,
+     * using grain overlap-add (WSOLA-lite). Grain size ~20ms with 50% overlap.
+     */
+    private fun timeStretch(pcm: ShortArray, tempo: Float, channels: Int): ShortArray {
+        if (tempo == 1.0f) return pcm
         val inFrames = pcm.size / channels
-        val outFrames = (inFrames * ratio).toInt().coerceIn(1, inFrames * 2)
-        if (outFrames == inFrames) return pcm
-        val output = ShortArray(outFrames * channels)
-        val step = 1f / ratio
-        for (frame in 0 until outFrames) {
+        if (inFrames < 2048) {
+            // Too short for granular work — fall back to plain resample (pitch couples, acceptable here).
+            return resampleFrames(pcm, (inFrames / tempo).toInt().coerceAtLeast(1), channels)
+        }
+        val outFrames = (inFrames / tempo).toInt().coerceAtLeast(1)
+        val grain = 2048                     // frames per grain
+        val hopOut = grain / 2               // output hop (50% overlap)
+        val hopIn = hopOut * tempo           // input hop follows tempo
+        val out = FloatArray(outFrames * channels)
+        val norm = FloatArray(outFrames)
+
+        var outPos = 0
+        var inPos = 0f
+        val window = FloatArray(grain) { i ->
+            (0.5 - 0.5 * Math.cos(2.0 * Math.PI * i / (grain - 1))).toFloat() // Hann
+        }
+
+        while (outPos + grain <= outFrames && inPos + grain <= inFrames) {
+            val baseIn = inPos.toInt()
+            for (g in 0 until grain) {
+                val srcIdx = (baseIn + g) * channels
+                val dstFrame = outPos + g
+                val w = window[g]
+                for (ch in 0 until channels) {
+                    out[dstFrame * channels + ch] += pcm[srcIdx + ch].toFloat() * w
+                }
+                norm[dstFrame] += w
+            }
+            outPos += hopOut
+            inPos += hopIn
+        }
+
+        // Normalize by the window sum and convert back to shorts.
+        val result = ShortArray(outFrames * channels)
+        for (f in 0 until outFrames) {
+            val n = if (norm[f] > 1e-4f) norm[f] else 1f
+            for (ch in 0 until channels) {
+                val v = (out[f * channels + ch] / n).toInt()
+                result[f * channels + ch] = v.coerceIn(-32768, 32767).toShort()
+            }
+        }
+        return result
+    }
+
+    /**
+     * Shift pitch by [pitchFactor] (2^(semitones/12)) while preserving duration.
+     * Done by resampling (which changes both pitch & duration), then time-stretching
+     * back to the original length so only the pitch change remains.
+     */
+    private fun pitchShift(pcm: ShortArray, pitchFactor: Float, channels: Int): ShortArray {
+        if (pitchFactor == 1.0f) return pcm
+        val inFrames = pcm.size / channels
+        // Resample: pitch up (factor>1) reads faster -> fewer frames; pitch down -> more frames.
+        val resampledFrames = (inFrames / pitchFactor).toInt().coerceAtLeast(1)
+        var result = resampleFrames(pcm, resampledFrames, channels)
+        // Restore original duration via time-stretch (inverse of the duration change).
+        val durationRatio = resampledFrames.toFloat() / inFrames.toFloat()
+        if (durationRatio != 1.0f) {
+            result = timeStretch(result, durationRatio, channels)
+        }
+        return result
+    }
+
+    /**
+     * Plain linear-interpolation resample to an exact frame count. Helper for the above.
+     */
+    private fun resampleFrames(pcm: ShortArray, targetFrames: Int, channels: Int): ShortArray {
+        val inFrames = pcm.size / channels
+        if (targetFrames == inFrames || targetFrames <= 0) return pcm
+        val output = ShortArray(targetFrames * channels)
+        val step = inFrames.toFloat() / targetFrames.toFloat()
+        for (frame in 0 until targetFrames) {
             val srcPos = frame * step
             val srcFrame = srcPos.toInt().coerceIn(0, inFrames - 2)
             val frac = srcPos - srcFrame
@@ -677,7 +798,10 @@ object ExportService {
                     sample += (layer.pcm[i].toInt() * layer.scaledVolume) shr 15
                 }
             }
-            result[i] = (sample + Short.MIN_VALUE).coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
+            // Clamp the mixed sample to 16-bit range. Adding Short.MIN_VALUE here previously
+            // shifted every sample by half the full scale, severely distorting any export
+            // that had an atmosphere layer active.
+            result[i] = sample.coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
         }
         return result
     }

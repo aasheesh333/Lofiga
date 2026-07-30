@@ -30,7 +30,11 @@ import kotlinx.coroutines.launch
 object AdManager {
 
     private const val TAG = "AdManager"
-    private const val MIN_INTERSTITIAL_INTERVAL = 10000L
+    // Play/AdMob policy-safe cooldowns (per user spec):
+    //  - Interstitial: at most once every 2 minutes, and only on explicit tab switches.
+    //  - Rewarded: strictly user-initiated, at most once every 3 minutes.
+    private const val MIN_INTERSTITIAL_INTERVAL = 120_000L
+    private const val MIN_REWARDED_INTERVAL = 180_000L
     private const val MAX_FAILED_LOADS = 3
     private const val BANNER_REFRESH_INTERVAL_MS = 60_000L
 
@@ -40,6 +44,7 @@ object AdManager {
     private var interstitialAd: InterstitialAd? = null
     private var rewardedAd: RewardedAd? = null
     private var lastInterstitialTime = 0L
+    private var lastRewardedTime = 0L
     private var consecutiveInterstitialFailures = 0
     private var consecutiveRewardedFailures = 0
     private var consentFormAttempts = 0
@@ -230,12 +235,24 @@ object AdManager {
         )
     }
 
+    /**
+     * Shows a rewarded ad. This must ONLY be invoked as a direct result of a
+     * user action (e.g. tapping an explicit "watch ad to unlock" button) to stay
+     * compliant with AdMob's rewarded-ad policy. A 3-minute cooldown applies.
+     */
     fun showRewarded(
         activity: Activity,
         onRewarded: () -> Unit,
         onDismissed: () -> Unit
     ) {
+        val now = System.currentTimeMillis()
+        if (now - lastRewardedTime < MIN_REWARDED_INTERVAL) {
+            Log.d(TAG, "Rewarded skipped - within cooldown window")
+            onDismissed()
+            return
+        }
         if (rewardedAd != null) {
+            lastRewardedTime = now
             rewardedAd?.fullScreenContentCallback = object : FullScreenContentCallback() {
                 override fun onAdDismissedFullScreenContent() {
                     rewardedAd = null
@@ -272,7 +289,9 @@ object AdManager {
      */
     fun getOrCreateBannerAd(context: Context, adUnitId: String): com.google.android.gms.ads.AdView {
         if (bannerAd == null) {
-            val view = com.google.android.gms.ads.AdView(context)
+            // Use the Application context to avoid leaking an Activity for the
+            // lifetime of this process-lifetime singleton AdView.
+            val view = com.google.android.gms.ads.AdView(context.applicationContext)
             view.setAdSize(com.google.android.gms.ads.AdSize.BANNER)
             view.adUnitId = adUnitId
             view.addOnAttachStateChangeListener(object : android.view.View.OnAttachStateChangeListener {
@@ -285,7 +304,7 @@ object AdManager {
             })
             bannerAd = view
         }
-        return bannerAd!!
+        return requireNotNull(bannerAd)
     }
 
     /**

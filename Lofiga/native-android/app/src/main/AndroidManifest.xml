@@ -22,9 +22,9 @@
         android:label="Lofiga"
         android:supportsRtl="true"
         android:theme="@style/Theme.Lofiga"
-        android:largeHeap="true"
+        android:enableOnBackInvokedCallback="true"
         android:extractNativeLibs="true"
-        tools:targetApi="35">
+        tools:targetApi="36">
 
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"

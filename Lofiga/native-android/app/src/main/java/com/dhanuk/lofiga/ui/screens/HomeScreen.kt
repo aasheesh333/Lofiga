@@ -295,7 +295,15 @@ fun HomeScreen(
                             }
                         }
                     } else {
-                        items(sortedSongs, key = { it.dataPath ?: it.uri?.toString() ?: it.title }) { song ->
+                        items(sortedSongs, key = {
+                            // dataPath is non-nullable (default ""); build a stable,
+                            // collision-free key with sensible fallbacks.
+                            when {
+                                it.dataPath.isNotEmpty() -> it.dataPath
+                                it.uri != null -> it.uri.toString()
+                                else -> "song_${it.id}_${it.title}"
+                            }
+                        }) { song ->
                             SongItem(
                                 title = song.title,
                                 artist = song.artist,

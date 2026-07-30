@@ -7,7 +7,7 @@ plugins {
 
 android {
     namespace = System.getenv("PACKAGE_NAME") ?: project.findProperty("PACKAGE_NAME")?.toString() ?: "com.dhanuk.lofiga"
-    compileSdk = 35
+    compileSdk = 36
 
     val admobAppId = System.getenv("ADMOB_APP_ID") ?: project.findProperty("ADMOB_APP_ID")?.toString() ?: ""
     val admobBannerId = System.getenv("ADMOB_BANNER_ID") ?: project.findProperty("ADMOB_BANNER_ID")?.toString() ?: ""
@@ -17,8 +17,8 @@ android {
     defaultConfig {
         applicationId = namespace
         minSdk = 26
-        targetSdk = 35
-        versionCode = System.getenv("VERSION_CODE")?.toIntOrNull() ?: project.findProperty("VERSION_CODE")?.toString()?.toIntOrNull() ?: 2
+        targetSdk = 36
+        versionCode = System.getenv("VERSION_CODE")?.toIntOrNull() ?: project.findProperty("VERSION_CODE")?.toString()?.toIntOrNull() ?: 3
         versionName = System.getenv("VERSION_NAME") ?: project.findProperty("VERSION_NAME")?.toString() ?: "2.0.0"
 
         manifestPlaceholders["ADMOB_APP_ID"] = admobAppId
@@ -113,8 +113,20 @@ dependencies {
 
     implementation("com.google.android.gms:play-services-ads:24.2.0")
     implementation("com.google.android.ump:user-messaging-platform:3.1.0")
-    implementation("com.onesignal:OneSignal:[5.0.0, 5.99.99]")
+    // Pin to a fixed version for reproducible builds (was a floating range).
+    implementation("com.onesignal:OneSignal:5.1.31")
+
+    // Legacy support-v4 media session (kept until Phase B full Media3 session migration).
     implementation("androidx.media:media:1.7.0")
+
+    // Media3: modern playback, session, and offline export (Transformer).
+    val media3Version = "1.5.1"
+    implementation("androidx.media3:media3-exoplayer:$media3Version")
+    implementation("androidx.media3:media3-session:$media3Version")
+    implementation("androidx.media3:media3-ui:$media3Version")
+    implementation("androidx.media3:media3-effect:$media3Version")
+    implementation("androidx.media3:media3-transformer:$media3Version")
+    implementation("androidx.media3:media3-common:$media3Version")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 }

@@ -85,6 +85,7 @@ fun PlayerScreen(
     var showEffects by remember { mutableStateOf(true) }
     var showAtmosphere by remember { mutableStateOf(false) }
     var showExportInfo by remember { mutableStateOf(false) }
+    var showPostExportSupportPrompt by remember { mutableStateOf(false) }
 
     // Scroll states - properly remembered to prevent recreation
     val scrollState = rememberScrollState()
@@ -128,9 +129,10 @@ fun PlayerScreen(
                 }
             }
             viewModel.clearExportedFilePath()
-            context.findActivity()?.let { act ->
-                AdManager.showRewarded(act, onRewarded = {}, onDismissed = {})
-            }
+            // NOTE: rewarded ads must be strictly user-initiated (AdMob policy).
+            // We no longer auto-show a rewarded ad after export. The user can opt
+            // in to watch one via the "Support us" button shown after export.
+            showPostExportSupportPrompt = true
         }
     }
 
@@ -268,15 +270,18 @@ fun PlayerScreen(
                         }
                         Spacer(Modifier.width(12.dp))
                         Column(modifier = Modifier.weight(1f)) {
+                            // Capture a stable local reference to avoid a recomposition
+                            // race NPE (currentTrack is a State delegate read twice).
+                            val track = currentTrack
                             Text(
-                                text = currentTrack!!.title,
+                                text = track?.title.orEmpty(),
                                 style = MaterialTheme.typography.titleLarge,
                                 color = colors.textPrimary,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
                             Text(
-                                text = currentTrack!!.artist,
+                                text = track?.artist.orEmpty(),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = colors.textTertiary,
                                 maxLines = 1,
@@ -817,6 +822,47 @@ fun PlayerScreen(
                 dismissButton = {
                     TextButton(onClick = { viewModel.clearExportError() }) {
                         Text("Close", color = colors.textSecondary)
+                    }
+                }
+            )
+        }
+
+        // ========================
+        // POST-EXPORT SUPPORT PROMPT (user-initiated rewarded ad)
+        // ========================
+        if (showPostExportSupportPrompt) {
+            AlertDialog(
+                onDismissRequest = { showPostExportSupportPrompt = false },
+                containerColor = colors.surface,
+                titleContentColor = colors.textPrimary,
+                textContentColor = colors.textSecondary,
+                title = {
+                    Text(
+                        "Mix exported! 🎧",
+                        fontWeight = FontWeight.Bold,
+                        color = colors.textPrimary
+                    )
+                },
+                text = {
+                    Text(
+                        "Enjoying Lofiga? You can support development by watching a short ad — totally optional.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = colors.textSecondary
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        showPostExportSupportPrompt = false
+                        context.findActivity()?.let { act ->
+                            AdManager.showRewarded(act, onRewarded = {}, onDismissed = {})
+                        }
+                    }) {
+                        Text("Watch Ad", color = colors.textPrimary, fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showPostExportSupportPrompt = false }) {
+                        Text("No Thanks", color = colors.textSecondary)
                     }
                 }
             )

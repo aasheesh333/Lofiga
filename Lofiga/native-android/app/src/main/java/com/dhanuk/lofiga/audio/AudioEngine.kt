@@ -69,6 +69,7 @@ class AudioEngine(private val context: Context) {
     private var fftJob: Job? = null
     @Volatile private var fftCancelled = false
     @Volatile private var wasPlayingBeforeFocusLoss = false
+    @Volatile private var isDucked = false
     @Volatile private var autoPlayOnPrepared = false
 
     // Animation for visualization while FFT is computing
@@ -89,12 +90,16 @@ class AudioEngine(private val context: Context) {
                 pause()
             }
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
-                // Duck the volume temporarily
+                // Duck both the main track AND the atmosphere layers temporarily
+                isDucked = true
                 mainPlayer?.setVolume(0.3f, 0.3f)
+                duckAtmospheres(true)
             }
             AudioManager.AUDIOFOCUS_GAIN -> {
-                // Focus regained
+                // Focus regained - restore full volume on everything
+                isDucked = false
                 mainPlayer?.setVolume(1.0f, 1.0f)
+                duckAtmospheres(false)
                 if (wasPlayingBeforeFocusLoss) {
                     play()
                 }
@@ -819,7 +824,8 @@ class AudioEngine(private val context: Context) {
         }
         if (player == null) return
         val vol = volume.coerceIn(0f, 1f)
-        player.setVolume(vol, vol)
+        val effective = if (isDucked) vol * 0.3f else vol
+        player.setVolume(effective, effective)
         // Start atmosphere player whenever volume > 0, regardless of main track playing state
         // The atmosphere is an independent layer
         if (vol > 0.01f && !player.isPlaying) {
@@ -857,6 +863,21 @@ class AudioEngine(private val context: Context) {
         atmospherePlayers.values.forEach {
             try {
                 if (it.isPlaying) it.pause()
+            } catch (_: Exception) {}
+        }
+    }
+
+    /**
+     * Scales all atmosphere layer volumes down (duck = true) or restores them
+     * (duck = false). Keeps the stored target volumes untouched; only the
+     * applied output level changes.
+     */
+    private fun duckAtmospheres(duck: Boolean) {
+        atmospherePlayers.forEach { (key, player) ->
+            try {
+                val vol = (atmosphereVolumes[key] ?: 0f).coerceIn(0f, 1f)
+                val effective = if (duck) vol * 0.3f else vol
+                player.setVolume(effective, effective)
             } catch (_: Exception) {}
         }
     }

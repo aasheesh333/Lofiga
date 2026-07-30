@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -24,7 +25,9 @@ fun Context.findActivity(): Activity? = when (this) {
     else -> null
 }
 
-private const val TAB_SWITCH_AD_COOLDOWN_MS = 60_000L
+// Interstitials on tab switch are policy-safe only with a long cooldown.
+// Keep this in sync with AdManager.MIN_INTERSTITIAL_INTERVAL (2 minutes).
+private const val TAB_SWITCH_AD_COOLDOWN_MS = 120_000L
 
 @Composable
 fun LofigaMainApp(
@@ -61,6 +64,9 @@ fun LofigaMainApp(
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                // Scaffold already accounts for bottom-bar insets; also respect the
+                // status bar so content isn't drawn under it in edge-to-edge mode.
+                .statusBarsPadding()
                 .padding(paddingValues)
         ) {
             when (selectedIndex) {

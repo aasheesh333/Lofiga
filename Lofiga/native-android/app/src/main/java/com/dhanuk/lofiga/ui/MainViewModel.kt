@@ -187,6 +187,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) { 
                 title = fileName,
                 dataPath = filePath
             )
+            // Not part of the MediaStore library list, so reset the index so
+            // next/previous don't jump to an unrelated library position.
+            _currentTrackIndex.value = -1
             applyPreset(LofiPreset.LofiSlow)
             return true
         } else {
@@ -347,6 +350,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) { 
             title = config.fileName,
             dataPath = config.filePath
         )
+        // Loaded from a saved config (arbitrary file), not the library list —
+        // reset the index so next/previous start from a sensible position.
+        _currentTrackIndex.value = -1
 
         val success = audioEngine.loadTrackFromFile(config.filePath, autoPlay = true)
         if (!success) {
