@@ -62,6 +62,11 @@ object AdManager {
         consecutiveInterstitialFailures = 0
         consecutiveRewardedFailures = 0
         Log.d(TAG, "Failure counters reset")
+        // Don't attempt to load ads before consent has been obtained — the
+        // LofigaApplication applicationScope is responsible for first-time
+        // ad loads after consent completes; this entry point only handles
+        // subsequent foreground re-entry.
+        if (!_isConsentObtained.value) return
         loadInterstitial(context)
         loadRewarded(context)
     }
@@ -77,6 +82,19 @@ object AdManager {
         val params = ConsentRequestParameters.Builder().build()
         val consentInformation = UserMessagingPlatform.getConsentInformation(activity)
 
+        // Google UMP guidance: canRequestAds is the single source of truth for
+        // "may we show personalize / load ads in this region". It is true when
+        // the user has consented OR when no consent form is required in their
+        // region (e.g. users outside EEA/UK/CH). We poll it after every step
+        // rather than synthesising "obtained" from error paths.
+        fun syncCanRequestAds() {
+            val canRequest = consentInformation.canRequestAds
+            if (canRequest && !_isConsentObtained.value) {
+                _isConsentObtained.value = true
+            }
+        }
+        syncCanRequestAds()
+
         consentInformation.requestConsentInfoUpdate(
             activity,
             params,
@@ -84,12 +102,16 @@ object AdManager {
                 if (consentInformation.isConsentFormAvailable) {
                     loadAndShowConsentForm(activity)
                 } else {
-                    _isConsentObtained.value = true
+                    // No form available — rely on canRequestAds.
+                    syncCanRequestAds()
                 }
             },
             { error ->
                 Log.e(TAG, "Consent info update failed: ${error.message}")
-                _isConsentObtained.value = true
+                // Don't synthesise "obtained" from failure — let canRequestAds
+                // decide. (If the user's region needs consent and we couldn't
+                // request it, we should NOT load ads.)
+                syncCanRequestAds()
             }
         )
     }
@@ -97,8 +119,8 @@ object AdManager {
     private fun loadAndShowConsentForm(activity: Activity) {
         consentFormAttempts++
         if (consentFormAttempts >= 2) {
-            Log.w(TAG, "Consent form max attempts reached, treating as obtained")
-            _isConsentObtained.value = true
+            Log.w(TAG, "Consent form max attempts reached; relying on canRequestAds")
+            syncCanRequestAdsFromActivity(activity)
             return
         }
         UserMessagingPlatform.loadConsentForm(activity,
@@ -106,17 +128,34 @@ object AdManager {
                 val consentInformation = UserMessagingPlatform.getConsentInformation(activity)
                 if (consentInformation.consentStatus == ConsentInformation.ConsentStatus.REQUIRED) {
                     consentForm.show(activity) {
-                        loadAndShowConsentForm(activity)
+                        // After form dismissed, refresh canRequestAds and recurse
+                        // in case the form re-shows (REQUIRED can persist briefly).
+                        val ci = UserMessagingPlatform.getConsentInformation(activity)
+                        if (ci.canRequestAds) _isConsentObtained.value = true
+                        if (ci.consentStatus == ConsentInformation.ConsentStatus.REQUIRED
+                            && consentFormAttempts < 2) {
+                            loadAndShowConsentForm(activity)
+                        } else {
+                            _isConsentObtained.value = ci.canRequestAds
+                        }
                     }
                 } else {
-                    _isConsentObtained.value = true
+                    val ci = UserMessagingPlatform.getConsentInformation(activity)
+                    _isConsentObtained.value = ci.canRequestAds
                 }
             },
             { error ->
                 Log.e(TAG, "Consent form load failed: ${error.message}")
-                _isConsentObtained.value = true
+                // Don't synthesise obtained — let canRequestAds decide.
+                val ci = UserMessagingPlatform.getConsentInformation(activity)
+                _isConsentObtained.value = ci.canRequestAds
             }
         )
+    }
+
+    private fun syncCanRequestAdsFromActivity(activity: Activity) {
+        val ci = UserMessagingPlatform.getConsentInformation(activity)
+        _isConsentObtained.value = ci.canRequestAds
     }
 
     // ========================
@@ -125,6 +164,10 @@ object AdManager {
 
     fun loadInterstitial(context: Context) {
         if (_isAdFree.value) return
+        if (!_isConsentObtained.value) {
+            Log.d(TAG, "loadInterstitial: consent pending, deferring")
+            return
+        }
 
         InterstitialAd.load(
             context,
@@ -199,6 +242,10 @@ object AdManager {
     // ========================
 
     fun loadRewarded(context: Context) {
+        if (!_isConsentObtained.value) {
+            Log.d(TAG, "loadRewarded: consent pending, deferring")
+            return
+        }
         RewardedAd.load(
             context,
             BuildConfig.ADMOB_REWARDED_ID,
@@ -321,6 +368,14 @@ object AdManager {
             return
         }
         if (ad.isLoading) return
+        // Per AdMob UMP guidance, ad requests may only fire once the user's
+        // consent has resolved. If consent is still pending, the refresh
+        // loop is deferred; SDK consent helpers re-trigger banner loads
+        // once _isConsentObtained flips true.
+        if (!_isConsentObtained.value) {
+            Log.d(TAG, "startBannerRefresh: consent pending, deferring initial load")
+            return
+        }
 
         if (lastBannerLoadTime == 0L) {
             ad.loadAd(AdRequest.Builder().build())
@@ -336,11 +391,29 @@ object AdManager {
                 if (!current.isAttachedToWindow) continue
                 if (current.isLoading) continue
                 if (current.visibility != android.view.View.VISIBLE) continue
+                if (!_isConsentObtained.value) continue
                 current.loadAd(AdRequest.Builder().build())
                 lastBannerLoadTime = System.currentTimeMillis()
                 Log.d(TAG, "Banner auto-refresh (interval=${BANNER_REFRESH_INTERVAL_MS / 1000}s)")
             }
         }
+    }
+
+    /**
+     * Triggers the first banner load and starts the refresh loop if consent
+     * has just become obtained. Called by [com.dhanuk.lofiga.LofigaApplication]
+     * once consent resolves — without this, a banner that was already attached
+     * before consent was obtained would wait indefinitely for a detach+re-attach
+     * cycle to trigger [startBannerRefresh].
+     */
+    fun onConsentResolved(context: Context) {
+        if (!_isConsentObtained.value) return
+        if (bannerAd?.isAttachedToWindow == true && lastBannerLoadTime == 0L) {
+            bannerAd?.loadAd(AdRequest.Builder().build())
+            lastBannerLoadTime = System.currentTimeMillis()
+            Log.d(TAG, "Banner initial load (post-consent)")
+        }
+        if (bannerRefreshJob?.isActive != true) startBannerRefresh()
     }
 
     fun stopBannerRefresh() {
