@@ -38,7 +38,6 @@ object ExportService {
 
     private val SUPPORTED_FORMATS = listOf("m4a", "wav")
     private val SUPPORTED_BITRATES = listOf("128k", "192k", "256k", "320k")
-    private const val MAX_PCM_SAMPLES = 20_000_000
 
     // Cache for atmosphere PCM data to avoid re-reading WAV files on every export
     // Key format: "{name}_{sampleRate}" e.g. "rain_44100"
@@ -228,7 +227,8 @@ object ExportService {
             }
 
             if (totalFrames > 0) {
-                onProgress?.invoke(0.5f + (frameOffset.toFloat() / totalFrames) * 0.45f)
+                // Encode phase spans 0.95 → 0.99 (decode+effects already covered 0 → 0.95).
+                onProgress?.invoke(0.95f + (frameOffset.toFloat() / totalFrames) * 0.04f)
             }
         }
 
@@ -307,7 +307,6 @@ object ExportService {
 
         fun toShortArray(): ShortArray = data.copyOf(size)
         fun isEmpty(): Boolean = size == 0
-        val isFull: Boolean get() = size >= MAX_PCM_SAMPLES
     }
 
     private fun collectAndProcessPcm(
@@ -347,14 +346,13 @@ object ExportService {
             val accumulator = ShortArrayBuffer()
             var sawInputEOS = false
             var sawOutputEOS = false
-            var wasTruncated = false
 
             // Safety escape: cap total decode iterations so a malformed stream or a
             // misbehaving codec can never spin forever.
-            val maxIterations = 200_000
+            val maxIterations = 500_000
             var iterations = 0
 
-            while (!sawOutputEOS && !accumulator.isFull && iterations < maxIterations) {
+            while (!sawOutputEOS && iterations < maxIterations) {
                 iterations++
                 if (cancelFlag.get()) { decoder.stop(); decoder.release(); extractor.release(); return null }
 
@@ -380,10 +378,10 @@ object ExportService {
                             decoder.queueInputBuffer(inIdx, 0, sampleSize, sampleTimeUs, 0)
                             extractor.advance()
                             // Progress = current presentation time / total duration (both in µs),
-                            // mapped into the decode phase's 0..0.3 window.
+                            // mapped into the decode phase's 0..0.5 window.
                             if (inputDuration > 0) {
                                 val progress = (sampleTimeUs.toFloat() / inputDuration.toFloat())
-                                    .coerceIn(0f, 1f) * 0.3f
+                                    .coerceIn(0f, 1f) * 0.5f
                                 onProgress?.invoke(progress)
                             }
                         }
@@ -406,18 +404,7 @@ object ExportService {
                             val shortCount = decInfo.size / 2
                             val tempShorts = ShortArray(shortCount)
                             outBuf.order(ByteOrder.LITTLE_ENDIAN).asShortBuffer().get(tempShorts, 0, shortCount)
-
-                            if (accumulator.size + shortCount > MAX_PCM_SAMPLES) {
-                                // Partial copy to stay within limit
-                                val allowed = MAX_PCM_SAMPLES - accumulator.size
-                                if (allowed > 0) {
-                                    accumulator.addAll(tempShorts, allowed)
-                                }
-                                wasTruncated = true
-                                sawOutputEOS = true // Stop decoding once we hit the limit
-                            } else {
-                                accumulator.addAll(tempShorts, shortCount)
-                            }
+                            accumulator.addAll(tempShorts, shortCount)
                         }
                     }
                     decoder.releaseOutputBuffer(decIdx, false)
@@ -432,20 +419,16 @@ object ExportService {
             var pcmShorts = accumulator.toShortArray()
             if (pcmShorts.isEmpty()) return pcmShorts
 
-            if (wasTruncated) {
-                android.util.Log.w("ExportService", "Track truncated to $MAX_PCM_SAMPLES samples (~${MAX_PCM_SAMPLES / 44100 / 2}s of audio)")
-            }
-
             if (inputChannels == 1) {
                 pcmShorts = monoToStereo(pcmShorts)
             }
 
             if (inputSampleRate != 44100) {
-                onProgress?.invoke(0.4f)
+                onProgress?.invoke(0.55f)
                 pcmShorts = resamplePcm(pcmShorts, inputSampleRate, 44100, 2)
             }
 
-            onProgress?.invoke(0.5f)
+            onProgress?.invoke(0.6f)
             if (isPresetActive(preset)) {
                 val processed = applyPresetEffects(pcmShorts, 44100, 2, preset)
                 onProgress?.invoke(0.8f)
