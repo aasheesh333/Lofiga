@@ -21,6 +21,7 @@ import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
+import com.dhanuk.lofiga.model.MoodTag
 import com.dhanuk.lofiga.model.PresetValues
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -51,6 +52,14 @@ class AudioEngine(private val context: Context) {
     private val _fftData = MutableStateFlow(List(16) { 0f })
     val fftData: StateFlow<List<Float>> = _fftData.asStateFlow()
 
+    // --- Mood tags (C.2) ---
+    // Per-track MoodTag, keyed by the same AudioTrack.id (Long) used by
+    // MainViewModel's filteredSongs. Updated after a track's FFT precompute
+    // completes — the mood is derived from the same spectrum bins we already
+    // have, so there's no extra decode work.
+    private val _moodTags = MutableStateFlow<Map<Long, MoodTag>>(emptyMap())
+    val moodTags: StateFlow<Map<Long, MoodTag>> = _moodTags.asStateFlow()
+
     data class WaveformSnapshot(val data: List<Float>, val seq: Long)
 
     private val _error = MutableStateFlow<String?>(null)
@@ -58,6 +67,10 @@ class AudioEngine(private val context: Context) {
 
     var currentTrackTitle: String = ""
     var currentTrackArtist: String = ""
+    /** MediaStore id (or 0 for file-picked tracks) of the currently-loaded
+     *  track. Used as the key into [moodTags] so the FFT precompute can stash
+     *  a mood classification once it has the spectrum in hand. */
+    var currentTrackId: Long = 0
     var onPlaybackStateChanged: ((isPlaying: Boolean) -> Unit)? = null
 
     private var exoPlayer: ExoPlayer? = null
@@ -652,6 +665,10 @@ class AudioEngine(private val context: Context) {
             } finally {
                 extractor.release()
             }
+            // C.2: derive a mood classification from the spectrum we just built.
+            // (Identical block exists in the filePath overload — kept inline rather
+            // than extracted to keep the algorithm local to its caller.)
+            runCatching { stashMoodTagForCurrentTrack() }
             animatingWaveform = false
             android.util.Log.i("AudioEngine", "FFT precompute done: ${precomputedFrames.size} frames")
             true
@@ -677,6 +694,11 @@ class AudioEngine(private val context: Context) {
             } finally {
                 extractor.release()
             }
+            // C.2: same mood-classification step as the uri overload.
+            // For file-picked tracks currentTrackId == 0, so the tag is keyed
+            // under 0 — the library filter (keyed by MediaStore ids only) will
+            // simply ignore it, which is fine for now.
+            runCatching { stashMoodTagForCurrentTrack() }
             animatingWaveform = false
             android.util.Log.i("AudioEngine", "FFT precompute done: ${precomputedFrames.size} frames")
             true
@@ -686,6 +708,37 @@ class AudioEngine(private val context: Context) {
         } finally {
             animatingWaveform = false
         }
+    }
+
+    /**
+     * Mean spectral centroid across all precomputed frames, mapped to a [MoodTag]
+     * and stashed in [_moodTags] under [currentTrackId]. Cheap: O(frames * 16)
+     * — runs once after the FFT pass. Bails out when there are no frames yet
+     * (cancelled before any window was processed).
+     */
+    private fun stashMoodTagForCurrentTrack() {
+        val frames = synchronized(framesLock) { precomputedFrames.toList() }
+        if (frames.isEmpty()) return
+        var centroidSum = 0f
+        for (frame in frames) {
+            val mags = frame.magnitudes
+            var totalMass = 0f
+            for (band in mags.indices) totalMass += mags[band]
+            if (totalMass <= 1e-6f) continue
+            var cumMass = 0f
+            var centroid = 0f
+            for (band in mags.indices) {
+                cumMass += mags[band]
+                if (cumMass >= totalMass * 0.5f) {
+                    centroid = band.toFloat()
+                    break
+                }
+            }
+            centroidSum += centroid
+        }
+        val meanCentroid = centroidSum / frames.size
+        val tag = MoodTag.fromCentroid(meanCentroid)
+        _moodTags.value = _moodTags.value + (currentTrackId to tag)
     }
 
     /**

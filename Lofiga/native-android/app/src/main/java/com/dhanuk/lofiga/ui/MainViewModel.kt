@@ -33,6 +33,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) { 
     private val _allSongs = MutableStateFlow<List<AudioTrack>>(emptyList())
     val allSongs: StateFlow<List<AudioTrack>> = _allSongs.asStateFlow()
 
+    /** C.2: per-track mood classifications (keyed by MediaStore AudioTrack.id),
+     *  populated by AudioEngine as each track's FFT precompute completes. */
+    val moodTags: StateFlow<Map<Long, MoodTag>> = audioEngine.moodTags
+
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
 
@@ -155,6 +159,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) { 
     fun loadTrack(track: AudioTrack) {
         audioEngine.currentTrackTitle = track.title
         audioEngine.currentTrackArtist = track.artist
+        audioEngine.currentTrackId = track.id  // C.2: used to key the mood tag
         val success = track.uri?.let { audioEngine.loadTrack(it, autoPlay = true) } ?: false
         if (success) {
             _currentTrack.value = track
@@ -168,6 +173,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) { 
     fun loadTrackFromFile(filePath: String, fileName: String): Boolean {
         audioEngine.currentTrackTitle = fileName
         audioEngine.currentTrackArtist = ""
+        audioEngine.currentTrackId = 0  // file-picked tracks have no MediaStore id
         val success = audioEngine.loadTrackFromFile(filePath, autoPlay = true)
         if (success) {
             _currentTrack.value = AudioTrack(
