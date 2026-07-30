@@ -159,7 +159,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) { 
         if (success) {
             _currentTrack.value = track
             _currentTrackIndex.value = filteredSongs.value.indexOf(track)
-            applyPreset(LofiPreset.LofiSlow)
+            applyPresetOnLoad()
         } else {
             _snackbarMessage.tryEmit(audioEngine.error.value ?: "Failed to load track")
         }
@@ -177,7 +177,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) { 
             // Not part of the MediaStore library list, so reset the index so
             // next/previous don't jump to an unrelated library position.
             _currentTrackIndex.value = -1
-            applyPreset(LofiPreset.LofiSlow)
+            applyPresetOnLoad()
             return true
         } else {
             _snackbarMessage.tryEmit(audioEngine.error.value ?: "Failed to load track")
@@ -212,6 +212,44 @@ class MainViewModel(application: Application) : AndroidViewModel(application) { 
     }
 
     // --- Presets ---
+
+    /**
+     * Tracks whether the user has loaded at least one track this session.
+     * The first load defaults to the [LofiPreset.LofiSlow] baseline so users
+     * opening the app for the first time still get the signature slowed+reverb
+     * vibe; subsequent loads in the same session keep whatever the user is
+     * working with (C.1: preset carryover across tracks).
+     */
+    private var firstLoadOfSession = true
+
+    /**
+     * Pushes the live [_currentValues] into the [AudioEngine] without touching
+     * the [_currentPreset] / [_selectedCustomPresetId] slots the UI shows.
+     * Used by [loadTrack] / [loadTrackFromFile] to re-apply the user's tweaks
+     * to a freshly-created ExoPlayer instance (loadTrack tears the player down
+     * then reconstructs it, dropping PlaybackParameters + Equalizer/Reverb state).
+     */
+    private fun applyCurrentValuesToEngine() {
+        val v = _currentValues.value
+        audioEngine.setSpeedAndPitch(v.tempo, v.pitch)
+        audioEngine.setReverbAndDelay(v.reverb, v.delay)
+        audioEngine.setBassBoost(v.bass)
+        audioEngine.setTrebleCut(v.trebleCut)
+        audioEngine.setAllAtmosphereVolumes(v)
+    }
+
+    private fun applyPresetOnLoad() {
+        if (firstLoadOfSession) {
+            // First track of the session: classic Lofiga default, so new users
+            // opening the app hear the signature slowed+reverb sound, not clean audio.
+            applyPreset(LofiPreset.LofiSlow)
+            firstLoadOfSession = false
+        } else {
+            // Subsequent tracks in the same session: keep whatever the user is
+            // tweaking — no silent LofiSlow reset midsession. C.1.
+            applyCurrentValuesToEngine()
+        }
+    }
 
     fun applyPreset(preset: LofiPreset) {
         _currentPreset.value = preset
