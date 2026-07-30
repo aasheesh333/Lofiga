@@ -283,12 +283,19 @@ class AudioEngine(private val context: Context) {
                             }
                         }
                         // Initialize the audiofx chain on ExoPlayer's audio session.
-                        scope.launch(Dispatchers.Default) {
-                            try {
-                                initEffects(player.audioSessionId)
-                            } catch (e: Exception) {
-                                Log.e("AudioEngine", "Effects init failed: ${e.message}")
-                            }
+                        // Run synchronously on the player callback thread (this
+                        // is the ExoPlayer application-thread) — the audiofx
+                        // constructors are not slow enough to justify a
+                        // background coroutine, and running them inline avoids
+                        // the race where a rapid track-switch would
+                        // releaseEffects() while a previous initEffects()
+                        // coroutine was still half-building. Removing the
+                        // launch also fixes the half-builtin audiofx leak
+                        // the audit flagged as F3.
+                        try {
+                            initEffects(player.audioSessionId)
+                        } catch (e: Exception) {
+                            Log.e("AudioEngine", "Effects init failed: ${e.message}")
                         }
                         val myGen = fftGeneration
                         fftJob = scope.launch(Dispatchers.IO) {
@@ -308,6 +315,22 @@ class AudioEngine(private val context: Context) {
                 override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
                     _error.value = "$errorPrefix: ${error.message}"
                     Log.e("AudioEngine", "Player error: ${error.message}", error)
+                }
+
+                override fun onAudioSessionIdChanged(audioSessionId: Int) {
+                    // ExoPlayer fires this when its audio-sink session id changes —
+                    // typically on a routing change (BT disconnect, new device).
+                    // audiofx (PresetReverb / BassBoost / Equalizer) are bound to
+                    // an audio session id; binding to the old session id quietly
+                    // no-ops the effects. Re-init on the new session so the
+                    // user's effects stay applied across the route change. This
+                    // is the audit's F4 issue.
+                    Log.i("AudioEngine", "Audio session id changed -> $audioSessionId; re-initializing effects")
+                    try {
+                        initEffects(audioSessionId)
+                    } catch (e: Exception) {
+                        Log.e("AudioEngine", "Effects re-init on session change failed: ${e.message}")
+                    }
                 }
             })
 
@@ -510,6 +533,11 @@ class AudioEngine(private val context: Context) {
     // --- Audio Effects ---
 
     private fun initEffects(audioSessionId: Int) {
+        // Release any previous audiofx first — when called via the
+        // onAudioSessionIdChanged routing callback, we're re-binding to a new
+        // session; when called fresh after a track switch, caller has already
+        // invoked releaseEffects() but this is a defensive no-op in that case.
+        try { releaseEffects() } catch (_: Exception) {}
         try {
             reverb = PresetReverb(EFFECT_PRIORITY, audioSessionId).apply {
                 enabled = true
