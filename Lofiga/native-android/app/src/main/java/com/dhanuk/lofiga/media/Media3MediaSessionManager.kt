@@ -8,6 +8,7 @@ import android.os.Build
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaSession
+import androidx.media3.session.MediaSession.Token as MediaSessionToken
 import com.dhanuk.lofiga.MainActivity
 
 /**
@@ -51,7 +52,7 @@ class Media3MediaSessionManager(private val context: Context) {
     val session: MediaSession? get() = mediaSession
 
     /** Token (for notification wiring / controller registration). */
-    val sessionToken: MediaSession.Token? get() = mediaSession?.token
+    val sessionToken: MediaSessionToken? get() = mediaSession?.token
 
     fun isActive(): Boolean = mediaSession != null
 
