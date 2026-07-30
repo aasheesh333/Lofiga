@@ -5,6 +5,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -161,10 +162,66 @@ fun HeaderChip(
     }
 }
 
+/**
+ * Collapsible section card used on the player screen for the "EFFECTS" and
+ * "ATMOSPHERE" blocks. Both follow the same structural pattern (16dp-rounded
+ * Surface + clickable header Row + divider + content Column) — extracted so the
+ * two instances stay visually consistent and future sections can re-use it.
+ *
+ * Uses the M3 surfaceContainerLow tonal role for an M3-card look (lifts above
+ * the ambient background without needing a shadow). The expand/collapse icon
+ * auto-toggles based on [expanded].
+ */
 @Composable
-fun EffectSlider(
-    value: Float,
-    onValueChange: (Float) -> Unit,
+fun ExpandableSection(
+    icon: ImageVector,
+    title: String,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    val colors = LocalAppColors.current
+    Surface(
+        modifier = modifier.fillMaxWidth().padding(horizontal = 4.dp),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow
+    ) {
+        Column {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onToggle() }
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(icon, contentDescription = null, tint = colors.textPrimary, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = colors.textPrimary,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f)
+                )
+                Icon(
+                    if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                    contentDescription = null,
+                    tint = colors.textTertiary,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+            if (expanded) {
+                HorizontalDivider(color = colors.outline, thickness = 0.5.dp)
+                Column(
+                    modifier = Modifier.padding(12.dp),
+                    content = content
+                )
+            }
+        }
+    }
+}
+
     label: String,
     displayValue: String? = null,
     icon: @Composable (() -> Unit)? = null,

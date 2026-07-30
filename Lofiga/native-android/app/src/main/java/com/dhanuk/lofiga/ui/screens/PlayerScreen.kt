@@ -387,218 +387,160 @@ fun PlayerScreen(
                     Spacer(Modifier.height(8.dp))
 
                     // --- Effects Section (Card-based layout) ---
-                    Surface(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
-                        shape = RoundedCornerShape(16.dp),
-                        color = colors.surface.copy(alpha = 0.5f)
+                    ExpandableSection(
+                        icon = Icons.Outlined.Tune,
+                        title = "EFFECTS",
+                        expanded = showEffects,
+                        onToggle = { showEffects = !showEffects }
                     ) {
-                        Column {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { showEffects = !showEffects }
-                                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(Icons.Outlined.Tune, contentDescription = null, tint = colors.textPrimary, modifier = Modifier.size(18.dp))
-                                Spacer(Modifier.width(8.dp))
-                                Text(
-                                    text = "EFFECTS",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = colors.textPrimary,
-                                    fontWeight = FontWeight.SemiBold,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                Icon(
-                                    if (showEffects) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
-                                    contentDescription = null,
-                                    tint = colors.textTertiary,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-                            if (showEffects) {
-                                HorizontalDivider(color = colors.outline, thickness = 0.5.dp)
-                                Column(modifier = Modifier.padding(12.dp)) {
-                                    // Card-based effect grid (2 columns)
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        // Tempo Card
-                                        EffectCard(
-                                            modifier = Modifier.weight(1f),
-                                            icon = Icons.Outlined.Speed,
-                                            label = "Tempo",
-                                            value = "${(currentValues.tempo * 100).toInt()}%",
-                                            sliderValue = currentValues.tempo,
-                                            onSliderChange = { viewModel.updateTempo(it) }
-                                        )
-                                        // Pitch Card
-                                        val semitones = currentValues.pitch
-                                        val pitchLabel = if (semitones >= 0) "+" + "%.1f".format(semitones) + " st" else "%.1f".format(semitones) + " st"
-                                        EffectCard(
-                                            modifier = Modifier.weight(1f),
-                                            icon = Icons.Outlined.Tune,
-                                            label = "Pitch",
-                                            value = pitchLabel,
-                                            sliderValue = (currentValues.pitch + 5f) / 10f,
-                                            onSliderChange = { viewModel.updatePitch(it * 10f - 5f) }
-                                        )
-                                    }
-                                    Spacer(Modifier.height(8.dp))
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        // Reverb Card
-                                        EffectCard(
-                                            modifier = Modifier.weight(1f),
-                                            icon = Icons.Outlined.Forward30,
-                                            label = "Reverb",
-                                            value = "${(currentValues.reverb * 100).toInt()}%",
-                                            sliderValue = currentValues.reverb,
-                                            onSliderChange = { viewModel.updateReverb(it) }
-                                        )
-                                        // Delay Card
-                                        EffectCard(
-                                            modifier = Modifier.weight(1f),
-                                            icon = Icons.Outlined.Timeline,
-                                            label = "Delay",
-                                            value = "${(currentValues.delay * 100).toInt()}%",
-                                            sliderValue = currentValues.delay,
-                                            onSliderChange = { viewModel.updateDelay(it) }
-                                        )
-                                    }
-                                    Spacer(Modifier.height(8.dp))
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        // Bass Card
-                                        EffectCard(
-                                            modifier = Modifier.weight(1f),
-                                            icon = Icons.Outlined.Equalizer,
-                                            label = "Bass",
-                                            value = "${(currentValues.bass * 100).toInt()}%",
-                                            sliderValue = currentValues.bass,
-                                            onSliderChange = { viewModel.updateBass(it) }
-                                        )
-                                        // Treble Card
-                                        EffectCard(
-                                            modifier = Modifier.weight(1f),
-                                            icon = Icons.Outlined.GraphicEq,
-                                            label = "Treble Cut",
-                                            value = "${(currentValues.trebleCut * 100).toInt()}%",
-                                            sliderValue = currentValues.trebleCut,
-                                            onSliderChange = { viewModel.updateTrebleCut(it) }
-                                        )
-                                    }
-                                }
-                            }
+                        // Card-based effect grid (2 columns)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            // Tempo Card
+                            EffectCard(
+                                modifier = Modifier.weight(1f),
+                                icon = Icons.Outlined.Speed,
+                                label = "Tempo",
+                                value = "${(currentValues.tempo * 100).toInt()}%",
+                                sliderValue = currentValues.tempo,
+                                onSliderChange = { viewModel.updateTempo(it) }
+                            )
+                            // Pitch Card
+                            val semitones = currentValues.pitch
+                            val pitchLabel = if (semitones >= 0) "+" + "%.1f".format(semitones) + " st" else "%.1f".format(semitones) + " st"
+                            EffectCard(
+                                modifier = Modifier.weight(1f),
+                                icon = Icons.Outlined.Tune,
+                                label = "Pitch",
+                                value = pitchLabel,
+                                sliderValue = (currentValues.pitch + 5f) / 10f,
+                                onSliderChange = { viewModel.updatePitch(it * 10f - 5f) }
+                            )
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            // Reverb Card
+                            EffectCard(
+                                modifier = Modifier.weight(1f),
+                                icon = Icons.Outlined.Forward30,
+                                label = "Reverb",
+                                value = "${(currentValues.reverb * 100).toInt()}%",
+                                sliderValue = currentValues.reverb,
+                                onSliderChange = { viewModel.updateReverb(it) }
+                            )
+                            // Delay Card
+                            EffectCard(
+                                modifier = Modifier.weight(1f),
+                                icon = Icons.Outlined.Timeline,
+                                label = "Delay",
+                                value = "${(currentValues.delay * 100).toInt()}%",
+                                sliderValue = currentValues.delay,
+                                onSliderChange = { viewModel.updateDelay(it) }
+                            )
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            // Bass Card
+                            EffectCard(
+                                modifier = Modifier.weight(1f),
+                                icon = Icons.Outlined.Equalizer,
+                                label = "Bass",
+                                value = "${(currentValues.bass * 100).toInt()}%",
+                                sliderValue = currentValues.bass,
+                                onSliderChange = { viewModel.updateBass(it) }
+                            )
+                            // Treble Card
+                            EffectCard(
+                                modifier = Modifier.weight(1f),
+                                icon = Icons.Outlined.GraphicEq,
+                                label = "Treble Cut",
+                                value = "${(currentValues.trebleCut * 100).toInt()}%",
+                                sliderValue = currentValues.trebleCut,
+                                onSliderChange = { viewModel.updateTrebleCut(it) }
+                            )
                         }
                     }
 
                     Spacer(Modifier.height(8.dp))
 
                     // --- Atmosphere Section ---
-                    Surface(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
-                        shape = RoundedCornerShape(16.dp),
-                        color = colors.surface.copy(alpha = 0.5f)
+                    ExpandableSection(
+                        icon = Icons.Outlined.Cloud,
+                        title = "ATMOSPHERE",
+                        expanded = showAtmosphere,
+                        onToggle = { showAtmosphere = !showAtmosphere }
                     ) {
-                        Column {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { showAtmosphere = !showAtmosphere }
-                                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(Icons.Outlined.Cloud, contentDescription = null, tint = colors.textPrimary, modifier = Modifier.size(18.dp))
-                                Spacer(Modifier.width(8.dp))
-                                Text(
-                                    text = "ATMOSPHERE",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = colors.textPrimary,
-                                    fontWeight = FontWeight.SemiBold,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                Icon(
-                                    if (showAtmosphere) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
-                                    contentDescription = null,
-                                    tint = colors.textTertiary,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-                            if (showAtmosphere) {
-                                HorizontalDivider(color = colors.outline, thickness = 0.5.dp)
-                                Column(modifier = Modifier.padding(16.dp)) {
-                                    Text(
-                                        "Add background ambiance to your mix",
-                                        color = colors.textTertiary,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        modifier = Modifier.padding(bottom = 12.dp)
-                                    )
+                        Text(
+                            "Add background ambiance to your mix",
+                            color = colors.textTertiary,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(bottom = 12.dp)
+                        )
 
-                                    // Atmosphere sliders - each with proper label & icon
-                                    remember { listOf(
-                                        Triple("rain", "Rain", Icons.Outlined.WaterDrop),
-                                        Triple("vinyl", "Vinyl", Icons.Outlined.DiscFull),
-                                        Triple("wind", "Wind", Icons.Outlined.Air),
-                                        Triple("tape", "Tape", Icons.Outlined.FiberManualRecord)
-                                    ) }.forEach { (key, label, icon) ->
-                                        val volume = when (key) {
-                                            "rain" -> currentValues.rainVolume
-                                            "vinyl" -> currentValues.vinylVolume
-                                            "wind" -> currentValues.windVolume
-                                            "tape" -> currentValues.tapeVolume
-                                            else -> 0f
-                                        }
-                                        val isActive = volume > 0.01f
-                                        Surface(
-                                            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                                            shape = RoundedCornerShape(12.dp),
-                                            color = if (isActive) colors.textPrimary.copy(alpha = 0.1f) else colors.surfaceHighlight,
-                                            border = BorderStroke(
-                                                1.dp,
-                                                if (isActive) colors.textPrimary.copy(alpha = 0.3f) else colors.outline
-                                            )
-                                        ) {
-                                            Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
-                                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                                    Icon(
-                                                        icon,
-                                                        contentDescription = label,
-                                                        tint = if (isActive) colors.textPrimary else colors.textTertiary,
-                                                        modifier = Modifier.size(18.dp)
-                                                    )
-                                                    Spacer(Modifier.width(8.dp))
-                                                    Text(
-                                                        text = label,
-                                                        style = MaterialTheme.typography.bodyMedium,
-                                                        color = if (isActive) colors.textPrimary else colors.textSecondary,
-                                                        fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Normal
-                                                    )
-                                                    Spacer(Modifier.weight(1f))
-                                                    Text(
-                                                        text = "${(volume * 100).toInt()}%",
-                                                        style = MaterialTheme.typography.bodySmall,
-                                                        color = if (isActive) colors.textPrimary else colors.textTertiary
-                                                    )
-                                                }
-                                                Slider(
-                                                    value = volume,
-                                                    onValueChange = { viewModel.updateAtmosphere(key, it) },
-                                                    modifier = Modifier.fillMaxWidth().height(24.dp),
-                                                    colors = SliderDefaults.colors(
-                                                        thumbColor = colors.textPrimary,
-                                                        activeTrackColor = colors.textPrimary,
-                                                        inactiveTrackColor = colors.outline
-                                                    )
-                                                )
-                                            }
-                                        }
+                        // Atmosphere sliders - each with proper label & icon
+                        remember { listOf(
+                            Triple("rain", "Rain", Icons.Outlined.WaterDrop),
+                            Triple("vinyl", "Vinyl", Icons.Outlined.DiscFull),
+                            Triple("wind", "Wind", Icons.Outlined.Air),
+                            Triple("tape", "Tape", Icons.Outlined.FiberManualRecord)
+                        ) }.forEach { (key, label, icon) ->
+                            val volume = when (key) {
+                                "rain" -> currentValues.rainVolume
+                                "vinyl" -> currentValues.vinylVolume
+                                "wind" -> currentValues.windVolume
+                                "tape" -> currentValues.tapeVolume
+                                else -> 0f
+                            }
+                            val isActive = volume > 0.01f
+                            Surface(
+                                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                                shape = RoundedCornerShape(12.dp),
+                                color = if (isActive) colors.textPrimary.copy(alpha = 0.1f) else colors.surfaceHighlight,
+                                border = BorderStroke(
+                                    1.dp,
+                                    if (isActive) colors.textPrimary.copy(alpha = 0.3f) else colors.outline
+                                )
+                            ) {
+                                Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            icon,
+                                            contentDescription = label,
+                                            tint = if (isActive) colors.textPrimary else colors.textTertiary,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Spacer(Modifier.width(8.dp))
+                                        Text(
+                                            text = label,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = if (isActive) colors.textPrimary else colors.textSecondary,
+                                            fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Normal
+                                        )
+                                        Spacer(Modifier.weight(1f))
+                                        Text(
+                                            text = "${(volume * 100).toInt()}%",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = if (isActive) colors.textPrimary else colors.textTertiary
+                                        )
                                     }
+                                    Slider(
+                                        value = volume,
+                                        onValueChange = { viewModel.updateAtmosphere(key, it) },
+                                        modifier = Modifier.fillMaxWidth().height(24.dp),
+                                        colors = SliderDefaults.colors(
+                                            thumbColor = colors.textPrimary,
+                                            activeTrackColor = colors.textPrimary,
+                                            inactiveTrackColor = colors.outline
+                                        )
+                                    )
                                 }
                             }
                         }
