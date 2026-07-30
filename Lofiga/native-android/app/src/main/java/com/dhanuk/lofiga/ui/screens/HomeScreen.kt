@@ -1,9 +1,11 @@
 package com.dhanuk.lofiga.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -35,6 +37,18 @@ enum class SortOption(val label: String) {
     ARTIST("Artist")
 }
 
+/**
+ * C.2 — library filter by auto-detected track mood. ALL shows every track
+ * (including ones whose mood hasn't been computed yet); the others narrow
+ * the list to tracks whose [com.dhanuk.lofiga.model.MoodTag] matches.
+ */
+enum class MoodFilterOption(val label: String, val tag: com.dhanuk.lofiga.model.MoodTag?) {
+    ALL("All", null),
+    CHILL("Chill", com.dhanuk.lofiga.model.MoodTag.CHILL),
+    MID("Mid", com.dhanuk.lofiga.model.MoodTag.MID),
+    ENERGETIC("Energetic", com.dhanuk.lofiga.model.MoodTag.ENERGETIC)
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
@@ -49,10 +63,12 @@ fun HomeScreen(
     val filteredSongs by viewModel.filteredSongs.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
     val currentTrack by viewModel.currentTrack.collectAsState()
+    val moodTags by viewModel.moodTags.collectAsState()   // C.2: id -> MoodTag
 
     var sortOption by remember { mutableStateOf(SortOption.DATE_ADDED) }
     var showSortMenu by remember { mutableStateOf(false) }
     var isRefreshing by remember { mutableStateOf(false) }
+    var moodFilter by remember { mutableStateOf(MoodFilterOption.ALL) }
 
     LaunchedEffect(isRefreshing) {
         if (isRefreshing) {
@@ -62,13 +78,20 @@ fun HomeScreen(
         }
     }
 
-    val sortedSongs = remember(filteredSongs, sortOption) {
+    val sortedSongs = remember(filteredSongs, sortOption, moodFilter, moodTags) {
+        // C.2: apply mood filter BEFORE sort so the chip count reflects only
+        // tagged-matching tracks. ALL keeps untagged tracks visible too.
+        val moodFiltered = if (moodFilter.tag == null) {
+            filteredSongs
+        } else {
+            filteredSongs.filter { track -> moodTags[track.id] == moodFilter.tag }
+        }
         when (sortOption) {
-            SortOption.DATE_ADDED -> filteredSongs.sortedByDescending { it.dateAdded }
-            SortOption.NAME -> filteredSongs.sortedBy { it.title.lowercase() }
-            SortOption.DURATION -> filteredSongs.sortedBy { it.durationMs }
-            SortOption.SIZE -> filteredSongs.sortedByDescending { it.fileSize }
-            SortOption.ARTIST -> filteredSongs.sortedBy { it.artist.lowercase() }
+            SortOption.DATE_ADDED -> moodFiltered.sortedByDescending { it.dateAdded }
+            SortOption.NAME -> moodFiltered.sortedBy { it.title.lowercase() }
+            SortOption.DURATION -> moodFiltered.sortedBy { it.durationMs }
+            SortOption.SIZE -> moodFiltered.sortedByDescending { it.fileSize }
+            SortOption.ARTIST -> moodFiltered.sortedBy { it.artist.lowercase() }
         }
     }
 
@@ -174,6 +197,39 @@ fun HomeScreen(
                                             }
                                         )
                                     }
+                                }
+                            }
+                        }
+                    }
+
+                    // C.2 — Mood filter chip row. Visible only when there's at
+                    // least one tagged track so first-time users with an untagged
+                    // library don't see a useless empty row. Updates as moodTags
+                    // fills in via background precompute.
+                    if (moodTags.isNotEmpty()) {
+                        item {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState())
+                                    .padding(bottom = 8.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                MoodFilterOption.entries.forEach { option ->
+                                    FilterChip(
+                                        selected = moodFilter == option,
+                                        onClick = { moodFilter = option },
+                                        label = { Text(option.label, style = MaterialTheme.typography.labelMedium) },
+                                        leadingIcon = if (moodFilter == option) {
+                                            {
+                                                Icon(
+                                                    Icons.Outlined.Check,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(14.dp)
+                                                )
+                                            }
+                                        } else null
+                                    )
                                 }
                             }
                         }
