@@ -38,6 +38,12 @@ fun LofigaMainApp(
     var lastInterstitialTime by remember { mutableStateOf(0L) }
     val context = LocalContext.current
 
+    // Track-loaded state drives the "now playing" badge on the Player tab.
+    // Show it whenever a track has been loaded, regardless of play/pause,
+    // and only when the user isn't already on the Player tab (avoids redundancy).
+    val currentTrack by viewModel.currentTrack.collectAsState()
+    val showNowPlayingBadge = currentTrack != null && selectedIndex != 1
+
     LaunchedEffect(selectedIndex) {
         if (previousIndex != selectedIndex) {
             val now = System.currentTimeMillis()
@@ -57,7 +63,8 @@ fun LofigaMainApp(
                 selectedIndex = selectedIndex,
                 onItemSelected = { index ->
                     selectedIndex = index
-                }
+                },
+                showNowPlayingBadge = showNowPlayingBadge
             )
         }
     ) { paddingValues ->

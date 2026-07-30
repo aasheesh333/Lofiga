@@ -53,37 +53,66 @@ fun AmbientBackground(modifier: Modifier = Modifier) {
 fun LofigaNavigationBar(
     selectedIndex: Int,
     onItemSelected: (Int) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** When true, the Player tab (index 1) shows a small "now playing"
+     *  dot overlay so users can see at a glance that audio is live. */
+    showNowPlayingBadge: Boolean = false
 ) {
     val colors = LocalAppColors.current
     NavigationBar(
         modifier = modifier,
-        containerColor = colors.surface,
+        containerColor = MaterialTheme.colorScheme.surfaceContainer,
         contentColor = colors.textPrimary,
-        tonalElevation = 0.dp,
-        windowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0)
+        // Keep the tonal lift modest — we want the bar to feel like part of
+        // the surface, not float. M3 surfaceContainer handles the contrast.
+        tonalElevation = 3.dp
+        // ImmutableListNavigationBarDefaults.windowInsets() (the M3 default)
+        // already pushes the bar above the gesture-nav pill on devices that
+        // ship with it, so we don't override it.
     ) {
         listOf("Browse", "Player", "Exports", "Settings").forEachIndexed { index, label ->
             NavigationBarItem(
                 selected = selectedIndex == index,
                 onClick = { onItemSelected(index) },
                 icon = {
-                    Icon(
-                        imageVector = when (index) {
-                            0 -> Icons.Outlined.LibraryMusic
-                            1 -> Icons.Outlined.Equalizer
-                            2 -> Icons.Outlined.Folder
-                            3 -> Icons.Outlined.Settings
-                            else -> Icons.Outlined.MusicNote
-                        },
-                        contentDescription = label,
-                        modifier = Modifier.size(22.dp)
-                    )
+                    // Wrap the icon in a Box so we can overlay the now-playing
+                    // dot in the top-right corner of the Player tab.
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = when (index) {
+                                0 -> Icons.Outlined.LibraryMusic
+                                1 -> Icons.Outlined.Equalizer
+                                2 -> Icons.Outlined.Folder
+                                3 -> Icons.Outlined.Settings
+                                else -> Icons.Outlined.MusicNote
+                            },
+                            contentDescription = label,
+                            modifier = Modifier.size(22.dp)
+                        )
+                        if (showNowPlayingBadge && index == 1 && selectedIndex != 1) {
+                            // Tiny primary-coloured dot signals audio is running
+                            // in the background while user is on another tab.
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .offset(x = 8.dp, y = (-4).dp)
+                                    .size(6.dp)
+                                    .background(
+                                        color = MaterialTheme.colorScheme.primary,
+                                        shape = CircleShape
+                                    )
+                            )
+                        }
+                    }
                 },
                 colors = NavigationBarItemDefaults.colors(
-                    selectedIconColor = Purple500,
+                    // Use theme container/indicator roles — these now default
+                    // to primaryContainer for the active pill (M3 expressive).
+                    selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
                     unselectedIconColor = colors.textTertiary,
-                    indicatorColor = Purple500.copy(alpha = 0.15f)
+                    selectedTextColor = MaterialTheme.colorScheme.onSurface,
+                    unselectedTextColor = colors.textSecondary,
+                    indicatorColor = MaterialTheme.colorScheme.primaryContainer
                 )
             )
         }
