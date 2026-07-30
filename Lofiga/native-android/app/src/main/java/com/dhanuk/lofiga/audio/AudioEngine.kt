@@ -448,7 +448,9 @@ class AudioEngine(private val context: Context) {
             // ONLY call setAuxEffectSendLevel. On some ROMs this boosts the implicit effect.
             try {
                 mainPlayer?.setAuxEffectSendLevel(pendingReverb.coerceIn(0f, 1f))
-            } catch(e: Exception) { }
+            } catch (e: Exception) {
+                android.util.Log.w("AudioEngine", "setAuxEffectSendLevel (init) failed: ${e.message}")
+            }
 
             bassBoost = BassBoost(EFFECT_PRIORITY, audioSessionId).apply {
                 enabled = true
@@ -480,23 +482,14 @@ class AudioEngine(private val context: Context) {
         }
     }
 
+    /**
+     * Set the reverb wet level. This routes through the unified [setReverbAndDelay]
+     * so the reverb preset mapping and aux send level stay consistent regardless
+     * of which call site is used (previously this had its own divergent thresholds,
+     * leaving two conflicting code paths for the same effect).
+     */
     fun setReverb(wet: Float) {
-        reverb?.let { r ->
-            try {
-                r.enabled = wet > 0.01f
-                if (wet > 0.01f) {
-                    r.preset = when {
-                        wet < 0.25f -> PresetReverb.PRESET_SMALLROOM
-                        wet < 0.5f -> PresetReverb.PRESET_MEDIUMROOM
-                        wet < 0.75f -> PresetReverb.PRESET_LARGEHALL
-                        else -> PresetReverb.PRESET_PLATE
-                    }
-                }
-            } catch (e: Exception) { Log.e("AudioEngine", "Reverb error: ${e.message}", e) }
-        } ?: run {
-            // Store for later application when effects are initialized
-            pendingReverb = wet
-        }
+        setReverbAndDelay(wet, pendingDelay)
     }
 
     private var pendingReverb: Float = 0f
@@ -574,7 +567,9 @@ class AudioEngine(private val context: Context) {
                     }
                     try {
                         mainPlayer?.setAuxEffectSendLevel(reverbWet.coerceIn(0f, 1f))
-                    } catch(e: Exception) {}
+                    } catch (e: Exception) {
+                        android.util.Log.w("AudioEngine", "setAuxEffectSendLevel failed: ${e.message}")
+                    }
                 } catch (e: Exception) { android.util.Log.e("AudioEngine", "Reverb error: ${e.message}", e) }
             }
         }
@@ -691,7 +686,14 @@ class AudioEngine(private val context: Context) {
                 if (!sawInputEOS) {
                     val inputIndex = codec.dequeueInputBuffer(5000)
                     if (inputIndex >= 0) {
-                        val inputBuffer = codec.getInputBuffer(inputIndex)!!
+                        val inputBuffer = codec.getInputBuffer(inputIndex)
+                        if (inputBuffer == null) {
+                            // Re-queue an empty buffer to free the slot, then try again.
+                            try {
+                                codec.queueInputBuffer(inputIndex, 0, 0, 0, 0)
+                            } catch (_: Exception) {}
+                            continue
+                        }
                         val sampleSize = extractor.readSampleData(inputBuffer, 0)
                         if (sampleSize < 0) {
                             sawInputEOS = true
@@ -805,7 +807,9 @@ class AudioEngine(private val context: Context) {
             try {
                 if (it.isPlaying) it.stop()
                 it.release()
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                android.util.Log.w("AudioEngine", "releaseAtmospherePlayer('$key') failed: ${e.message}")
+            }
         }
     }
 
@@ -832,7 +836,9 @@ class AudioEngine(private val context: Context) {
             try {
                 player.seekTo(0)
                 player.start()
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                android.util.Log.w("AudioEngine", "Atmosphere start ('$key') failed: ${e.message}")
+            }
         } else if (vol <= 0.01f && player.isPlaying) {
             player.pause()
         }
@@ -852,7 +858,9 @@ class AudioEngine(private val context: Context) {
                 try {
                     player.seekTo(0)
                     player.start()
-                } catch (_: Exception) {}
+                } catch (e: Exception) {
+                    android.util.Log.w("AudioEngine", "syncAtmospheres start ('$key') failed: ${e.message}")
+                }
             } else if (vol <= 0.01f && player.isPlaying) {
                 player.pause()
             }
@@ -863,7 +871,9 @@ class AudioEngine(private val context: Context) {
         atmospherePlayers.values.forEach {
             try {
                 if (it.isPlaying) it.pause()
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                android.util.Log.w("AudioEngine", "pauseAtmospheres failed: ${e.message}")
+            }
         }
     }
 
@@ -878,7 +888,9 @@ class AudioEngine(private val context: Context) {
                 val vol = (atmosphereVolumes[key] ?: 0f).coerceIn(0f, 1f)
                 val effective = if (duck) vol * 0.3f else vol
                 player.setVolume(effective, effective)
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                android.util.Log.w("AudioEngine", "duckAtmospheres('$key') failed: ${e.message}")
+            }
         }
     }
 

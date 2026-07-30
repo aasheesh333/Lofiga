@@ -164,7 +164,10 @@ object ExportService {
             if (inputIdx >= 0) {
                 val inBuf = encoder.getInputBuffer(inputIdx)
                 if (inBuf == null) {
-                    encoder.releaseInputBuffer(inputIdx)
+                    // Re-queue an empty buffer to free the slot, then try again.
+                    try {
+                        encoder.queueInputBuffer(inputIdx, 0, 0, 0, 0)
+                    } catch (_: Exception) {}
                     continue
                 }
                 inBuf.clear()
@@ -360,7 +363,12 @@ object ExportService {
                     if (inIdx >= 0) {
                         val inBuf = decoder.getInputBuffer(inIdx)
                         if (inBuf == null) {
-                            decoder.releaseInputBuffer(inIdx)
+                            // Could not get the buffer reference (rare on some ROMs).
+                            // Re-queue an empty buffer so the codec frees the slot,
+                            // then try again on the next pass.
+                            try {
+                                decoder.queueInputBuffer(inIdx, 0, 0, 0, 0)
+                            } catch (_: Exception) {}
                             continue
                         }
                         val sampleSize = extractor.readSampleData(inBuf, 0)

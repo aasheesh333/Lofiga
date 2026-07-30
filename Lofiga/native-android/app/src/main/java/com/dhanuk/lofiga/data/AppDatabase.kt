@@ -91,7 +91,10 @@ abstract class AppDatabase : RoomDatabase() {
 
         private val MIGRATION_1_2 = object : Migration(1, 2) {
             override fun migrate(database: SupportSQLiteDatabase) {
-                // Initial migration: schema unchanged, version bump for future-safe upgrades
+                // v1 -> v2: the persisted PresetValues columns already existed in v1
+                // (this is only a version bump, no schema change), so there is
+                // nothing to ALTER or INSERT here. The migration is intentionally
+                // a no-op so users keep their saved configs / custom presets.
             }
         }
 
@@ -103,7 +106,10 @@ abstract class AppDatabase : RoomDatabase() {
                     "lofiga_database"
                 )
                     .addMigrations(MIGRATION_1_2)
-                    .fallbackToDestructiveMigration()
+                    // Only used as an absolute last resort if an unforeseen schema
+                    // mismatch slips through. Prefer adding a real Migration above
+                    // for any future column changes so user data is never wiped.
+                    .fallbackToDestructiveMigrationOnDowngrade()
                     .build()
                 INSTANCE = instance
                 instance
