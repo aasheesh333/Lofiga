@@ -119,6 +119,48 @@ fun LofigaNavigationBar(
     }
 }
 
+/**
+ * A small pill-shaped chip used in screen headers to surface feature availability
+ * (e.g. the "Tempo / Reverb / Atmosphere" row on the empty PlayerScreen).
+ *
+ * Consolidates the 14-line "Surface + RoundedCornerShape + border + Row(icon,text)"
+ * pattern that was repeated three times in PlayerScreen — see PlayerScreen.kt.
+ * Uses the M3 surfaceContainer tonal role from D.1 so the chip reads as a
+ * low-emphasis container (M3 "card" look without the card shadow).
+ */
+@Composable
+fun HeaderChip(
+    icon: ImageVector,
+    label: String,
+    modifier: Modifier = Modifier
+) {
+    val colors = LocalAppColors.current
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = colors.textPrimary,
+                modifier = Modifier.size(14.dp)
+            )
+            Spacer(Modifier.width(4.dp))
+            Text(
+                text = label,
+                color = colors.textSecondary,
+                style = MaterialTheme.typography.labelSmall
+            )
+        }
+    }
+}
+
 @Composable
 fun EffectSlider(
     value: Float,

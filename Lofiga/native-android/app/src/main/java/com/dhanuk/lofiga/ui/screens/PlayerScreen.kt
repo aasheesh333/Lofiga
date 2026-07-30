@@ -182,48 +182,9 @@ fun PlayerScreen(
                     )
                     Spacer(Modifier.height(32.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Surface(
-                            shape = RoundedCornerShape(20.dp),
-                            color = colors.surfaceHighlight,
-                            border = BorderStroke(1.dp, colors.outline)
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(Icons.Outlined.Speed, contentDescription = null, tint = colors.textPrimary, modifier = Modifier.size(14.dp))
-                                Spacer(Modifier.width(4.dp))
-                                Text("Tempo", color = colors.textSecondary, style = MaterialTheme.typography.labelSmall)
-                            }
-                        }
-                        Surface(
-                            shape = RoundedCornerShape(20.dp),
-                            color = colors.surfaceHighlight,
-                            border = BorderStroke(1.dp, colors.outline)
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(Icons.Outlined.Forward30, contentDescription = null, tint = colors.textPrimary, modifier = Modifier.size(14.dp))
-                                Spacer(Modifier.width(4.dp))
-                                Text("Reverb", color = colors.textSecondary, style = MaterialTheme.typography.labelSmall)
-                            }
-                        }
-                        Surface(
-                            shape = RoundedCornerShape(20.dp),
-                            color = colors.surfaceHighlight,
-                            border = BorderStroke(1.dp, colors.outline)
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(Icons.Outlined.Cloud, contentDescription = null, tint = colors.textPrimary, modifier = Modifier.size(14.dp))
-                                Spacer(Modifier.width(4.dp))
-                                Text("Atmosphere", color = colors.textSecondary, style = MaterialTheme.typography.labelSmall)
-                            }
-                        }
+                        HeaderChip(icon = Icons.Outlined.Speed, label = "Tempo")
+                        HeaderChip(icon = Icons.Outlined.Forward30, label = "Reverb")
+                        HeaderChip(icon = Icons.Outlined.Cloud, label = "Atmosphere")
                     }
                 }
             }
