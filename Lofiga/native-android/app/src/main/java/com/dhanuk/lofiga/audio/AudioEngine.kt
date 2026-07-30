@@ -15,6 +15,7 @@ import android.media.audiofx.BassBoost
 import android.media.audiofx.Equalizer
 import android.media.audiofx.PresetReverb
 import androidx.media3.common.AudioAttributes as Media3AudioAttributes
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
@@ -223,8 +224,8 @@ class AudioEngine(private val context: Context) {
             val player = ExoPlayer.Builder(context)
                 .setAudioAttributes(
                     Media3AudioAttributes.Builder()
-                        .setUsage(Media3AudioAttributes.USAGE_MEDIA)
-                        .setContentType(Media3AudioAttributes.CONTENT_TYPE_MUSIC)
+                        .setUsage(C.USAGE_MEDIA)
+                        .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
                         .build(),
                     /* handleAudioFocus = */ false // we manage focus ourselves below
                 )
