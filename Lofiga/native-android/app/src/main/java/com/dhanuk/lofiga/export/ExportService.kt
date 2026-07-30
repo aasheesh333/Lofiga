@@ -97,6 +97,17 @@ object ExportService {
                         put(MediaStore.Audio.Media.IS_MUSIC, true)
                     }
                     context.contentResolver.insert(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, values)
+                } else {
+                    // Pre-Q (API 26..28): there is no MediaStore.RELATIVE_PATH, so we
+                    // wrote the file into the app's external Music directory directly.
+                    // Ask the system media scanner to pick it up so it shows up in the
+                    // user's music library without needing a reboot.
+                    val mime = if (format == "wav") "audio/wav" else "audio/mp4"
+                    android.media.MediaScannerConnection.scanFile(
+                        context,
+                        arrayOf(outputFile.absolutePath),
+                        arrayOf(mime)
+                    ) { _, _ -> }
                 }
             }
 
