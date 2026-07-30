@@ -1,20 +1,25 @@
 package com.dhanuk.lofiga.audio
 
 import android.content.Context
-import android.media.AudioFocusRequest
 import android.media.AudioAttributes
+import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.media.MediaCodec
 import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.media.MediaPlayer
-import android.media.PlaybackParams
 import android.net.Uri
 import android.os.Build
 import android.util.Log
 import android.media.audiofx.BassBoost
 import android.media.audiofx.Equalizer
 import android.media.audiofx.PresetReverb
+import androidx.media3.common.AudioAttributes as Media3AudioAttributes
+import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackParameters
+import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.ExoPlayer
 import com.dhanuk.lofiga.model.PresetValues
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -23,6 +28,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 
+@OptIn(UnstableApi::class)
 class AudioEngine(private val context: Context) {
 
     private val _isPlaying = MutableStateFlow(false)
@@ -53,7 +59,7 @@ class AudioEngine(private val context: Context) {
     var currentTrackArtist: String = ""
     var onPlaybackStateChanged: ((isPlaying: Boolean) -> Unit)? = null
 
-    private var mainPlayer: MediaPlayer? = null
+    private var exoPlayer: ExoPlayer? = null
     private val atmospherePlayers = ConcurrentHashMap<String, MediaPlayer>()
     private val atmosphereVolumes = ConcurrentHashMap<String, Float>()
 
@@ -92,13 +98,13 @@ class AudioEngine(private val context: Context) {
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
                 // Duck both the main track AND the atmosphere layers temporarily
                 isDucked = true
-                mainPlayer?.setVolume(0.3f, 0.3f)
+                exoPlayer?.volume = 0.3f
                 duckAtmospheres(true)
             }
             AudioManager.AUDIOFOCUS_GAIN -> {
                 // Focus regained - restore full volume on everything
                 isDucked = false
-                mainPlayer?.setVolume(1.0f, 1.0f)
+                exoPlayer?.volume = 1.0f
                 duckAtmospheres(false)
                 if (wasPlayingBeforeFocusLoss) {
                     play()
@@ -172,7 +178,8 @@ class AudioEngine(private val context: Context) {
     fun loadTrack(uri: Uri, autoPlay: Boolean = false): Boolean {
         return loadTrackInternal(
             autoPlay = autoPlay,
-            setupSource = { player -> player.setDataSource(context, uri) },
+            sourceUri = uri,
+            filePath = null,
             initFft = { precomputeFFTFast(context, uri) },
             errorPrefix = "Failed to load track"
         )
@@ -181,7 +188,8 @@ class AudioEngine(private val context: Context) {
     fun loadTrackFromFile(filePath: String, autoPlay: Boolean = false): Boolean {
         return loadTrackInternal(
             autoPlay = autoPlay,
-            setupSource = { player -> player.setDataSource(filePath) },
+            sourceUri = Uri.fromFile(File(filePath)),
+            filePath = filePath,
             initFft = { precomputeFFTFast(filePath) },
             errorPrefix = "Failed to load file"
         )
@@ -189,12 +197,13 @@ class AudioEngine(private val context: Context) {
 
     private fun loadTrackInternal(
         autoPlay: Boolean,
-        setupSource: (MediaPlayer) -> Unit,
+        sourceUri: Uri,
+        filePath: String?,
         initFft: () -> Unit,
         errorPrefix: String
     ): Boolean {
         _isPlaying.value = false
-        releaseMainPlayer()
+        releaseExoPlayer()
         releaseEffects()
         _error.value = null
         _position.value = 0
@@ -210,89 +219,103 @@ class AudioEngine(private val context: Context) {
             return false
         }
 
-        try {
-            val player = MediaPlayer().apply {
-                setAudioAttributes(
-                    AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_MEDIA)
-                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                        .build()
+        return try {
+            val player = ExoPlayer.Builder(context)
+                .setAudioAttributes(
+                    Media3AudioAttributes.Builder()
+                        .setUsage(Media3AudioAttributes.USAGE_MEDIA)
+                        .setContentType(Media3AudioAttributes.CONTENT_TYPE_MUSIC)
+                        .build(),
+                    /* handleAudioFocus = */ false // we manage focus ourselves below
                 )
-                setupSource(this)
-                setOnPreparedListener { mediaPlayer ->
-                    val dur = mediaPlayer.duration.toLong()
-                    _duration.value = dur
-                    if (autoPlayOnPrepared) {
-                        try {
-                            mediaPlayer.start()
-                            _isPlaying.value = true
-                            _position.value = mediaPlayer.currentPosition.toLong()
-                            startPositionPolling()
-                            syncAtmospheres()
-                            applyStoredPlaybackParams()
-                            onPlaybackStateChanged?.invoke(true)
-                            Log.i("AudioEngine", "Auto-play started, position: ${_position.value}")
-                        } catch (e: Exception) {
-                            Log.e("AudioEngine", "Auto-play failed: ${e.message}")
+                .build()
+
+            player.addListener(object : Player.Listener {
+                override fun onPlaybackStateChanged(state: Int) {
+                    if (state == Player.STATE_READY) {
+                        _duration.value = player.duration.coerceAtLeast(0L)
+                        if (autoPlayOnPrepared) {
+                            try {
+                                player.play()
+                                _isPlaying.value = true
+                                _position.value = player.currentPosition
+                                startPositionPolling()
+                                syncAtmospheres()
+                                applyStoredPlaybackParams()
+                                onPlaybackStateChanged?.invoke(true)
+                                Log.i("AudioEngine", "Auto-play started, position: ${_position.value}")
+                            } catch (e: Exception) {
+                                Log.e("AudioEngine", "Auto-play failed: ${e.message}")
+                            }
                         }
-                    }
-                    scope.launch(Dispatchers.Default) {
-                        try {
-                            initEffects(mediaPlayer.audioSessionId)
-                        } catch (e: Exception) {
-                            Log.e("AudioEngine", "Effects init failed: ${e.message}")
+                        // Initialize the audiofx chain on ExoPlayer's audio session.
+                        scope.launch(Dispatchers.Default) {
+                            try {
+                                initEffects(player.audioSessionId)
+                            } catch (e: Exception) {
+                                Log.e("AudioEngine", "Effects init failed: ${e.message}")
+                            }
                         }
+                        fftJob = scope.launch(Dispatchers.IO) {
+                            fftCancelled = false
+                            initFft()
+                        }
+                        startAnimatingWaveform()
+                        Log.i("AudioEngine", "Track loaded, duration: ${player.duration}ms")
+                    } else if (state == Player.STATE_ENDED) {
+                        _isPlaying.value = false
+                        positionJob?.cancel()
+                        pauseAtmospheres()
+                        onPlaybackStateChanged?.invoke(false)
+                        Log.i("AudioEngine", "Track playback completed")
                     }
-                    fftJob = scope.launch(Dispatchers.IO) {
-                        fftCancelled = false
-                        initFft()
-                    }
-                    startAnimatingWaveform()
-                    Log.i("AudioEngine", "Track loaded, duration: ${dur}ms")
                 }
-                setOnCompletionListener {
-                    _isPlaying.value = false
-                    positionJob?.cancel()
-                    pauseAtmospheres()
-                    onPlaybackStateChanged?.invoke(false)
-                    Log.i("AudioEngine", "Track playback completed")
+
+                override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                    _error.value = "$errorPrefix: ${error.message}"
+                    Log.e("AudioEngine", "Player error: ${error.message}", error)
                 }
-                prepareAsync()
-            }
-            mainPlayer = player
+            })
+
+            player.setMediaItem(MediaItem.fromUri(sourceUri))
+            player.prepare()
+            exoPlayer = player
             storedTempo = pendingTempo
             storedPitch = pendingPitch
-            return true
+            true
         } catch (e: Exception) {
             _error.value = "$errorPrefix: ${e.message}"
             abandonAudioFocus()
             Log.e("AudioEngine", "$errorPrefix: ${e.message}", e)
-            return false
+            false
         }
     }
 
-    fun isReady(): Boolean = mainPlayer != null
+    fun isReady(): Boolean = exoPlayer != null
 
     fun clearError() {
         _error.value = null
     }
 
     fun play() {
-        val player = mainPlayer
+        val player = exoPlayer
         if (player == null) {
             _error.value = "No track loaded"
             return
         }
         try {
             if (!player.isPlaying) {
-                player.start()
+                if (player.playbackState == Player.STATE_ENDED) {
+                    player.seekTo(0)
+                }
+                player.play()
                 _isPlaying.value = true
-                
+
                 // Immediately set current position
                 try {
-                    _position.value = player.currentPosition.toLong()
+                    _position.value = player.currentPosition
                 } catch (e: Exception) {}
-                
+
                 startPositionPolling()
                 syncAtmospheres()
                 applyStoredPlaybackParams()
@@ -307,7 +330,7 @@ class AudioEngine(private val context: Context) {
 
 
     fun pause() {
-        val player = mainPlayer
+        val player = exoPlayer
         if (player == null) return
         wasPlayingBeforeFocusLoss = false
         try {
@@ -325,7 +348,7 @@ class AudioEngine(private val context: Context) {
     }
 
     fun togglePlayPause() {
-        val player = mainPlayer
+        val player = exoPlayer
         if (player == null) {
             _error.value = "No track loaded"
             return
@@ -338,7 +361,10 @@ class AudioEngine(private val context: Context) {
                 pauseAtmospheres()
                 onPlaybackStateChanged?.invoke(false)
             } else {
-                player.start()
+                if (player.playbackState == Player.STATE_ENDED) {
+                    player.seekTo(0)
+                }
+                player.play()
                 _isPlaying.value = true
                 startPositionPolling()
                 syncAtmospheres()
@@ -353,7 +379,7 @@ class AudioEngine(private val context: Context) {
 
     fun seekTo(millis: Long) {
         try {
-            mainPlayer?.seekTo(millis.coerceIn(0L, Int.MAX_VALUE.toLong()).toInt())
+            exoPlayer?.seekTo(millis.coerceIn(0L, _duration.value.coerceAtLeast(0L)))
             _position.value = millis
         } catch (e: Exception) {
             Log.e("AudioEngine", "Seek failed: ${e.message}", e)
@@ -362,7 +388,7 @@ class AudioEngine(private val context: Context) {
 
     fun setLooping(loop: Boolean) {
         _isLooping.value = loop
-        mainPlayer?.isLooping = loop
+        exoPlayer?.repeatMode = if (loop) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
     }
 
     fun toggleLoop() {
@@ -373,7 +399,7 @@ class AudioEngine(private val context: Context) {
         _isPlaying.value = false
         wasPlayingBeforeFocusLoss = false
         pauseAtmospheres()
-        mainPlayer?.let { player ->
+        exoPlayer?.let { player ->
             try {
                 if (player.isPlaying) {
                     player.stop()
@@ -389,7 +415,7 @@ class AudioEngine(private val context: Context) {
     fun release() {
         positionJob?.cancel()
         scope.cancel()
-        releaseMainPlayer()
+        releaseExoPlayer()
         releaseAtmospherePlayers()
         releaseEffects()
     }
@@ -400,28 +426,27 @@ class AudioEngine(private val context: Context) {
     private var storedPitch: Float = 0f
 
     private fun applyStoredPlaybackParams() {
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-            mainPlayer?.let { player ->
-                try {
-                    // Only apply if player is actually playing or at least started
-                    val tempo = storedTempo
-                    val semitones = storedPitch
-                    val pitchFactor = if (semitones != 0f) {
-                        Math.pow(2.0, (semitones / 12.0).toDouble()).toFloat()
-                    } else 1f
-                    val params = PlaybackParams()
-                        .setSpeed(tempo.coerceIn(0.1f, 3.0f))
-                        .setPitch(pitchFactor.coerceIn(0.1f, 3.0f))
-                        .setAudioFallbackMode(PlaybackParams.AUDIO_FALLBACK_MODE_DEFAULT)
-                    player.playbackParams = params
-                } catch (e: Exception) {
-                    Log.e("AudioEngine", "Playback error: ${e.message}", e)
-                }
+        exoPlayer?.let { player ->
+            try {
+                val tempo = storedTempo.coerceIn(0.1f, 3.0f)
+                val semitones = storedPitch
+                val pitchFactor = if (semitones != 0f) {
+                    Math.pow(2.0, (semitones / 12.0).toDouble()).toFloat()
+                } else 1f
+                // Media3 Sonic tempo/pitch are INDEPENDENT — tempo changes speed
+                // without changing pitch, pitch changes pitch without changing
+                // duration. This matches the offline export (Phase A2 fix) and
+                // fixes the preview/export mismatch at the source.
+                player.setPlaybackParameters(
+                    PlaybackParameters(tempo, pitchFactor.coerceIn(0.1f, 3.0f))
+                )
+            } catch (e: Exception) {
+                Log.e("AudioEngine", "Playback params error: ${e.message}", e)
             }
         }
     }
 
-    // --- Speed & Pitch (INDEPENDENT) ---
+    // --- Speed & Pitch (INDEPENDENT via Media3 Sonic) ---
 
     fun setSpeedAndPitch(tempo: Float, semitones: Float) {
         pendingTempo = tempo
@@ -429,7 +454,7 @@ class AudioEngine(private val context: Context) {
         storedTempo = tempo
         storedPitch = semitones
         // If player is already playing, apply immediately
-        val player = mainPlayer
+        val player = exoPlayer
         if (player != null && player.isPlaying) {
             applyStoredPlaybackParams()
         }
@@ -445,12 +470,10 @@ class AudioEngine(private val context: Context) {
             }
             
             // MAGIC FIX: Do NOT call attachAuxEffect. It crashes the user's firmware.
-            // ONLY call setAuxEffectSendLevel. On some ROMs this boosts the implicit effect.
-            try {
-                mainPlayer?.setAuxEffectSendLevel(pendingReverb.coerceIn(0f, 1f))
-            } catch (e: Exception) {
-                android.util.Log.w("AudioEngine", "setAuxEffectSendLevel (init) failed: ${e.message}")
-            }
+            // ExoPlayer does not expose setAuxEffectSendLevel (MediaPlayer does); the
+            // PresetReverb inserted on the audio session still applies on its own.
+            // Side note: ExoPlayer routes audio through its own AudioSink; the
+            // aux-send level workaround was a MediaPlayer-only path.
 
             bassBoost = BassBoost(EFFECT_PRIORITY, audioSessionId).apply {
                 enabled = true
@@ -565,11 +588,8 @@ class AudioEngine(private val context: Context) {
                             else -> PresetReverb.PRESET_PLATE
                         }
                     }
-                    try {
-                        mainPlayer?.setAuxEffectSendLevel(reverbWet.coerceIn(0f, 1f))
-                    } catch (e: Exception) {
-                        android.util.Log.w("AudioEngine", "setAuxEffectSendLevel failed: ${e.message}")
-                    }
+                    // ExoPlayer has no setAuxEffectSendLevel; the reverb preset above
+                    // is the effective control. (MediaPlayer-only workaround removed.)
                 } catch (e: Exception) { android.util.Log.e("AudioEngine", "Reverb error: ${e.message}", e) }
             }
         }
@@ -900,9 +920,9 @@ class AudioEngine(private val context: Context) {
         positionJob?.cancel()
         positionJob = scope.launch {
             while (isActive) {
-                mainPlayer?.let { player ->
+                exoPlayer?.let { player ->
                     try {
-                        val pos = player.currentPosition.toLong()
+                        val pos = player.currentPosition
                         if (pos >= 0) {
                             _position.value = pos
                         }
@@ -944,10 +964,10 @@ class AudioEngine(private val context: Context) {
 
     // --- Cleanup ---
 
-    private fun releaseMainPlayer() {
+    private fun releaseExoPlayer() {
         _isPlaying.value = false
         positionJob?.cancel()
-        mainPlayer?.let { player ->
+        exoPlayer?.let { player ->
             try {
                 if (player.isPlaying) {
                     player.stop()
@@ -955,7 +975,7 @@ class AudioEngine(private val context: Context) {
                 player.release()
             } catch (_: Exception) {}
         }
-        mainPlayer = null
+        exoPlayer = null
         abandonAudioFocus()
     }
 
@@ -963,7 +983,7 @@ class AudioEngine(private val context: Context) {
      * Ensure main audio session is established before initializing effects.
      */
     fun ensureAudioSessionReady(): Boolean {
-        val player = mainPlayer ?: return false
+        val player = exoPlayer ?: return false
         return try {
             player.audioSessionId > 0
         } catch (_: Exception) {
