@@ -3,6 +3,7 @@ package com.dhanuk.lofiga.media
 import android.content.Intent
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaSession
+import androidx.media3.session.MediaSession.ControllerInfo
 import androidx.media3.session.MediaSessionService
 
 /**
@@ -17,7 +18,7 @@ import androidx.media3.session.MediaSessionService
 @OptIn(UnstableApi::class)
 class MediaPlaybackService : MediaSessionService() {
 
-    override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? {
+    override fun onGetSession(controllerInfo: ControllerInfo): MediaSession? {
         // The session is owned by MediaSessionManagerHolder, set up once the
         // ViewModel creates the player.
         return MediaSessionManagerHolder.mediaSession
