@@ -4,10 +4,9 @@ import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.ContextWrapper
 import android.content.Intent
-import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -24,31 +23,26 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.text.style.TextAlign
 import androidx.core.content.FileProvider
 import android.widget.Toast
-import androidx.compose.material3.ExperimentalMaterial3Api
 import com.dhanuk.lofiga.ads.AdManager
 import com.dhanuk.lofiga.model.CustomPreset
 import com.dhanuk.lofiga.model.LofiPreset
 import com.dhanuk.lofiga.ui.MainViewModel
 import com.dhanuk.lofiga.ui.components.*
 import com.dhanuk.lofiga.ui.theme.*
-import com.dhanuk.lofiga.ui.theme.LocalAppColors
 import java.io.File
 
-import android.content.ContextWrapper
-
-fun Context.findActivity(): Activity? = when (this) {
+private fun Context.findActivity(): Activity? = when (this) {
     is Activity -> this
     is ContextWrapper -> baseContext.findActivity()
     else -> null
@@ -86,20 +80,15 @@ fun PlayerScreen(
     var showAtmosphere by remember { mutableStateOf(false) }
     var showExportInfo by remember { mutableStateOf(false) }
     var showPostExportSupportPrompt by remember { mutableStateOf(false) }
-
-    // Scroll states - properly remembered to prevent recreation
     val scrollState = rememberScrollState()
-    val presetScrollState = rememberScrollState()
 
-    // Selected effect type for menu: "all", "bass", "treble"
-    var selectedEffectType by remember { mutableStateOf("all") }
+    // ── Effects used by the effect cards ─────────────────────────────────────
+    // Tempo: stored 0.5..1.5 and displayed as -50%..+50%
+    // Pitch: stored -5..+5 semitones and displayed as such
+    val tempoPercent = (currentValues.tempo - 1f) * 100f
+    val tempoForSlider = currentValues.tempo.coerceIn(0.5f, 1.5f)
 
-
-    LaunchedEffect(viewModel) {
-        viewModel.snackbarMessage.collect { snackbarHostState.showSnackbar(it) }
-    }
-
-    // Show audio errors in snackbar
+    // Show audio errors
     LaunchedEffect(audioError) {
         audioError?.let {
             snackbarHostState.showSnackbar(it)
@@ -107,17 +96,13 @@ fun PlayerScreen(
         }
     }
 
-    // Show share dialog when export completes
+    // Share exported file when export completes
     LaunchedEffect(exportedFilePath) {
         exportedFilePath?.let { path ->
             val file = File(path)
             if (file.exists()) {
                 try {
-                    val uri = FileProvider.getUriForFile(
-                        context,
-                        "${context.packageName}.fileprovider",
-                        file
-                    )
+                    val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
                     val shareIntent = Intent(Intent.ACTION_SEND).apply {
                         type = if (path.endsWith(".wav")) "audio/wav" else "audio/mp4"
                         putExtra(Intent.EXTRA_STREAM, uri)
@@ -129,302 +114,93 @@ fun PlayerScreen(
                 }
             }
             viewModel.clearExportedFilePath()
-            // NOTE: rewarded ads must be strictly user-initiated (AdMob policy).
-            // We no longer auto-show a rewarded ad after export. The user can opt
-            // in to watch one via the "Support us" button shown after export.
             showPostExportSupportPrompt = true
         }
     }
 
-    Box(modifier = modifier.fillMaxSize()) {
-        AmbientBackground(modifier = Modifier.fillMaxSize())
+    // Snackbar messages from viewmodel
+    LaunchedEffect(viewModel) {
+        viewModel.snackbarMessage.collect { snackbarHostState.showSnackbar(it) }
+    }
 
+    Box(modifier = modifier.fillMaxSize().background(colors.bg)) {
         if (currentTrack == null) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center,
-                    modifier = Modifier.padding(horizontal = 32.dp)
-                ) {
-                    Surface(
-                        modifier = Modifier.size(140.dp),
-                        shape = CircleShape,
-                        color = colors.textPrimary.copy(alpha = 0.1f),
-                        border = BorderStroke(2.dp, colors.textPrimary.copy(alpha = 0.2f))
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                Icons.Outlined.LibraryMusic,
-                                contentDescription = null,
-                                tint = colors.textPrimary.copy(alpha = 0.6f),
-                                modifier = Modifier.size(64.dp)
-                            )
-                        }
-                    }
-                    Spacer(Modifier.height(28.dp))
-                    Text(
-                        "Select a song to begin",
-                        color = colors.textPrimary,
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        "Pick a song from the Browse tab or\nload one from your files",
-                        color = colors.textTertiary,
-                        style = MaterialTheme.typography.bodyMedium,
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                        lineHeight = 22.sp
-                    )
-                    Spacer(Modifier.height(32.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        HeaderChip(icon = Icons.Outlined.Speed, label = "Tempo")
-                        HeaderChip(icon = Icons.Outlined.Forward30, label = "Reverb")
-                        HeaderChip(icon = Icons.Outlined.Cloud, label = "Atmosphere")
-                    }
-                }
-            }
+            EmptyPlayerState()
         } else {
             Column(modifier = Modifier.fillMaxSize()) {
-
-                // ========================
-                // SCROLLABLE CONTENT (top, takes all space minus bottom controls)
-                // ========================
+                // ── Scrollable content ───────────────────────────────────────
                 Column(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth()
                         .verticalScroll(scrollState)
-                        .padding(horizontal = 12.dp)
+                        .padding(horizontal = 16.dp)
                 ) {
                     Spacer(Modifier.height(8.dp))
 
-                    // --- Track Info Header ---
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 4.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        // Album art placeholder
-                        Box(
-                            modifier = Modifier
-                                .size(56.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(
-                                    Brush.linearGradient(
-                                        listOf(colors.textPrimary.copy(alpha = 0.3f), colors.textPrimary.copy(alpha = 0.1f))
-                                    )
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                Icons.Outlined.MusicNote,
-                                contentDescription = null,
-                                tint = colors.textPrimary,
-                                modifier = Modifier.size(28.dp)
-                            )
-                        }
-                        Spacer(Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            // Capture a stable local reference to avoid a recomposition
-                            // race NPE (currentTrack is a State delegate read twice).
-                            val track = currentTrack
-                            Text(
-                                text = track?.title.orEmpty(),
-                                style = MaterialTheme.typography.titleLarge,
-                                color = colors.textPrimary,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            Text(
-                                text = track?.artist.orEmpty(),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = colors.textTertiary,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                        // Action buttons
-                        var showActionsMenu by remember { mutableStateOf(false) }
-                        Box {
-                            IconButton(onClick = { showActionsMenu = true }) {
-                                Icon(Icons.Outlined.MoreVert, contentDescription = "Actions", tint = colors.textSecondary)
-                            }
-                            DropdownMenu(
-                                expanded = showActionsMenu,
-                                onDismissRequest = { showActionsMenu = false },
-                                containerColor = colors.surface
-                            ) {
-                                DropdownMenuItem(
-                                    text = { Text("Export", color = colors.textPrimary) },
-                                    onClick = {
-                                        viewModel.exportTrack(viewModel.getApplication())
-                                        showActionsMenu = false
-                                    },
-                                    leadingIcon = { Icon(Icons.Outlined.FileDownload, contentDescription = null, tint = colors.textSecondary) }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Save Config", color = colors.textPrimary) },
-                                    onClick = {
-                                        viewModel.saveCurrentConfig()
-                                        showActionsMenu = false
-                                    },
-                                    leadingIcon = { Icon(Icons.Outlined.Save, contentDescription = null, tint = colors.textSecondary) }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Save as Preset", color = colors.textPrimary) },
-                                    onClick = {
-                                        showSavePresetSheet = true
-                                        showActionsMenu = false
-                                    },
-                                    leadingIcon = { Icon(Icons.Outlined.BookmarkAdd, contentDescription = null, tint = colors.textSecondary) }
-                                )
+                    // Track info card with centered large artwork
+                    TrackInfoCard(
+                        title = currentTrack?.title.orEmpty(),
+                        artist = currentTrack?.artist.orEmpty(),
+                        onAction = { action ->
+                            when (action) {
+                                TrackAction.Export -> viewModel.exportTrack(context)
+                                TrackAction.SaveConfig -> viewModel.saveCurrentConfig()
+                                TrackAction.SavePreset -> showSavePresetSheet = true
                             }
                         }
-                    }
+                    )
 
-                    Spacer(Modifier.height(4.dp))
+                    Spacer(Modifier.height(16.dp))
 
-                    // --- Waveform Visualizer ---
+                    // Waveform visualizer
                     WaveformVisualizer(viewModel)
-
-                    Spacer(Modifier.height(10.dp))
-
-                    // --- Presets Section ---
-                    Column(modifier = Modifier.padding(horizontal = 4.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Outlined.AutoAwesome, contentDescription = null, tint = colors.textPrimary, modifier = Modifier.size(18.dp))
-                                Spacer(Modifier.width(6.dp))
-                                SectionHeader("PRESETS")
-                                // Quick save chip when custom preset is active
-                                if (currentPreset == LofiPreset.Custom) {
-                                    Spacer(Modifier.width(8.dp))
-                                    AssistChip(
-                                        onClick = { showSavePresetSheet = true },
-                                        label = { Text("Save", style = MaterialTheme.typography.labelSmall) },
-                                        leadingIcon = { Icon(Icons.Outlined.BookmarkAdd, contentDescription = null, modifier = Modifier.size(14.dp)) },
-                                        colors = AssistChipDefaults.assistChipColors(
-                                            containerColor = colors.textPrimary.copy(alpha = 0.15f),
-                                            labelColor = colors.textPrimary,
-                                            leadingIconContentColor = colors.textPrimary
-                                        ),
-                                        border = BorderStroke(1.dp, colors.textPrimary.copy(alpha = 0.3f))
-                                    )
-                                }
-                            }
-                            TextButton(onClick = { showAllPresets = !showAllPresets }) {
-                                Text(
-                                    if (showAllPresets) "Less" else "All",
-                                    color = colors.textPrimary,
-                                    style = MaterialTheme.typography.bodySmall
-                                )
-                            }
-                        }
-
-                        // Preset chips - horizontally scrollable row
-                        Row(
-                            modifier = Modifier
-                                .horizontalScroll(presetScrollState)
-                                .fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            val presetsToShow = if (showAllPresets) LofiPreset.entries.filter { it != LofiPreset.Custom }
-                            else LofiPreset.entries.filter { it != LofiPreset.Custom }.take(4)
-
-                            presetsToShow.forEach { preset ->
-                                FilterChip(
-                                    selected = currentPreset == preset,
-                                    onClick = { viewModel.applyPreset(preset) },
-                                    label = { Text(preset.displayName, fontSize = MaterialTheme.typography.labelSmall.fontSize) },
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = colors.textPrimary.copy(alpha = 0.2f),
-                                        containerColor = colors.surfaceHighlight,
-                                        selectedLabelColor = colors.textPrimary,
-                                        labelColor = colors.textSecondary
-                                    ),
-                                    border = FilterChipDefaults.filterChipBorder(
-                                        borderColor = colors.outline,
-                                        selectedBorderColor = colors.textPrimary.copy(alpha = 0.5f),
-                                        enabled = true,
-                                        selected = currentPreset == preset
-                                    )
-                                )
-                            }
-                            // Custom presets - each with individual selection state
-                            customPresets.forEach { preset ->
-                                val isSelected = selectedCustomPresetId == preset.id
-                                FilterChip(
-                                    selected = isSelected,
-                                    onClick = { viewModel.applyCustomPreset(preset) },
-                                    label = { Text(preset.name, fontSize = MaterialTheme.typography.labelSmall.fontSize) },
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = colors.textPrimary.copy(alpha = 0.15f),
-                                        containerColor = colors.surfaceHighlight,
-                                        selectedLabelColor = colors.textPrimary,
-                                        labelColor = colors.textSecondary
-                                    ),
-                                    border = FilterChipDefaults.filterChipBorder(
-                                        borderColor = colors.outline,
-                                        selectedBorderColor = colors.textPrimary.copy(alpha = 0.5f),
-                                        enabled = true,
-                                        selected = isSelected
-                                    )
-                                )
-                            }
-                        }
-                    }
 
                     Spacer(Modifier.height(8.dp))
 
-                    // --- Effects Section (Card-based layout) ---
+                    // ── Presets ──────────────────────────────────────────────
+                    PresetsRow(
+                        viewModel = viewModel,
+                        currentPreset = currentPreset,
+                        customPresets = customPresets,
+                        selectedCustomPresetId = selectedCustomPresetId,
+                        showAllPresets = showAllPresets,
+                        onShowAllToggle = { showAllPresets = !showAllPresets },
+                        onSavePreset = { showSavePresetSheet = true }
+                    )
+
+                    Spacer(Modifier.height(12.dp))
+
+                    // ── Effects section ──────────────────────────────────────
                     ExpandableSection(
                         icon = Icons.Outlined.Tune,
                         title = "EFFECTS",
                         expanded = showEffects,
                         onToggle = { showEffects = !showEffects }
                     ) {
-                        // Card-based effect grid (2 columns)
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            // Tempo Card
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             EffectCard(
                                 modifier = Modifier.weight(1f),
                                 icon = Icons.Outlined.Speed,
                                 label = "Tempo",
-                                value = "${(currentValues.tempo * 100).toInt()}%",
-                                sliderValue = currentValues.tempo,
-                                onSliderChange = { viewModel.updateTempo(it) }
+                                value = "%+.0f%%".format(tempoPercent),
+                                sliderValue = tempoForSlider,
+                                onSliderChange = { viewModel.updateTempo(it) },
+                                valueRange = 0.5f..1.5f
                             )
-                            // Pitch Card
-                            val semitones = currentValues.pitch
-                            val pitchLabel = if (semitones >= 0) "+" + "%.1f".format(semitones) + " st" else "%.1f".format(semitones) + " st"
+                            val pitchLabel = "%+.1f st".format(currentValues.pitch.coerceIn(-5f, 5f))
                             EffectCard(
                                 modifier = Modifier.weight(1f),
                                 icon = Icons.Outlined.Tune,
                                 label = "Pitch",
                                 value = pitchLabel,
-                                sliderValue = (currentValues.pitch + 5f) / 10f,
-                                onSliderChange = { viewModel.updatePitch(it * 10f - 5f) }
+                                sliderValue = currentValues.pitch.coerceIn(-5f, 5f),
+                                onSliderChange = { viewModel.updatePitch(it) },
+                                valueRange = -5f..5f
                             )
                         }
                         Spacer(Modifier.height(8.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            // Reverb Card
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             EffectCard(
                                 modifier = Modifier.weight(1f),
                                 icon = Icons.Outlined.Forward30,
@@ -433,7 +209,6 @@ fun PlayerScreen(
                                 sliderValue = currentValues.reverb,
                                 onSliderChange = { viewModel.updateReverb(it) }
                             )
-                            // Delay Card
                             EffectCard(
                                 modifier = Modifier.weight(1f),
                                 icon = Icons.Outlined.Timeline,
@@ -444,11 +219,7 @@ fun PlayerScreen(
                             )
                         }
                         Spacer(Modifier.height(8.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            // Bass Card
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             EffectCard(
                                 modifier = Modifier.weight(1f),
                                 icon = Icons.Outlined.Equalizer,
@@ -457,7 +228,6 @@ fun PlayerScreen(
                                 sliderValue = currentValues.bass,
                                 onSliderChange = { viewModel.updateBass(it) }
                             )
-                            // Treble Card
                             EffectCard(
                                 modifier = Modifier.weight(1f),
                                 icon = Icons.Outlined.GraphicEq,
@@ -469,9 +239,9 @@ fun PlayerScreen(
                         }
                     }
 
-                    Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(12.dp))
 
-                    // --- Atmosphere Section ---
+                    // ── Atmosphere section ───────────────────────────────────
                     ExpandableSection(
                         icon = Icons.Outlined.Cloud,
                         title = "ATMOSPHERE",
@@ -479,236 +249,130 @@ fun PlayerScreen(
                         onToggle = { showAtmosphere = !showAtmosphere }
                     ) {
                         Text(
-                            "Add background ambiance to your mix",
-                            color = colors.textTertiary,
+                            "Add background ambience to your mix",
                             style = MaterialTheme.typography.bodySmall,
+                            color = colors.textTertiary,
                             modifier = Modifier.padding(bottom = 12.dp)
                         )
-
-                        // Atmosphere sliders - each with proper label & icon
-                        remember { listOf(
-                            Triple("rain", "Rain", Icons.Outlined.WaterDrop),
-                            Triple("vinyl", "Vinyl", Icons.Outlined.DiscFull),
-                            Triple("wind", "Wind", Icons.Outlined.Air),
-                            Triple("tape", "Tape", Icons.Outlined.FiberManualRecord)
-                        ) }.forEach { (key, label, icon) ->
-                            val volume = when (key) {
-                                "rain" -> currentValues.rainVolume
-                                "vinyl" -> currentValues.vinylVolume
-                                "wind" -> currentValues.windVolume
-                                "tape" -> currentValues.tapeVolume
-                                else -> 0f
-                            }
-                            val isActive = volume > 0.01f
-                            Surface(
-                                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                                shape = RoundedCornerShape(12.dp),
-                                color = if (isActive) colors.textPrimary.copy(alpha = 0.1f) else colors.surfaceHighlight,
-                                border = BorderStroke(
-                                    1.dp,
-                                    if (isActive) colors.textPrimary.copy(alpha = 0.3f) else colors.outline
-                                )
-                            ) {
-                                Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(
-                                            icon,
-                                            contentDescription = label,
-                                            tint = if (isActive) colors.textPrimary else colors.textTertiary,
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                        Spacer(Modifier.width(8.dp))
-                                        Text(
-                                            text = label,
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = if (isActive) colors.textPrimary else colors.textSecondary,
-                                            fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Normal
-                                        )
-                                        Spacer(Modifier.weight(1f))
-                                        Text(
-                                            text = "${(volume * 100).toInt()}%",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = if (isActive) colors.textPrimary else colors.textTertiary
-                                        )
-                                    }
-                                    Slider(
-                                        value = volume,
-                                        onValueChange = { viewModel.updateAtmosphere(key, it) },
-                                        modifier = Modifier.fillMaxWidth().height(24.dp),
-                                        colors = SliderDefaults.colors(
-                                            thumbColor = colors.textPrimary,
-                                            activeTrackColor = colors.textPrimary,
-                                            inactiveTrackColor = colors.outline
-                                        )
-                                    )
-                                }
-                            }
-                        }
+                        AtmosphereSlider(volume = currentValues.rainVolume, onVolumeChange = { viewModel.updateAtmosphere("rain", it) }, label = "Rain", icon = Icons.Outlined.WaterDrop)
+                        AtmosphereSlider(volume = currentValues.vinylVolume, onVolumeChange = { viewModel.updateAtmosphere("vinyl", it) }, label = "Vinyl", icon = Icons.Outlined.DiscFull)
+                        AtmosphereSlider(volume = currentValues.windVolume, onVolumeChange = { viewModel.updateAtmosphere("wind", it) }, label = "Wind", icon = Icons.Outlined.Air)
+                        AtmosphereSlider(volume = currentValues.tapeVolume, onVolumeChange = { viewModel.updateAtmosphere("tape", it) }, label = "Tape", icon = Icons.Outlined.FiberManualRecord)
                     }
 
-                    Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(12.dp))
 
-                    // --- Export Button ---
-                    Button(
-                        onClick = { viewModel.exportTrack(viewModel.getApplication()) },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 4.dp)
-                            .height(56.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = colors.textPrimary,
-                            disabledContainerColor = colors.textPrimary.copy(alpha = 0.3f)
-                        ),
-                        shape = RoundedCornerShape(16.dp),
-                        enabled = !isExporting
+                    // ── Export button ────────────────────────────────────────
+                    OutlinedButton(
+                        onClick = { showExportInfo = !showExportInfo },
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                        shape = RoundedCornerShape(24.dp),
+                        border = BorderStroke(1.dp, Indigo.copy(alpha = 0.3f)),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Indigo)
                     ) {
-                        if (isExporting) {
-                            CircularProgressIndicator(
-                                color = colors.surface,
-                                modifier = Modifier.size(20.dp),
-                                strokeWidth = 2.dp
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Text("Exporting...", color = colors.surface)
-                        } else {
-                            Icon(Icons.Filled.FileDownload, contentDescription = null, tint = colors.surface)
-                            Spacer(Modifier.width(8.dp))
-                            Text("Export Lofi Mix", color = colors.surface, fontWeight = FontWeight.Bold)
-                        }
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp),
-                        horizontalArrangement = Arrangement.Start
-                    ) {
-                        TextButton(onClick = { showExportInfo = !showExportInfo }) {
-                            Icon(Icons.Outlined.Info, contentDescription = null, tint = colors.textTertiary, modifier = Modifier.size(14.dp))
-                            Spacer(Modifier.width(4.dp))
-                            Text("How export works", color = colors.textTertiary, style = MaterialTheme.typography.bodySmall)
-                        }
+                        Icon(Icons.Outlined.Info, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("How export works", fontWeight = FontWeight.Medium)
                     }
                     if (showExportInfo) {
                         Surface(
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp).padding(bottom = 8.dp),
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 6.dp),
                             shape = RoundedCornerShape(12.dp),
                             color = colors.surfaceHighlight
                         ) {
                             Text(
-                                "Export saves your current mix with all effects applied. " +
-                                "The processed file is saved to Music/Lofiga folder. " +
-                                "M4A offers the best balance of quality and file size. " +
-                                "After export, you can share directly.",
-                                color = colors.textSecondary,
+                                "Export saves your current mix with all effects applied to Music/Lofiga. " +
+                                "M4A offers the best balance of quality and file size; WAV is uncompressed.",
                                 style = MaterialTheme.typography.bodySmall,
+                                color = colors.textSecondary,
                                 modifier = Modifier.padding(12.dp)
                             )
                         }
                     }
 
-                    // Bottom spacer to ensure content isn't hidden behind fixed controls
+                    Button(
+                        onClick = { viewModel.exportTrack(context) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 4.dp)
+                            .height(56.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Indigo),
+                        shape = RoundedCornerShape(28.dp),
+                        enabled = !isExporting
+                    ) {
+                        if (isExporting) {
+                            CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Exporting...", color = Color.White)
+                        } else {
+                            Icon(Icons.Outlined.FileDownload, contentDescription = null, tint = Color.White)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Export slowed+reverb mix", color = Color.White, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
                     Spacer(Modifier.height(100.dp))
                 }
 
-                // ========================
-                // FIXED BOTTOM CONTROLS (never scrolls)
-                // ========================
+                // ── Fixed bottom playback controls ───────────────────────────
                 PlaybackControls(viewModel)
-
             }
 
-            // ========================
-            // EXPORT PROGRESS OVERLAY
-            // ========================
+            // ── Export progress overlay ──────────────────────────────────────
             if (isExporting) {
                 val exportProgress by viewModel.exportProgress.collectAsState()
                 Box(
-                    modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.75f)),
+                    modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.6f)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Card(
+                    Surface(
                         shape = RoundedCornerShape(24.dp),
-                        colors = CardDefaults.cardColors(containerColor = colors.surface)
+                        color = colors.surface,
+                        border = BorderStroke(1.dp, colors.outline)
                     ) {
                         Column(
                             modifier = Modifier.padding(32.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            CircularProgressIndicator(
-                                color = colors.textPrimary,
-                                modifier = Modifier.size(48.dp),
-                                strokeWidth = 4.dp
-                            )
+                            CircularProgressIndicator(color = Indigo, modifier = Modifier.size(48.dp), strokeWidth = 4.dp)
                             Spacer(Modifier.height(20.dp))
-                            Text(
-                                "Rendering Lofi Mix...",
-                                color = colors.textPrimary,
-                                fontWeight = FontWeight.Bold,
-                                style = MaterialTheme.typography.titleMedium
-                            )
+                            Text("Rendering Lofi Mix...", style = MaterialTheme.typography.titleMedium, color = colors.textPrimary, fontWeight = FontWeight.Bold)
                             Spacer(Modifier.height(12.dp))
-                            Text(
-                                "${(exportProgress * 100).toInt()}% Complete",
-                                color = colors.textPrimary,
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.Bold
-                            )
+                            Text("${(exportProgress * 100).toInt()}% Complete", style = MaterialTheme.typography.bodyLarge, color = Indigo, fontWeight = FontWeight.Bold)
                             Spacer(Modifier.height(16.dp))
                             LinearProgressIndicator(
                                 progress = { exportProgress },
                                 modifier = Modifier.fillMaxWidth(0.8f).height(6.dp),
-                                color = colors.textPrimary,
-                                trackColor = colors.outline,
+                                color = Indigo,
+                                trackColor = colors.outline
                             )
                             Spacer(Modifier.height(24.dp))
                             OutlinedButton(
                                 onClick = { viewModel.cancelExport() },
+                                border = BorderStroke(1.dp, colors.outline),
                                 colors = ButtonDefaults.outlinedButtonColors(contentColor = colors.textSecondary)
-                            ) {
-                                Text("Cancel", color = colors.textSecondary)
-                            }
+                            ) { Text("Cancel") }
                         }
                     }
                 }
             }
         }
 
-        // ========================
-        // EXPORT ERROR DIALOG
-        // ========================
+        // ── Export error dialog ──────────────────────────────────────────────
         val exportError by viewModel.lastExportError.collectAsState()
         if (exportError != null) {
             AlertDialog(
                 onDismissRequest = { viewModel.clearExportError() },
                 containerColor = colors.surface,
-                titleContentColor = colors.textPrimary,
-                textContentColor = colors.textSecondary,
-                title = {
-                    Text(
-                        "Export Failed",
-                        fontWeight = FontWeight.Bold,
-                        color = colors.textPrimary
-                    )
-                },
+                title = { Text("Export Failed", fontWeight = FontWeight.Bold, color = colors.textPrimary) },
                 text = {
                     Column {
-                        Text(
-                            "Please copy this error and share it with the developer:",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = colors.textSecondary
-                        )
+                        Text("Please copy this error and share it with the developer:", style = MaterialTheme.typography.bodyMedium, color = colors.textSecondary)
                         Spacer(Modifier.height(12.dp))
                         Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(colors.bg, RoundedCornerShape(8.dp))
-                                .padding(12.dp)
+                            modifier = Modifier.fillMaxWidth().background(colors.surfaceHighlight, RoundedCornerShape(8.dp)).padding(12.dp)
                         ) {
-                            Text(
-                                exportError ?: "",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = colors.textPrimary,
-                                textAlign = TextAlign.Start
-                            )
+                            Text(exportError ?: "", style = MaterialTheme.typography.bodySmall, color = colors.textPrimary)
                         }
                     }
                 },
@@ -718,62 +382,34 @@ fun PlayerScreen(
                         cm?.setPrimaryClip(ClipData.newPlainText("Lofiga export error", exportError ?: ""))
                         Toast.makeText(context, "Error copied to clipboard", Toast.LENGTH_SHORT).show()
                         viewModel.clearExportError()
-                    }) {
-                        Text("Copy", color = colors.textPrimary, fontWeight = FontWeight.Bold)
-                    }
+                    }) { Text("Copy", color = Indigo, fontWeight = FontWeight.Bold) }
                 },
                 dismissButton = {
-                    TextButton(onClick = { viewModel.clearExportError() }) {
-                        Text("Close", color = colors.textSecondary)
-                    }
+                    TextButton(onClick = { viewModel.clearExportError() }) { Text("Close", color = colors.textSecondary) }
                 }
             )
         }
 
-        // ========================
-        // POST-EXPORT SUPPORT PROMPT (user-initiated rewarded ad)
-        // ========================
+        // ── Post-export support prompt (rewarded ad, user-initiated) ─────────
         if (showPostExportSupportPrompt) {
             AlertDialog(
                 onDismissRequest = { showPostExportSupportPrompt = false },
                 containerColor = colors.surface,
-                titleContentColor = colors.textPrimary,
-                textContentColor = colors.textSecondary,
-                title = {
-                    Text(
-                        "Mix exported! 🎧",
-                        fontWeight = FontWeight.Bold,
-                        color = colors.textPrimary
-                    )
-                },
-                text = {
-                    Text(
-                        "Enjoying Lofiga? You can support development by watching a short ad — totally optional.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = colors.textSecondary
-                    )
-                },
+                title = { Text("Mix exported!", fontWeight = FontWeight.Bold, color = colors.textPrimary) },
+                text = { Text("Enjoying Lofiga? You can support development by watching a short ad — totally optional.", color = colors.textSecondary) },
                 confirmButton = {
                     TextButton(onClick = {
                         showPostExportSupportPrompt = false
-                        context.findActivity()?.let { act ->
-                            AdManager.showRewarded(act, onRewarded = {}, onDismissed = {})
-                        }
-                    }) {
-                        Text("Watch Ad", color = colors.textPrimary, fontWeight = FontWeight.Bold)
-                    }
+                        context.findActivity()?.let { act -> AdManager.showRewarded(act, onRewarded = {}, onDismissed = {}) }
+                    }) { Text("Watch Ad", color = Indigo, fontWeight = FontWeight.Bold) }
                 },
                 dismissButton = {
-                    TextButton(onClick = { showPostExportSupportPrompt = false }) {
-                        Text("No Thanks", color = colors.textSecondary)
-                    }
+                    TextButton(onClick = { showPostExportSupportPrompt = false }) { Text("No Thanks", color = colors.textSecondary) }
                 }
             )
         }
 
-        // ========================
-        // SAVE PRESET BOTTOM SHEET
-        // ========================
+        // ── Save preset bottom sheet ─────────────────────────────────────────
         if (showSavePresetSheet) {
             var presetName by remember { mutableStateOf("") }
             ModalBottomSheet(
@@ -785,45 +421,27 @@ fun PlayerScreen(
                     modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp).padding(bottom = 32.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    // Sheet handle via bottom sheet itself
-                    Icon(
-                        Icons.Outlined.BookmarkAdd,
-                        contentDescription = null,
-                        tint = colors.textPrimary,
-                        modifier = Modifier.size(40.dp)
-                    )
+                    Icon(Icons.Outlined.BookmarkAdd, contentDescription = null, tint = Indigo, modifier = Modifier.size(40.dp))
                     Spacer(Modifier.height(12.dp))
-                    Text(
-                        "Save Custom Preset",
-                        color = colors.textPrimary,
-                        fontWeight = FontWeight.Bold,
-                        style = MaterialTheme.typography.titleLarge
-                    )
-                    Text(
-                        "Save the current effect settings as a reusable preset",
-                        color = colors.textTertiary,
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.padding(top = 4.dp, bottom = 20.dp)
-                    )
+                    Text("Save Custom Preset", color = colors.textPrimary, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
+                    Text("Save the current effect settings as a reusable preset", color = colors.textTertiary, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 4.dp, bottom = 20.dp))
                     OutlinedTextField(
                         value = presetName,
                         onValueChange = { presetName = it },
-                        label = { Text("Preset Name", color = colors.textTertiary) },
-                        placeholder = { Text("e.g. My Chill Mix", color = colors.textTertiary.copy(alpha = 0.5f)) },
+                        label = { Text("Preset Name") },
+                        placeholder = { Text("e.g. My Chill Mix") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedTextColor = colors.textPrimary,
                             unfocusedTextColor = colors.textPrimary,
-                            cursorColor = colors.textPrimary,
-                            focusedBorderColor = colors.textPrimary,
+                            cursorColor = Indigo,
+                            focusedBorderColor = Indigo,
                             unfocusedBorderColor = colors.outline,
                             focusedContainerColor = colors.surfaceHighlight,
-                            unfocusedContainerColor = colors.surfaceHighlight,
-                            focusedLabelColor = colors.textPrimary,
-                            unfocusedLabelColor = colors.textTertiary
-                        ),
-                        shape = RoundedCornerShape(12.dp)
+                            unfocusedContainerColor = colors.surfaceHighlight
+                        )
                     )
                     Spacer(Modifier.height(20.dp))
                     Button(
@@ -835,10 +453,7 @@ fun PlayerScreen(
                         },
                         enabled = presetName.isNotBlank(),
                         modifier = Modifier.fillMaxWidth().height(52.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = colors.textPrimary,
-                            disabledContainerColor = colors.textPrimary.copy(alpha = 0.3f)
-                        ),
+                        colors = ButtonDefaults.buttonColors(containerColor = Indigo, disabledContainerColor = Indigo.copy(alpha = 0.3f)),
                         shape = RoundedCornerShape(14.dp)
                     ) {
                         Icon(Icons.Outlined.BookmarkAdd, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -849,42 +464,267 @@ fun PlayerScreen(
             }
         }
 
-        // ========================
-        // SNACKBAR HOST
-        // ========================
+        // ── Snackbar host ────────────────────────────────────────────────────
         SnackbarHost(
             hostState = snackbarHostState,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 140.dp, start = 16.dp, end = 16.dp)
+            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 140.dp, start = 16.dp, end = 16.dp)
         )
     }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// Sub-composables
+// ═══════════════════════════════════════════════════════════════════════════════
+
+private enum class TrackAction { Export, SaveConfig, SavePreset }
+
+@Composable
+private fun EmptyPlayerState() {
+    val colors = LocalAppColors.current
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.padding(horizontal = 32.dp)
+        ) {
+            Surface(
+                modifier = Modifier.size(120.dp),
+                shape = CircleShape,
+                color = colors.surfaceHighlight,
+                border = BorderStroke(1.dp, colors.outline)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(Icons.Outlined.MusicNote, contentDescription = null, tint = colors.textTertiary, modifier = Modifier.size(48.dp))
+                }
+            }
+            Spacer(Modifier.height(24.dp))
+            Text("Select a song to begin", color = colors.textPrimary, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(8.dp))
+            Text("Pick a song from the Library tab or load one from your files", color = colors.textTertiary, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center, lineHeight = 22.sp)
+            Spacer(Modifier.height(24.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                HeaderChip(icon = Icons.Outlined.Speed, label = "Tempo")
+                HeaderChip(icon = Icons.Outlined.Forward30, label = "Reverb")
+                HeaderChip(icon = Icons.Outlined.Cloud, label = "Atmosphere")
+            }
+        }
+    }
+}
+
+@Composable
+private fun TrackInfoCard(
+    title: String,
+    artist: String,
+    onAction: (TrackAction) -> Unit
+) {
+    val colors = LocalAppColors.current
+    var showActionsMenu by remember { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Box(
+            modifier = Modifier.size(160.dp).clip(RoundedCornerShape(16.dp)).background(colors.surfaceHighlight),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(Icons.Outlined.Album, contentDescription = null, tint = colors.textTertiary, modifier = Modifier.size(64.dp))
+        }
+        Spacer(Modifier.height(16.dp))
+        Text(
+            title,
+            style = MaterialTheme.typography.headlineSmall,
+            color = colors.textPrimary,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Spacer(Modifier.height(2.dp))
+        Text(
+            artist.ifBlank { "Unknown Artist" },
+            style = MaterialTheme.typography.bodyMedium,
+            color = colors.textTertiary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Spacer(Modifier.height(8.dp))
+        Box {
+            IconButton(onClick = { showActionsMenu = true }) {
+                Icon(Icons.Outlined.MoreVert, contentDescription = "Actions", tint = colors.textSecondary)
+            }
+            DropdownMenu(
+                expanded = showActionsMenu,
+                onDismissRequest = { showActionsMenu = false },
+                containerColor = colors.surface
+            ) {
+                DropdownMenuItem(
+                    text = { Text("Export") },
+                    onClick = { onAction(TrackAction.Export); showActionsMenu = false },
+                    leadingIcon = { Icon(Icons.Outlined.FileDownload, contentDescription = null, tint = Indigo, modifier = Modifier.size(18.dp)) }
+                )
+                DropdownMenuItem(
+                    text = { Text("Save Config") },
+                    onClick = { onAction(TrackAction.SaveConfig); showActionsMenu = false },
+                    leadingIcon = { Icon(Icons.Outlined.Save, contentDescription = null, tint = Indigo, modifier = Modifier.size(18.dp)) }
+                )
+                DropdownMenuItem(
+                    text = { Text("Save as Preset") },
+                    onClick = { onAction(TrackAction.SavePreset); showActionsMenu = false },
+                    leadingIcon = { Icon(Icons.Outlined.BookmarkAdd, contentDescription = null, tint = Indigo, modifier = Modifier.size(18.dp)) }
+                )
+            }
+        }
+    }
+}
 
 @Composable
 private fun WaveformVisualizer(viewModel: MainViewModel) {
     val fftData by viewModel.audioEngine.fftData.collectAsState()
     val colors = LocalAppColors.current
-    Canvas(modifier = Modifier.fillMaxWidth().height(72.dp)) {
+    Canvas(modifier = Modifier.fillMaxWidth().height(80.dp)) {
         val width = size.width
         val height = size.height
-        val barCount = fftData.size
-        if (barCount > 0) {
-            val barWidth = width / barCount
-            for (i in 0 until barCount) {
-                val barHeight = fftData[i] * height * 0.5f
-                drawRect(
-                    brush = Brush.verticalGradient(
-                        listOf(
-                            colors.textPrimary.copy(alpha = 0.8f),
-                            colors.textPrimary.copy(alpha = 0.3f)
-                        )
+        val barCount = fftData.size.coerceAtLeast(1)
+        val barWidth = width / barCount
+        val corner = 4.dp.toPx()
+        for (i in 0 until barCount) {
+            val barHeight = (fftData.getOrNull(i) ?: 0f) * height * 0.55f
+            drawRoundRect(
+                color = Indigo.copy(alpha = 0.8f),
+                topLeft = Offset(x = i * barWidth + 1.dp.toPx(), y = height - barHeight),
+                size = Size(width = barWidth - 2.dp.toPx(), height = barHeight),
+                cornerRadius = androidx.compose.ui.geometry.CornerRadius(corner, corner)
+            )
+        }
+    }
+}
+
+@Composable
+private fun PresetsRow(
+    viewModel: MainViewModel,
+    currentPreset: LofiPreset,
+    customPresets: List<CustomPreset>,
+    selectedCustomPresetId: Long?,
+    showAllPresets: Boolean,
+    onShowAllToggle: () -> Unit,
+    onSavePreset: () -> Unit
+) {
+    val colors = LocalAppColors.current
+    Column {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Outlined.AutoAwesome, contentDescription = null, tint = colors.textPrimary, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Presets", style = MaterialTheme.typography.labelMedium, color = colors.textTertiary, fontWeight = FontWeight.SemiBold)
+                if (currentPreset == LofiPreset.Custom) {
+                    Spacer(Modifier.width(8.dp))
+                    AssistChip(
+                        onClick = onSavePreset,
+                        label = { Text("Save", style = MaterialTheme.typography.labelSmall) },
+                        leadingIcon = { Icon(Icons.Outlined.BookmarkAdd, contentDescription = null, modifier = Modifier.size(14.dp)) },
+                        colors = AssistChipDefaults.assistChipColors(
+                            containerColor = IndigoContainer,
+                            labelColor = Indigo,
+                            leadingIconContentColor = Indigo
+                        ),
+                        border = BorderStroke(1.dp, Indigo.copy(alpha = 0.3f))
+                    )
+                }
+            }
+            TextButton(onClick = onShowAllToggle) {
+                Text(if (showAllPresets) "Less" else "All", color = Indigo, style = MaterialTheme.typography.bodySmall)
+            }
+        }
+        Row(
+            modifier = Modifier.horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            val presetsToShow = if (showAllPresets) {
+                LofiPreset.entries.filter { it != LofiPreset.Custom }
+            } else {
+                LofiPreset.entries.filter { it != LofiPreset.Custom }.take(4)
+            }
+            presetsToShow.forEach { preset ->
+                FilterChip(
+                    selected = currentPreset == preset,
+                    onClick = { viewModel.applyPreset(preset) },
+                    label = { Text(preset.displayName, style = MaterialTheme.typography.labelMedium) },
+                    shape = RoundedCornerShape(20.dp),
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = IndigoContainer,
+                        selectedLabelColor = Indigo,
+                        containerColor = colors.surface,
+                        labelColor = colors.textPrimary
                     ),
-                    topLeft = Offset(x = i * barWidth, y = height - barHeight),
-                    size = Size(width = barWidth, height = barHeight)
+                    border = FilterChipDefaults.filterChipBorder(
+                        borderColor = colors.outline,
+                        selectedBorderColor = Indigo.copy(alpha = 0.3f),
+                        enabled = true,
+                        selected = currentPreset == preset
+                    )
                 )
             }
+            customPresets.forEach { preset ->
+                val isSelected = selectedCustomPresetId == preset.id
+                FilterChip(
+                    selected = isSelected,
+                    onClick = { viewModel.applyCustomPreset(preset) },
+                    label = { Text(preset.name, style = MaterialTheme.typography.labelMedium) },
+                    shape = RoundedCornerShape(20.dp),
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = IndigoContainer,
+                        selectedLabelColor = Indigo,
+                        containerColor = colors.surface,
+                        labelColor = colors.textPrimary
+                    ),
+                    border = FilterChipDefaults.filterChipBorder(
+                        borderColor = colors.outline,
+                        selectedBorderColor = Indigo.copy(alpha = 0.3f),
+                        enabled = true,
+                        selected = isSelected
+                    )
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AtmosphereSlider(
+    volume: Float,
+    onVolumeChange: (Float) -> Unit,
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector
+) {
+    val colors = LocalAppColors.current
+    val isActive = volume > 0.01f
+
+    Surface(
+        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+        shape = RoundedCornerShape(12.dp),
+        color = colors.surface,
+        border = BorderStroke(1.dp, if (isActive) Indigo.copy(alpha = 0.3f) else colors.outline)
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(icon, contentDescription = label, tint = if (isActive) Indigo else colors.textTertiary, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(label, style = MaterialTheme.typography.bodyMedium, color = if (isActive) Indigo else colors.textPrimary, fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Normal)
+                Spacer(Modifier.weight(1f))
+                Text("${(volume * 100).toInt()}%", style = MaterialTheme.typography.labelMedium, color = Indigo, fontWeight = FontWeight.SemiBold)
+            }
+            Slider(
+                value = volume,
+                onValueChange = onVolumeChange,
+                modifier = Modifier.fillMaxWidth().height(24.dp),
+                colors = SliderDefaults.colors(thumbColor = Indigo, activeTrackColor = Indigo, inactiveTrackColor = colors.outline)
+            )
         }
     }
 }
@@ -896,121 +736,76 @@ private fun PlaybackControls(viewModel: MainViewModel) {
     val isPlaying by viewModel.audioEngine.isPlaying.collectAsState()
     val isLooping by viewModel.audioEngine.isLooping.collectAsState()
     val colors = LocalAppColors.current
-    
+
     var isDragging by remember { mutableStateOf(false) }
     var dragPosition by remember { mutableStateOf(0f) }
     val sliderDisplayValue = if (isDragging) dragPosition else position.toFloat()
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = colors.surface.copy(alpha = 0.95f),
-        tonalElevation = 8.dp,
-        shadowElevation = 16.dp
+        color = colors.surface,
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
+        border = BorderStroke(1.dp, colors.outline)
     ) {
-        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
-            // --- Seek Bar ---
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    formatDuration(sliderDisplayValue.toLong()),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = colors.textTertiary,
-                    modifier = Modifier.width(40.dp)
-                )
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
+            // Seek bar
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Text(formatDuration(sliderDisplayValue.toLong()), style = MaterialTheme.typography.bodySmall, color = colors.textTertiary, modifier = Modifier.width(40.dp))
                 Slider(
                     value = sliderDisplayValue,
-                    onValueChange = { newValue ->
-                        dragPosition = newValue
-                        isDragging = true
-                    },
+                    onValueChange = { dragPosition = it; isDragging = true },
                     onValueChangeFinished = {
                         viewModel.audioEngine.seekTo(dragPosition.toLong())
                         isDragging = false
                     },
                     valueRange = 0f..if (duration > 0) duration.toFloat() else 1f,
                     modifier = Modifier.weight(1f).height(24.dp),
-                    colors = SliderDefaults.colors(
-                        thumbColor = colors.textPrimary,
-                        activeTrackColor = colors.textPrimary,
-                        inactiveTrackColor = colors.outline
-                    )
+                    colors = SliderDefaults.colors(thumbColor = Indigo, activeTrackColor = Indigo, inactiveTrackColor = colors.outline)
                 )
-                Text(
-                    formatDuration(duration),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = colors.textTertiary,
-                    modifier = Modifier.width(40.dp)
-                )
+                Text(formatDuration(duration), style = MaterialTheme.typography.bodySmall, color = colors.textTertiary, modifier = Modifier.width(40.dp))
             }
-
-            // --- Playback Controls ---
+            // Controls
             Row(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Rewind 10s
-                IconButton(
-                    onClick = { viewModel.audioEngine.seekTo((position - 10000).coerceAtLeast(0)) },
-                    modifier = Modifier.size(40.dp)
-                ) {
+                IconButton(onClick = { viewModel.audioEngine.seekTo((position - 10000).coerceAtLeast(0)) }, modifier = Modifier.size(44.dp)) {
                     Icon(Icons.Filled.Replay10, contentDescription = "-10s", tint = colors.textSecondary, modifier = Modifier.size(24.dp))
                 }
-                Spacer(Modifier.width(4.dp))
-                // Previous
-                IconButton(
-                    onClick = { viewModel.previousTrack() },
-                    modifier = Modifier.size(40.dp)
-                ) {
-                    Icon(Icons.Filled.SkipPrevious, contentDescription = "Previous", tint = colors.textSecondary, modifier = Modifier.size(24.dp))
+                IconButton(onClick = { viewModel.previousTrack() }, modifier = Modifier.size(44.dp)) {
+                    Icon(Icons.Filled.SkipPrevious, contentDescription = "Previous", tint = colors.textSecondary, modifier = Modifier.size(28.dp))
                 }
                 Spacer(Modifier.width(12.dp))
-                // Play/Pause - Big button
                 Surface(
                     modifier = Modifier.size(64.dp),
                     shape = CircleShape,
-                    color = colors.textPrimary
+                    color = Indigo,
+                    border = BorderStroke(1.dp, Indigo)
                 ) {
-                    IconButton(
-                        onClick = { viewModel.audioEngine.togglePlayPause() },
-                        modifier = Modifier.fillMaxSize()
-                    ) {
+                    IconButton(onClick = { viewModel.audioEngine.togglePlayPause() }, modifier = Modifier.fillMaxSize()) {
                         Icon(
                             if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
                             contentDescription = if (isPlaying) "Pause" else "Play",
-                            tint = colors.surface,
-                            modifier = Modifier.size(36.dp)
+                            tint = Color.White,
+                            modifier = Modifier.size(32.dp)
                         )
                     }
                 }
                 Spacer(Modifier.width(12.dp))
-                // Next
-                IconButton(
-                    onClick = { viewModel.nextTrack() },
-                    modifier = Modifier.size(40.dp)
-                ) {
-                    Icon(Icons.Filled.SkipNext, contentDescription = "Next", tint = colors.textSecondary, modifier = Modifier.size(24.dp))
+                IconButton(onClick = { viewModel.nextTrack() }, modifier = Modifier.size(44.dp)) {
+                    Icon(Icons.Filled.SkipNext, contentDescription = "Next", tint = colors.textSecondary, modifier = Modifier.size(28.dp))
                 }
-                Spacer(Modifier.width(4.dp))
-                // Forward 10s
-                IconButton(
-                    onClick = { viewModel.audioEngine.seekTo((position + 10000).coerceAtMost(duration)) },
-                    modifier = Modifier.size(40.dp)
-                ) {
+                IconButton(onClick = { viewModel.audioEngine.seekTo((position + 10000).coerceAtMost(duration)) }, modifier = Modifier.size(44.dp)) {
                     Icon(Icons.Filled.Forward10, contentDescription = "+10s", tint = colors.textSecondary, modifier = Modifier.size(24.dp))
                 }
                 Spacer(Modifier.width(8.dp))
-                // Loop
-                IconButton(
-                    onClick = { viewModel.audioEngine.toggleLoop() },
-                    modifier = Modifier.size(40.dp)
-                ) {
+                IconButton(onClick = { viewModel.audioEngine.toggleLoop() }, modifier = Modifier.size(40.dp)) {
                     Icon(
                         if (isLooping) Icons.Filled.RepeatOne else Icons.Outlined.Repeat,
                         contentDescription = "Loop",
-                        tint = if (isLooping) colors.textPrimary else colors.textTertiary,
+                        tint = if (isLooping) Indigo else colors.textTertiary,
                         modifier = Modifier.size(22.dp)
                     )
                 }

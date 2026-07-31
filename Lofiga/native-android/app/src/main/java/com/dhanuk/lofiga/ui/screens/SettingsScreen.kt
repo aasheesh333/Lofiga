@@ -2,6 +2,7 @@ package com.dhanuk.lofiga.ui.screens
 
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -14,16 +15,15 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.dhanuk.lofiga.ui.MainViewModel
-import com.dhanuk.lofiga.ui.components.*
-import com.dhanuk.lofiga.ui.theme.*
-import com.dhanuk.lofiga.ui.theme.LocalAppColors
-import com.dhanuk.lofiga.util.SettingsManager
 import com.dhanuk.lofiga.BuildConfig
+import com.dhanuk.lofiga.ads.AdManager
+import com.dhanuk.lofiga.ui.MainViewModel
+import com.dhanuk.lofiga.ui.components.DeleteConfirmDialog
+import com.dhanuk.lofiga.ui.theme.*
+import com.dhanuk.lofiga.util.SettingsManager
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -32,367 +32,370 @@ fun SettingsScreen(
     viewModel: MainViewModel,
     modifier: Modifier = Modifier
 ) {
+    val colors = LocalAppColors.current
     val settings by viewModel.settingsManager.settingsFlow.collectAsState(initial = SettingsManager.AppSettings())
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
-    val colors = LocalAppColors.current
+    val customPresets by viewModel.customPresets.collectAsState()
 
-    var showFormatDialog by remember { mutableStateOf(false) }
-    var showBitrateDialog by remember { mutableStateOf(false) }
+    var showBitrateMenu by remember { mutableStateOf(false) }
+    var snackbarMessage by remember { mutableStateOf<String?>(null) }
+
+    val snackbarHostState = remember { SnackbarHostState() }
+    LaunchedEffect(snackbarMessage) {
+        snackbarMessage?.let {
+            snackbarHostState.showSnackbar(it)
+            snackbarMessage = null
+        }
+    }
 
     Box(modifier = modifier.fillMaxSize()) {
-        AmbientBackground()
-
         Column(
-            modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 80.dp)
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(bottom = 80.dp)
         ) {
+            // ── Title ──────────────────────────────────────────────────────────
             Text(
-                text = "Settings",
-                style = MaterialTheme.typography.headlineLarge,
+                "Settings",
+                style = MaterialTheme.typography.headlineMedium,
                 color = colors.textPrimary,
-                modifier = Modifier.padding(bottom = 20.dp)
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(start = 20.dp, top = 16.dp, bottom = 16.dp)
             )
 
-            SectionHeader("GENERAL")
-
-            SettingItem(
-                title = "Audio Format",
-                subtitle = settings.audioFormat.uppercase(),
-                icon = Icons.Outlined.AudioFile,
-                onClick = { showFormatDialog = true }
-            )
-
-            if (settings.audioFormat != "wav") {
-                SettingItem(
-                    title = "Audio Bitrate",
-                    subtitle = settings.audioBitrate,
-                    icon = Icons.Outlined.Speed,
-                    onClick = { showBitrateDialog = true }
+            // ════════════════════════════════════════════════════════════════════
+            // Section 1 — APPEARANCE
+            // ════════════════════════════════════════════════════════════════════
+            SettingsSection("APPEARANCE") {
+                SwitchRow(
+                    title = "Dark mode",
+                    subtitle = "Use dark surfaces instead of light",
+                    checked = settings.isDarkMode,
+                    onCheckedChange = { dark ->
+                        scope.launch { viewModel.settingsManager.updateDarkMode(dark) }
+                    }
                 )
             }
 
-            SettingItem(
-                title = "Theme",
-                subtitle = if (settings.isDarkMode) "Dark Mode" else "Light Mode",
-                icon = Icons.Outlined.DarkMode,
-                onClick = {},
-                isSwitch = true,
-                switchValue = settings.isDarkMode,
-                onSwitchChange = { dark ->
-                    scope.launch { viewModel.settingsManager.updateDarkMode(dark) }
-                }
-            )
+            Spacer(Modifier.height(16.dp))
 
-            Spacer(Modifier.height(32.dp))
-
-            SectionHeader("ABOUT")
-
-            SettingItem(
-                title = "Version",
-                subtitle = "${BuildConfig.VERSION_NAME} (Native)",
-                icon = Icons.Outlined.Info,
-                onClick = {}
-            )
-
-            SettingItem(
-                title = "Made with \u2764 for Lofi Lovers",
-                subtitle = "",
-                icon = Icons.Outlined.FavoriteBorder,
-                onClick = {}
-            )
-
-            SettingItem(
-                title = "Privacy Policy",
-                subtitle = "Learn how we handle your data",
-                icon = Icons.Outlined.PrivacyTip,
-                onClick = {
-                    val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://dhanuk.page.gd/Lofiga/Privacy-Policy.html?i=2"))
-                    context.startActivity(browserIntent)
-                }
-            )
-
-            SettingItem(
-                title = "Terms of Use",
-                subtitle = "Read our terms and conditions",
-                icon = Icons.Outlined.Description,
-                onClick = {
-                    val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://dhanuk.page.gd/Lofiga/Terms-Of-Use.html"))
-                    context.startActivity(browserIntent)
-                }
-            )
-
-            SettingItem(
-                title = "Contact Us",
-                subtitle = "Get in touch with us",
-                icon = Icons.Outlined.MailOutline,
-                onClick = {
-                    val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://dhanuk.page.gd/Lofiga/Contact-Us.html"))
-                    context.startActivity(browserIntent)
-                }
-            )
-
-            Spacer(Modifier.height(24.dp))
-
-            SectionHeader("CUSTOM PRESETS")
-            val customPresets by viewModel.customPresets.collectAsState()
-            if (customPresets.isEmpty()) {
-                Text(
-                    "No custom presets saved yet",
-                    color = colors.textTertiary,
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.padding(vertical = 16.dp)
-                )
-            } else {
-                customPresets.forEach { preset ->
-                    key(preset.id) {
-                        var showPresetDeleteConfirm by remember { mutableStateOf(false) }
-                        if (showPresetDeleteConfirm) {
-                            DeleteConfirmDialog(
-                                title = "Delete Preset",
-                                message = "Are you sure you want to delete \"${preset.name}\"? This cannot be undone.",
-                                onConfirm = {
-                                    viewModel.deleteCustomPreset(preset.id)
-                                    showPresetDeleteConfirm = false
-                                },
-                                onDismiss = { showPresetDeleteConfirm = false }
-                            )
-                        }
-                        Surface(
-                            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                            shape = RoundedCornerShape(12.dp),
-                            color = colors.surface,
-                            border = ButtonDefaults.outlinedButtonBorder.copy(
-                                brush = androidx.compose.ui.graphics.Brush.linearGradient(
-                                    listOf(colors.outline, colors.outline)
-                                )
-                            )
+            // ════════════════════════════════════════════════════════════════════
+            // Section 2 — EXPORT
+            // ════════════════════════════════════════════════════════════════════
+            SettingsSection("EXPORT") {
+                // Audio quality dropdown
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showBitrateMenu = true }
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Audio quality", style = MaterialTheme.typography.bodyLarge, color = colors.textPrimary)
+                        Text("Bitrate for exported files", style = MaterialTheme.typography.bodySmall, color = colors.textTertiary)
+                    }
+                    Box {
+                        Text(
+                            settings.audioBitrate,
+                            style = MaterialTheme.typography.labelLarge,
+                            color = Indigo,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        DropdownMenu(
+                            expanded = showBitrateMenu,
+                            onDismissRequest = { showBitrateMenu = false },
+                            containerColor = colors.surface
                         ) {
-                            Row(
-                                modifier = Modifier.padding(12.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    Icons.Outlined.Bookmark,
-                                    contentDescription = null,
-                                    tint = Cyan400,
-                                    modifier = Modifier.size(20.dp)
+                            listOf("128k" to "128 kbps", "192k" to "192 kbps", "256k" to "256 kbps", "320k" to "320 kbps").forEach { (value, label) ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(label, color = if (settings.audioBitrate == value) Indigo else colors.textPrimary)
+                                            if (settings.audioBitrate == value) {
+                                                Spacer(Modifier.width(8.dp))
+                                                Icon(Icons.Outlined.Check, contentDescription = null, tint = Indigo, modifier = Modifier.size(16.dp))
+                                            }
+                                        }
+                                    },
+                                    onClick = {
+                                        scope.launch { viewModel.settingsManager.updateBitrate(value) }
+                                        showBitrateMenu = false
+                                    }
                                 )
-                                Spacer(Modifier.width(12.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = preset.name,
-                                        color = colors.textPrimary,
-                                        style = MaterialTheme.typography.titleMedium
-                                    )
-                                    Text(
-                                        text = "Custom preset",
-                                        color = colors.textTertiary,
-                                        style = MaterialTheme.typography.bodySmall
-                                    )
-                                }
-                                IconButton(onClick = { showPresetDeleteConfirm = true }) {
-                                    Icon(
-                                        Icons.Outlined.Delete,
-                                        contentDescription = "Delete",
-                                        tint = Color(0xFFFF5252).copy(alpha = 0.7f),
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
                             }
                         }
                     }
+                    Spacer(Modifier.width(8.dp))
+                    Icon(Icons.Outlined.ArrowDropDown, contentDescription = null, tint = colors.textTertiary)
                 }
-            }
+                HorizontalDivider(color = colors.outline, thickness = 1.dp)
 
-        }
-    }
-
-    if (showFormatDialog) {
-        FormatSelectionDialog(
-            currentFormat = settings.audioFormat,
-            onSelect = { format ->
-                scope.launch { viewModel.settingsManager.updateFormat(format) }
-                showFormatDialog = false
-            },
-            onDismiss = { showFormatDialog = false }
-        )
-    }
-
-    if (showBitrateDialog) {
-        BitrateSelectionDialog(
-            currentBitrate = settings.audioBitrate,
-            onSelect = { bitrate ->
-                scope.launch { viewModel.settingsManager.updateBitrate(bitrate) }
-                showBitrateDialog = false
-            },
-            onDismiss = { showBitrateDialog = false }
-        )
-    }
-}
-
-@Composable
-private fun FormatSelectionDialog(
-    currentFormat: String,
-    onSelect: (String) -> Unit,
-    onDismiss: () -> Unit
-) {
-    val colors = LocalAppColors.current
-    val formats = listOf("m4a" to "M4A (AAC) - Best quality/size", "wav" to "WAV - Uncompressed")
-
-    AlertDialog(
-        containerColor = colors.surface,
-        onDismissRequest = onDismiss,
-        title = { Text("Export Format", color = colors.textPrimary) },
-        text = {
-            Column {
-                formats.forEach { (value, label) ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 8.dp)
-                            .clickable { onSelect(value) },
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        RadioButton(
-                            selected = currentFormat == value,
-                            onClick = { onSelect(value) },
-                            colors = RadioButtonDefaults.colors(
-                                selectedColor = Purple500,
-                                unselectedColor = colors.textTertiary
-                            )
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Column {
-                            Text(value.uppercase(), color = colors.textPrimary, style = MaterialTheme.typography.bodyMedium)
-                            Text(label, color = colors.textTertiary, style = MaterialTheme.typography.bodySmall)
-                        }
+                // Format segmented buttons
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Format", style = MaterialTheme.typography.bodyLarge, color = colors.textPrimary, modifier = Modifier.weight(1f))
+                    SingleChoiceSegmentedButtonRow {
+                        SegmentedButton(
+                            selected = settings.audioFormat == "m4a",
+                            onClick = { scope.launch { viewModel.settingsManager.updateFormat("m4a") } },
+                            shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2)
+                        ) { Text("M4A", style = MaterialTheme.typography.labelLarge) }
+                        SegmentedButton(
+                            selected = settings.audioFormat == "wav",
+                            onClick = { scope.launch { viewModel.settingsManager.updateFormat("wav") } },
+                            shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2)
+                        ) { Text("WAV", style = MaterialTheme.typography.labelLarge) }
                     }
                 }
             }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Done", color = Purple500)
-            }
-        }
-    )
-}
 
-@Composable
-private fun BitrateSelectionDialog(
-    currentBitrate: String,
-    onSelect: (String) -> Unit,
-    onDismiss: () -> Unit
-) {
-    val colors = LocalAppColors.current
-    val bitrates = listOf("128k" to "128 Kbps - Small file", "192k" to "192 Kbps - Balanced", "256k" to "256 Kbps - High quality", "320k" to "320 Kbps - Best quality")
+            Spacer(Modifier.height(16.dp))
 
-    AlertDialog(
-        containerColor = colors.surface,
-        onDismissRequest = onDismiss,
-        title = { Text("Audio Bitrate", color = colors.textPrimary) },
-        text = {
-            Column {
-                bitrates.forEach { (value, label) ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 8.dp)
-                            .clickable { onSelect(value) },
-                        verticalAlignment = Alignment.CenterVertically
+            // ════════════════════════════════════════════════════════════════════
+            // Section 3 — ADS & PREMIUM
+            // ════════════════════════════════════════════════════════════════════
+            SettingsSection("ADS & PREMIUM") {
+                ActionRow(
+                    title = "Remove ads",
+                    subtitle = "Upgrade to premium for an ad-free experience"
+                ) {
+                    OutlinedButton(
+                        onClick = { snackbarMessage = "Premium coming soon" },
+                        shape = RoundedCornerShape(20.dp),
+                        border = BorderStroke(1.dp, Indigo),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Indigo),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp)
+                    ) { Text("Upgrade", fontWeight = FontWeight.SemiBold) }
+                }
+                HorizontalDivider(color = colors.outline, thickness = 1.dp)
+                ActionRow(
+                    title = "Watch ad for 1 hour ad-free",
+                    subtitle = "Watch a short ad to remove ads temporarily"
+                ) {
+                    TextButton(
+                        onClick = {
+                            val activity = context.findActivity()
+                            if (activity != null) {
+                                AdManager.showRewarded(
+                                    activity = activity,
+                                    onRewarded = { snackbarMessage = "Enjoy 1 hour of ad-free listening!" },
+                                    onDismissed = { snackbarMessage = "Ad not available right now" }
+                                )
+                            } else {
+                                snackbarMessage = "Unable to show ad"
+                            }
+                        },
+                        colors = ButtonDefaults.textButtonColors(contentColor = Indigo),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp)
                     ) {
-                        RadioButton(
-                            selected = currentBitrate == value,
-                            onClick = { onSelect(value) },
-                            colors = RadioButtonDefaults.colors(
-                                selectedColor = Purple500,
-                                unselectedColor = colors.textTertiary
-                            )
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Column {
-                            Text(value, color = colors.textPrimary, style = MaterialTheme.typography.bodyMedium)
-                            Text(label, color = colors.textTertiary, style = MaterialTheme.typography.bodySmall)
+                        Icon(Icons.Outlined.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Watch ad", fontWeight = FontWeight.SemiBold)
+                    }
+                }
+                HorizontalDivider(color = colors.outline, thickness = 1.dp)
+                ActionRow(
+                    title = "Reset ad counters",
+                    subtitle = "Clear ad failure counters and retry"
+                ) {
+                    TextButton(
+                        onClick = {
+                            AdManager.resetFailureCounters(context)
+                            snackbarMessage = "Ad counters reset"
+                        },
+                        colors = ButtonDefaults.textButtonColors(contentColor = colors.textTertiary),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp)
+                    ) { Text("Reset") }
+                }
+            }
+
+            Spacer(Modifier.height(16.dp))
+
+            // ════════════════════════════════════════════════════════════════════
+            // Section 4 — CUSTOM PRESETS
+            // ════════════════════════════════════════════════════════════════════
+            if (customPresets.isNotEmpty()) {
+                SettingsSection("CUSTOM PRESETS") {
+                    customPresets.forEach { preset ->
+                        key(preset.id) {
+                            var showDelete by remember { mutableStateOf(false) }
+                            if (showDelete) {
+                                DeleteConfirmDialog(
+                                    title = "Delete Preset",
+                                    message = "Delete \"${preset.name}\"? This cannot be undone.",
+                                    onConfirm = { viewModel.deleteCustomPreset(preset.id); showDelete = false },
+                                    onDismiss = { showDelete = false }
+                                )
+                            }
+                            ActionRow(
+                                title = preset.name,
+                                subtitle = "Custom preset"
+                            ) {
+                                IconButton(onClick = { showDelete = true }) {
+                                    Icon(Icons.Outlined.Delete, contentDescription = "Delete", tint = Color(0xFFBA1A1A).copy(alpha = 0.7f), modifier = Modifier.size(20.dp))
+                                }
+                            }
+                            HorizontalDivider(color = colors.outline, thickness = 1.dp)
                         }
                     }
                 }
+                Spacer(Modifier.height(16.dp))
             }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Done", color = Purple500)
-            }
-        }
-    )
-}
 
-@Composable
-private fun SettingItem(
-    title: String,
-    subtitle: String,
-    icon: ImageVector,
-    onClick: () -> Unit,
-    isSwitch: Boolean = false,
-    switchValue: Boolean = false,
-    onSwitchChange: (Boolean) -> Unit = {}
-) {
-    val colors = LocalAppColors.current
-    Surface(
-        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-        shape = RoundedCornerShape(16.dp),
-        color = colors.surface,
-        border = ButtonDefaults.outlinedButtonBorder.copy(
-            brush = androidx.compose.ui.graphics.Brush.linearGradient(
-                listOf(colors.outline, colors.outline)
-            )
-        ),
-        onClick = onClick
-    ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier.size(40.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(icon, contentDescription = title, tint = colors.textSecondary, modifier = Modifier.size(20.dp))
-            }
-            Spacer(Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.W600,
-                    color = colors.textPrimary
-                )
-                if (subtitle.isNotEmpty()) {
+            // ════════════════════════════════════════════════════════════════════
+            // Section 5 — ABOUT
+            // ════════════════════════════════════════════════════════════════════
+            SettingsSection("ABOUT") {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Lofiga", style = MaterialTheme.typography.bodyLarge, color = colors.textPrimary, modifier = Modifier.weight(1f))
                     Text(
-                        subtitle,
-                        style = MaterialTheme.typography.bodySmall,
+                        "v${BuildConfig.VERSION_NAME} (Build ${BuildConfig.VERSION_CODE})",
+                        style = MaterialTheme.typography.labelMedium,
                         color = colors.textTertiary
                     )
                 }
+                HorizontalDivider(color = colors.outline, thickness = 1.dp)
+                LinkRow("Rate on Play Store") {
+                    try {
+                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=${context.packageName}")))
+                    } catch (_: Exception) {
+                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=${context.packageName}")))
+                    }
+                }
+                HorizontalDivider(color = colors.outline, thickness = 1.dp)
+                LinkRow("Send feedback") {
+                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://dhanuk.page.gd/Lofiga/Contact-Us.html")))
+                }
+                HorizontalDivider(color = colors.outline, thickness = 1.dp)
+                LinkRow("Privacy policy") {
+                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://dhanuk.page.gd/Lofiga/Privacy-Policy.html?i=2")))
+                }
+                HorizontalDivider(color = colors.outline, thickness = 1.dp)
+                LinkRow("Terms of use") {
+                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://dhanuk.page.gd/Lofiga/Terms-Of-Use.html")))
+                }
+                HorizontalDivider(color = colors.outline, thickness = 1.dp)
+                LinkRow("Open source licenses") {
+                    snackbarMessage = "Licenses available at github.com/dhanuk/lofiga"
+                }
             }
-            if (isSwitch) {
-                Switch(
-                    checked = switchValue,
-                    onCheckedChange = onSwitchChange,
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = Purple500,
-                        checkedTrackColor = Purple500.copy(alpha = 0.3f),
-                        uncheckedThumbColor = colors.textTertiary,
-                        uncheckedTrackColor = colors.outline
-                    )
-                )
-            } else {
-                Icon(
-                    Icons.Outlined.NavigateNext,
-                    contentDescription = null,
-                    tint = colors.textTertiary,
-                    modifier = Modifier.size(16.dp)
-                )
-            }
+
+            Spacer(Modifier.height(24.dp))
+        }
+
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 80.dp)
+        )
+    }
+}
+
+// ── Reusable section card ──────────────────────────────────────────────────────
+@Composable
+private fun SettingsSection(
+    title: String,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    val colors = LocalAppColors.current
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+        Text(
+            title,
+            style = MaterialTheme.typography.labelMedium,
+            color = colors.textTertiary,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
+        )
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            color = colors.surface,
+            border = BorderStroke(1.dp, colors.outline)
+        ) {
+            Column(content = content)
         }
     }
+}
+
+// ── Switch row ─────────────────────────────────────────────────────────────────
+@Composable
+private fun SwitchRow(
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    val colors = LocalAppColors.current
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge, color = colors.textPrimary)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = colors.textTertiary)
+        }
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = Color.White,
+                checkedTrackColor = Indigo,
+                uncheckedThumbColor = colors.textTertiary,
+                uncheckedTrackColor = colors.outline
+            )
+        )
+    }
+}
+
+// ── Action row (title + subtitle + trailing composable) ────────────────────────
+@Composable
+private fun ActionRow(
+    title: String,
+    subtitle: String,
+    trailing: @Composable () -> Unit
+) {
+    val colors = LocalAppColors.current
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge, color = colors.textPrimary)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = colors.textTertiary)
+        }
+        trailing()
+    }
+}
+
+// ── Link row (indigo text, clickable) ──────────────────────────────────────────
+@Composable
+private fun LinkRow(
+    title: String,
+    onClick: () -> Unit
+) {
+    val colors = LocalAppColors.current
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(title, style = MaterialTheme.typography.bodyLarge, color = Indigo, modifier = Modifier.weight(1f))
+        Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = colors.textTertiary, modifier = Modifier.size(20.dp))
+    }
+}
+
+// ── Activity finder (needed for rewarded ads) ──────────────────────────────────
+private fun android.content.Context.findActivity(): android.app.Activity? = when (this) {
+    is android.app.Activity -> this
+    is android.content.ContextWrapper -> baseContext.findActivity()
+    else -> null
 }
