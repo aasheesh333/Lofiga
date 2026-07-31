@@ -1,7 +1,6 @@
 package com.dhanuk.lofiga.ui.components
 
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -16,105 +15,79 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.*
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.dhanuk.lofiga.ui.theme.LocalAppColors
 import com.dhanuk.lofiga.ui.theme.*
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// Lofiga v2 — Shared UI Components
+// Pure white surfaces, 1px #EEEEEE outlines, deep indigo #1F3A8A accent.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * No-op ambient background. The v2 design uses pure white surfaces — no
+ * gradients, no coloured circles. Kept as a transparent placeholder so
+ * existing callsites compile without modification.
+ */
 @Composable
 fun AmbientBackground(modifier: Modifier = Modifier) {
-    Canvas(modifier = modifier) {
-        val w = size.width
-        val h = size.height
-
-        drawCircle(
-            color = Purple500.copy(alpha = 0.15f),
-            radius = w * 0.6f,
-            center = Offset(w * 0.2f, h * 0.1f)
-        )
-        drawCircle(
-            color = Cyan400.copy(alpha = 0.08f),
-            radius = w * 0.5f,
-            center = Offset(w * 0.8f, h * 0.9f)
-        )
-        drawCircle(
-            color = Purple500.copy(alpha = 0.08f),
-            radius = w * 0.4f,
-            center = Offset(w * 0.5f, h * 0.5f)
-        )
-    }
+    // Intentionally empty — v2 is flat white.
 }
 
-
+/**
+ * 4-tab bottom NavigationBar: Home, Library, Player, Settings.
+ * White surface, indigo pill indicator on active tab, gray inactive icons.
+ */
 @Composable
 fun LofigaNavigationBar(
     selectedIndex: Int,
     onItemSelected: (Int) -> Unit,
     modifier: Modifier = Modifier,
-    /** When true, the Player tab (index 1) shows a small "now playing"
-     *  dot overlay so users can see at a glance that audio is live. */
     showNowPlayingBadge: Boolean = false
 ) {
     val colors = LocalAppColors.current
     NavigationBar(
         modifier = modifier,
-        containerColor = MaterialTheme.colorScheme.surfaceContainer,
-        contentColor = colors.textPrimary,
-        // Keep the tonal lift modest — we want the bar to feel like part of
-        // the surface, not float. M3 surfaceContainer handles the contrast.
-        tonalElevation = 3.dp
-        // ImmutableListNavigationBarDefaults.windowInsets() (the M3 default)
-        // already pushes the bar above the gesture-nav pill on devices that
-        // ship with it, so we don't override it.
+        containerColor = colors.surface,
+        tonalElevation = 0.dp,
     ) {
-        listOf("Browse", "Player", "Exports", "Settings").forEachIndexed { index, label ->
+        listOf("Home", "Library", "Player", "Settings").forEachIndexed { index, label ->
             NavigationBarItem(
                 selected = selectedIndex == index,
                 onClick = { onItemSelected(index) },
                 icon = {
-                    // Wrap the icon in a Box so we can overlay the now-playing
-                    // dot in the top-right corner of the Player tab.
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
                             imageVector = when (index) {
-                                0 -> Icons.Outlined.LibraryMusic
-                                1 -> Icons.Outlined.Equalizer
-                                2 -> Icons.Outlined.Folder
+                                0 -> Icons.Outlined.Home
+                                1 -> Icons.Outlined.LibraryMusic
+                                2 -> Icons.Outlined.Equalizer
                                 3 -> Icons.Outlined.Settings
                                 else -> Icons.Outlined.MusicNote
                             },
                             contentDescription = label,
-                            modifier = Modifier.size(22.dp)
+                            modifier = Modifier.size(24.dp)
                         )
-                        if (showNowPlayingBadge && index == 1 && selectedIndex != 1) {
-                            // Tiny primary-coloured dot signals audio is running
-                            // in the background while user is on another tab.
+                        if (showNowPlayingBadge && index == 2 && selectedIndex != 2) {
                             Box(
                                 modifier = Modifier
                                     .align(Alignment.TopEnd)
                                     .offset(x = 8.dp, y = (-4).dp)
                                     .size(6.dp)
-                                    .background(
-                                        color = MaterialTheme.colorScheme.primary,
-                                        shape = CircleShape
-                                    )
+                                    .background(Indigo, CircleShape)
                             )
                         }
                     }
                 },
                 colors = NavigationBarItemDefaults.colors(
-                    // Use theme container/indicator roles — these now default
-                    // to primaryContainer for the active pill (M3 expressive).
-                    selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    selectedIconColor = Indigo,
                     unselectedIconColor = colors.textTertiary,
-                    selectedTextColor = MaterialTheme.colorScheme.onSurface,
-                    unselectedTextColor = colors.textSecondary,
-                    indicatorColor = MaterialTheme.colorScheme.primaryContainer
+                    selectedTextColor = Indigo,
+                    unselectedTextColor = colors.textTertiary,
+                    indicatorColor = IndigoContainer
                 )
             )
         }
@@ -122,13 +95,7 @@ fun LofigaNavigationBar(
 }
 
 /**
- * A small pill-shaped chip used in screen headers to surface feature availability
- * (e.g. the "Tempo / Reverb / Atmosphere" row on the empty PlayerScreen).
- *
- * Consolidates the 14-line "Surface + RoundedCornerShape + border + Row(icon,text)"
- * pattern that was repeated three times in PlayerScreen — see PlayerScreen.kt.
- * Uses the M3 surfaceContainer tonal role from D.1 so the chip reads as a
- * low-emphasis container (M3 "card" look without the card shadow).
+ * Small pill chip for headers — subtle surface with outline.
  */
 @Composable
 fun HeaderChip(
@@ -140,38 +107,23 @@ fun HeaderChip(
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        color = colors.surfaceHighlight,
+        border = BorderStroke(1.dp, colors.outline)
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = colors.textPrimary,
-                modifier = Modifier.size(14.dp)
-            )
+            Icon(icon, contentDescription = null, tint = colors.textSecondary, modifier = Modifier.size(14.dp))
             Spacer(Modifier.width(4.dp))
-            Text(
-                text = label,
-                color = colors.textSecondary,
-                style = MaterialTheme.typography.labelSmall
-            )
+            Text(label, color = colors.textSecondary, style = MaterialTheme.typography.labelSmall)
         }
     }
 }
 
 /**
- * Collapsible section card used on the player screen for the "EFFECTS" and
- * "ATMOSPHERE" blocks. Both follow the same structural pattern (16dp-rounded
- * Surface + clickable header Row + divider + content Column) — extracted so the
- * two instances stay visually consistent and future sections can re-use it.
- *
- * Uses the M3 surfaceContainerLow tonal role for an M3-card look (lifts above
- * the ambient background without needing a shadow). The expand/collapse icon
- * auto-toggles based on [expanded].
+ * Collapsible section card — white surface, 1px outline, 12dp radius.
+ * Used for EFFECTS and ATMOSPHERE blocks on the Player screen.
  */
 @Composable
 fun ExpandableSection(
@@ -184,22 +136,23 @@ fun ExpandableSection(
 ) {
     val colors = LocalAppColors.current
     Surface(
-        modifier = modifier.fillMaxWidth().padding(horizontal = 4.dp),
-        shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerLow
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        color = colors.surface,
+        border = BorderStroke(1.dp, colors.outline)
     ) {
         Column {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable { onToggle() }
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(icon, contentDescription = null, tint = colors.textPrimary, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
+                Icon(icon, contentDescription = null, tint = Indigo, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(10.dp))
                 Text(
-                    text = title,
+                    title,
                     style = MaterialTheme.typography.titleMedium,
                     color = colors.textPrimary,
                     fontWeight = FontWeight.SemiBold,
@@ -213,9 +166,9 @@ fun ExpandableSection(
                 )
             }
             if (expanded) {
-                HorizontalDivider(color = colors.outline, thickness = 0.5.dp)
+                HorizontalDivider(color = colors.outline, thickness = 1.dp)
                 Column(
-                    modifier = Modifier.padding(12.dp),
+                    modifier = Modifier.padding(16.dp),
                     content = content
                 )
             }
@@ -223,6 +176,9 @@ fun ExpandableSection(
     }
 }
 
+/**
+ * Effect slider row — icon + label + indigo value on top, slider below.
+ */
 @Composable
 fun EffectSlider(
     value: Float,
@@ -236,7 +192,7 @@ fun EffectSlider(
     max: Float = 1f
 ) {
     val colors = LocalAppColors.current
-    Column(modifier = modifier.padding(vertical = 4.dp)) {
+    Column(modifier = modifier.padding(vertical = 6.dp)) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth()
@@ -247,40 +203,43 @@ fun EffectSlider(
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = label,
+                    label,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = colors.textPrimary,
+                    fontWeight = FontWeight.Medium
                 )
                 if (description != null) {
-                    Text(
-                        text = description,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = colors.textTertiary
-                    )
+                    Text(description, style = MaterialTheme.typography.bodySmall, color = colors.textTertiary)
                 }
             }
             Text(
-                text = displayValue ?: "${(value * 100).toInt()}%",
-                style = MaterialTheme.typography.bodySmall,
-                color = colors.textSecondary
+                displayValue ?: "${(value * 100).toInt()}%",
+                style = MaterialTheme.typography.labelMedium,
+                color = Indigo,
+                fontWeight = FontWeight.SemiBold
             )
         }
+        Spacer(Modifier.height(4.dp))
         Slider(
             value = value,
             onValueChange = onValueChange,
             valueRange = min..max,
             modifier = Modifier.fillMaxWidth(),
             colors = SliderDefaults.colors(
-                thumbColor = Purple500,
-                activeTrackColor = Purple500,
+                thumbColor = Indigo,
+                activeTrackColor = Indigo,
                 inactiveTrackColor = colors.outline,
-                activeTickColor = Purple500,
+                activeTickColor = Indigo,
                 inactiveTickColor = colors.outline
             )
         )
     }
 }
 
+/**
+ * Song list row — flat with bottom divider, 48dp thumbnail, title/artist/duration.
+ * Tapping loads the track into the Player.
+ */
 @Composable
 fun SongItem(
     title: String,
@@ -293,72 +252,58 @@ fun SongItem(
     thumbTitle: String = title
 ) {
     val colors = LocalAppColors.current
-    Card(
+    Column(
         modifier = modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = if (isCurrentlyPlaying) colors.surfaceHighlight else colors.surface),
-        border = ButtonDefaults.outlinedButtonBorder.copy(
-            brush = Brush.linearGradient(
-                listOf(
-                    if (isCurrentlyPlaying) Purple500.copy(alpha = 0.3f) else colors.outline,
-                    if (isCurrentlyPlaying) Purple500.copy(alpha = 0.1f) else colors.outline
-                )
-            )
-        )
+            .clickable(onClick = onClick)
     ) {
         Row(
-            modifier = Modifier.padding(12.dp),
+            modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            if (gradientThumb) {
-                GradientThumbnail(size = 50, title = thumbTitle, isActive = isCurrentlyPlaying)
-            } else {
-                Box(
-                    modifier = Modifier
-                        .size(50.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(if (isCurrentlyPlaying) Purple500.copy(alpha = 0.15f) else colors.surfaceHighlight),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = if (isCurrentlyPlaying) Icons.Outlined.Equalizer else Icons.Outlined.MusicNote,
-                        contentDescription = null,
-                        tint = if (isCurrentlyPlaying) Purple500 else colors.textTertiary,
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(if (isCurrentlyPlaying) IndigoContainer else colors.surfaceHighlight),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = if (isCurrentlyPlaying) Icons.Outlined.Equalizer else Icons.Outlined.MusicNote,
+                    contentDescription = null,
+                    tint = if (isCurrentlyPlaying) Indigo else colors.textTertiary,
+                    modifier = Modifier.size(22.dp)
+                )
             }
-            Spacer(Modifier.width(16.dp))
+            Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = title,
+                    title,
                     maxLines = 1,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = if (isCurrentlyPlaying) Indigo else colors.textPrimary,
+                    fontWeight = if (isCurrentlyPlaying) FontWeight.SemiBold else FontWeight.Normal
                 )
                 Text(
-                    text = artist,
+                    artist,
                     maxLines = 1,
                     style = MaterialTheme.typography.bodySmall,
-                    color = if (isCurrentlyPlaying) Purple400 else colors.textTertiary
+                    color = colors.textTertiary
                 )
             }
             Text(
-                text = duration,
-                style = MaterialTheme.typography.bodySmall,
+                duration,
+                style = MaterialTheme.typography.labelMedium,
                 color = colors.textTertiary
             )
-            Icon(
-                imageVector = if (isCurrentlyPlaying) Icons.Outlined.PlayArrow else Icons.Outlined.NavigateNext,
-                contentDescription = null,
-                tint = if (isCurrentlyPlaying) Purple500 else colors.textTertiary
-            )
         }
+        HorizontalDivider(color = colors.outline, thickness = 1.dp)
     }
 }
 
+/**
+ * Small uppercase section label.
+ */
 @Composable
 fun SectionHeader(
     title: String,
@@ -366,63 +311,51 @@ fun SectionHeader(
 ) {
     val colors = LocalAppColors.current
     Text(
-        text = title,
-        modifier = modifier.padding(vertical = 8.dp),
-        style = MaterialTheme.typography.labelSmall,
+        title,
+        modifier = modifier.padding(vertical = 6.dp),
+        style = MaterialTheme.typography.labelMedium,
         color = colors.textTertiary,
-        letterSpacing = 2.sp
+        fontWeight = FontWeight.SemiBold,
+        letterSpacing = 1.5.sp
     )
 }
 
 /**
- * Creates a gradient thumbnail based on a string hash for visual variety.
+ * Thumbnail with gradient — kept for backward compat but simplified.
  */
-fun gradientForTitle(title: String): List<Color> {
-    val pairs = listOf(
-        Purple500 to Cyan400,
-        Purple700 to Purple400,
-        Color(0xFFE040FB) to Color(0xFF7C4DFF),
-        Color(0xFF00E5FF) to Color(0xFF1DE9B6),
-        Color(0xFFFF4081) to Color(0xFF7C4DFF),
-        Color(0xFFFFAB00) to Color(0xFFFF6D00),
-        Color(0xFF00BCD4) to Color(0xFF8BC34A),
-        Color(0xFF7C4DFF) to Color(0xFF448AFF)
-    )
-    val hash = title.hashCode().let { if (it == Int.MIN_VALUE) 0 else kotlin.math.abs(it) }
-    return listOf(pairs[hash % pairs.size].first, pairs[hash % pairs.size].second)
-}
-
 @Composable
 fun GradientThumbnail(
-    size: Int = 50,
+    size: Int = 48,
     title: String,
     isActive: Boolean = false
 ) {
-    val appColors = LocalAppColors.current
-    val gradientColors = remember(title) { gradientForTitle(title) }
+    val colors = LocalAppColors.current
     Box(
         modifier = Modifier
             .size(size.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(
-                Brush.linearGradient(
-                    colors = listOf(
-                        gradientColors[0].copy(alpha = if (isActive) 0.8f else 0.6f),
-                        gradientColors[1].copy(alpha = if (isActive) 0.6f else 0.4f)
-                    )
-                )
-            ),
+            .clip(RoundedCornerShape(8.dp))
+            .background(if (isActive) IndigoContainer else colors.surfaceHighlight),
         contentAlignment = Alignment.Center
     ) {
         Icon(
-            Icons.Outlined.MusicNote,
+            if (isActive) Icons.Outlined.Equalizer else Icons.Outlined.MusicNote,
             contentDescription = null,
-            tint = appColors.textPrimary.copy(alpha = if (isActive) 0.9f else 0.7f),
-            modifier = Modifier.size((size * 0.45f).dp)
+            tint = if (isActive) Indigo else colors.textTertiary,
+            modifier = Modifier.size((size * 0.4f).dp)
         )
     }
 }
 
+/**
+ * Gradient colour pair for a title hash — simplified to indigo shades.
+ */
+fun gradientForTitle(title: String): List<Color> {
+    return listOf(Indigo, IndigoLight)
+}
+
+/**
+ * Effect card — compact slider card for the player.
+ */
 @Composable
 fun EffectCard(
     modifier: Modifier = Modifier,
@@ -430,54 +363,38 @@ fun EffectCard(
     label: String,
     value: String,
     sliderValue: Float,
-    onSliderChange: (Float) -> Unit
+    onSliderChange: (Float) -> Unit,
+    valueRange: ClosedFloatingPointRange<Float> = 0f..1f
 ) {
     val colors = LocalAppColors.current
-    val isActive = sliderValue > 0.01f || label == "Tempo"
     Surface(
         modifier = modifier,
-        shape = RoundedCornerShape(14.dp),
-        color = if (isActive) Purple500.copy(alpha = 0.1f) else colors.surfaceHighlight,
-        border = BorderStroke(
-            1.dp,
-            if (isActive) Purple500.copy(alpha = 0.3f) else colors.outline
-        )
+        shape = RoundedCornerShape(12.dp),
+        color = colors.surface,
+        border = BorderStroke(1.dp, colors.outline)
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Surface(
-                    modifier = Modifier.size(28.dp),
-                    shape = RoundedCornerShape(8.dp),
-                    color = Purple500.copy(alpha = if (isActive) 0.8f else 0.3f)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(icon, contentDescription = null, tint = colors.surface, modifier = Modifier.size(18.dp))
-                    }
-                }
+                Icon(icon, contentDescription = null, tint = Indigo, modifier = Modifier.size(20.dp))
                 Spacer(Modifier.width(8.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = label,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (isActive) colors.textPrimary else colors.textSecondary,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
                 Text(
-                    text = value,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Cyan400,
-                    fontWeight = FontWeight.Bold
+                    label,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = colors.textPrimary,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.weight(1f)
                 )
+                Text(value, style = MaterialTheme.typography.labelMedium, color = Indigo, fontWeight = FontWeight.SemiBold)
             }
             Spacer(Modifier.height(8.dp))
             Slider(
-                value = sliderValue,
+                value = sliderValue.coerceIn(valueRange.start, valueRange.endInclusive),
                 onValueChange = onSliderChange,
+                valueRange = valueRange,
                 modifier = Modifier.fillMaxWidth().height(20.dp),
                 colors = SliderDefaults.colors(
-                    thumbColor = Purple500,
-                    activeTrackColor = Purple500,
+                    thumbColor = Indigo,
+                    activeTrackColor = Indigo,
                     inactiveTrackColor = colors.outline
                 )
             )
@@ -485,6 +402,9 @@ fun EffectCard(
     }
 }
 
+/**
+ * Delete confirmation dialog.
+ */
 @Composable
 fun DeleteConfirmDialog(
     title: String,
@@ -496,23 +416,12 @@ fun DeleteConfirmDialog(
     AlertDialog(
         containerColor = colors.surface,
         onDismissRequest = onDismiss,
-        icon = {
-            Icon(
-                Icons.Outlined.Delete,
-                contentDescription = null,
-                tint = Color(0xFFFF5252),
-                modifier = Modifier.size(32.dp)
-            )
-        },
-        title = {
-            Text(text = title, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
-        },
-        text = {
-            Text(text = message, color = colors.textSecondary)
-        },
+        icon = { Icon(Icons.Outlined.Delete, contentDescription = null, tint = Color(0xFFBA1A1A), modifier = Modifier.size(32.dp)) },
+        title = { Text(title, color = colors.textPrimary, fontWeight = FontWeight.Bold) },
+        text = { Text(message, color = colors.textSecondary) },
         confirmButton = {
             TextButton(onClick = onConfirm) {
-                Text("Delete", color = Color(0xFFFF5252), fontWeight = FontWeight.Bold)
+                Text("Delete", color = Color(0xFFBA1A1A), fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {
@@ -523,6 +432,9 @@ fun DeleteConfirmDialog(
     )
 }
 
+/**
+ * Atmosphere chip — compact slider for rain/vinyl/wind/tape.
+ */
 @Composable
 fun AtmosphereChip(
     label: String,
@@ -535,33 +447,26 @@ fun AtmosphereChip(
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(12.dp),
-        color = if (isActive) Purple500.copy(alpha = 0.2f) else colors.surfaceHighlight,
-        border = ButtonDefaults.outlinedButtonBorder.copy(
-            brush = Brush.linearGradient(
-                listOf(
-                    if (isActive) Purple500.copy(alpha = 0.5f) else colors.outline,
-                    if (isActive) Purple500.copy(alpha = 0.3f) else colors.outline
-                )
-            )
-        )
+        color = colors.surface,
+        border = BorderStroke(1.dp, if (isActive) Indigo.copy(alpha = 0.3f) else colors.outline)
     ) {
         Column(
-            modifier = Modifier.padding(8.dp),
+            modifier = Modifier.padding(10.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                text = label,
-                style = MaterialTheme.typography.bodySmall,
-                fontWeight = FontWeight.SemiBold,
-                color = if (isActive) Purple400 else colors.textSecondary
+                label,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Medium,
+                color = if (isActive) Indigo else colors.textSecondary
             )
             Slider(
                 value = volume,
                 onValueChange = onVolumeChange,
                 modifier = Modifier.width(60.dp).height(24.dp),
                 colors = SliderDefaults.colors(
-                    thumbColor = Purple500,
-                    activeTrackColor = Purple500,
+                    thumbColor = Indigo,
+                    activeTrackColor = Indigo,
                     inactiveTrackColor = colors.outline
                 )
             )

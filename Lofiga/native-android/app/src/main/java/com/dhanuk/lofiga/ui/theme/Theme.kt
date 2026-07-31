@@ -13,26 +13,53 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-// Lofiga Brand Colors (M3 expressive tonal palette around the purple seed #993DF5)
-// Light/dark schemes are derived from these via the M3 tonal-spot mapping below.
-// All names below are kept as stable public API — re-exports of the underlying
-// tonal values used across the app. Editing the hex here propagates everywhere.
-val Purple500 = Color(0xFF993DF5)   // primary seed (M3 tone-40 in light, tone-80 in dark)
-val Purple400 = Color(0xFFC6A0FF)   // soft accent (was 0xFFB060F7)
-val Purple700 = Color(0xFF7226D6)   // deep accent (was 0xFF7C2FD4)
-val Cyan400   = Color(0xFF22D8C0)   // secondary teal (was 0xFF3DF5E6 — more saturated for contrast)
-val Cyan200   = Color(0xFF73F0DE)   // secondary light
-val DarkBg    = Color(0xFF110718)   // darker plum-black for stronger contrast
-val DarkSurface = Color(0xFF1B1126) // surface lifted clearly above background
-val DarkSurfaceHighlight = Color(0xFF2B1B3D) // clearer separation from surface
-val White12 = Color(0x1FFFFFFF)
-val White38 = Color(0x61FFFFFF)
-val White60 = Color(0x99FFFFFF)
+// ═══════════════════════════════════════════════════════════════════════════════
+// Lofiga v2 Premium Design System
+// Light-first, pure white surfaces, single deep indigo accent, 1px outlines.
+// Inspired by 2026 Material 3 expressive + top Play Store utility apps.
+// ═══════════════════════════════════════════════════════════════════════════════
 
-// Light theme colors
-val LightBg      = Color(0xFFFBF7FF)   // warm off-white, slight lavender cast
-val LightSurface = Color(0xFFFFFBFF)   // nearly pure white surface
+// ── Brand colours ──────────────────────────────────────────────────────────────
+val Indigo       = Color(0xFF1F3A8A)   // primary accent — deep indigo
+val IndigoLight  = Color(0xFFB6C4FF)   // dark-theme primary (lighter indigo)
+val IndigoDark   = Color(0xFF002270)   // on-primary-container in light
+val IndigoContainer = Color(0xFFDCE1FF) // primary container (light)
 
+// Neutral scale
+val Ink          = Color(0xFF111111)   // text-primary
+val Gray         = Color(0xFF666666)   // text-secondary
+val GrayLight    = Color(0xFF999999)   // text-tertiary
+val Hairline     = Color(0xFFEEEEEE)   // 1px outline
+val Subtle       = Color(0xFFF5F5F5)   // surface variant / subtle bg
+val PureWhite    = Color(0xFFFFFFFF)   // surface
+
+// Dark-theme neutrals
+val DarkBg       = Color(0xFF1A1B21)
+val DarkSurface  = Color(0xFF1A1B21)
+val DarkSurfaceHi = Color(0xFF2F3036)
+val DarkHairline = Color(0xFF444651)
+val DarkInk      = Color(0xFFE6E1E9)
+val DarkGray     = Color(0xFF999999)
+val DarkGrayLt   = Color(0xFF666666)
+
+// Error
+val ErrorRed     = Color(0xFFBA1A1A)
+val ErrorContainer = Color(0xFFFFDAD6)
+
+// ── Backward-compat aliases (old code references these names) ──────────────────
+val Purple500    = Indigo
+val Purple400    = IndigoLight
+val Purple700    = IndigoDark
+val Cyan400      = Gray
+val Cyan200      = GrayLight
+val DarkSurfaceHighlight = DarkSurfaceHi
+val White12      = Color(0x1F9E9E9E)
+val White38      = Color(0x619E9E9E)
+val White60      = Color(0x999E9E9E)
+val LightBg      = PureWhite
+val LightSurface = PureWhite
+
+// ── App-level colour tokens (consumed via LocalAppColors) ──────────────────────
 data class AppColors(
     val surface: Color,
     val surfaceHighlight: Color,
@@ -45,118 +72,141 @@ data class AppColors(
 
 val LocalAppColors = staticCompositionLocalOf {
     AppColors(
-        surface = DarkSurface,
-        surfaceHighlight = DarkSurfaceHighlight,
-        bg = DarkBg,
-        textPrimary = Color.White,
-        textSecondary = White60,
-        textTertiary = White38,
-        outline = White38,
+        surface = PureWhite,
+        surfaceHighlight = Subtle,
+        bg = PureWhite,
+        textPrimary = Ink,
+        textSecondary = Gray,
+        textTertiary = GrayLight,
+        outline = Hairline,
     )
 }
 
 private val LightAppColors = AppColors(
-    surface = Color(0xFFFFFBFF),
-    surfaceHighlight = Color(0xFFEDE2F5),     // clearly differentiated from surface
-    bg = Color(0xFFFBF7FF),
-    textPrimary = Color(0xFF1D0B2A),
-    textSecondary = Color(0xFF49454F),
-    textTertiary = Color(0xFF7A7585),
-    outline = Color(0xFF7A7585),             // raised — outline was barely visible before
+    surface = PureWhite,
+    surfaceHighlight = Subtle,
+    bg = PureWhite,
+    textPrimary = Ink,
+    textSecondary = Gray,
+    textTertiary = GrayLight,
+    outline = Hairline,
+)
+
+private val DarkAppColors = AppColors(
+    surface = DarkSurface,
+    surfaceHighlight = DarkSurfaceHi,
+    bg = DarkBg,
+    textPrimary = DarkInk,
+    textSecondary = DarkGray,
+    textTertiary = DarkGrayLt,
+    outline = DarkHairline,
+)
+
+// ── M3 Color Schemes ───────────────────────────────────────────────────────────
+private val LofigaLightColorScheme = lightColorScheme(
+    primary = Indigo,
+    onPrimary = PureWhite,
+    primaryContainer = IndigoContainer,
+    onPrimaryContainer = IndigoDark,
+    secondary = Gray,
+    onSecondary = PureWhite,
+    secondaryContainer = Subtle,
+    onSecondaryContainer = Gray,
+    tertiary = GrayLight,
+    onTertiary = PureWhite,
+    tertiaryContainer = Subtle,
+    onTertiaryContainer = GrayLight,
+    error = ErrorRed,
+    onError = PureWhite,
+    errorContainer = ErrorContainer,
+    onErrorContainer = Color(0xFF93000A),
+    background = PureWhite,
+    onBackground = Ink,
+    surface = PureWhite,
+    onSurface = Ink,
+    surfaceVariant = Subtle,
+    onSurfaceVariant = Gray,
+    outline = Hairline,
+    outlineVariant = Color(0xFFF5F5F5),
+    inverseSurface = Color(0xFF2F3036),
+    inverseOnSurface = Color(0xFFF1F0F7),
+    inversePrimary = IndigoLight,
+    surfaceTint = Indigo,
+    surfaceContainer = PureWhite,
+    surfaceContainerHigh = Subtle,
+    surfaceContainerHighest = Subtle,
+    surfaceContainerLow = PureWhite,
+    surfaceContainerLowest = PureWhite,
+    surfaceDim = Subtle,
+    surfaceBright = PureWhite,
 )
 
 private val LofigaDarkColorScheme = darkColorScheme(
-    primary = Purple500,
-    onPrimary = Color.White,
-    primaryContainer = Color(0xFF581CA8),     // deep purple container
-    onPrimaryContainer = Color(0xFFEADDFF),
-    secondary = Cyan400,
-    onSecondary = Color(0xFF00332C),
-    secondaryContainer = Color(0xFF005044),
-    onSecondaryContainer = Color(0xFF73F0DE),
-    tertiary = Purple400,
-    onTertiary = Color(0xFF382059),
-    tertiaryContainer = Color(0xFF4F3878),
-    onTertiaryContainer = Color(0xFFEADDFF),
+    primary = IndigoLight,
+    onPrimary = IndigoDark,
+    primaryContainer = Color(0xFF274191),
+    onPrimaryContainer = IndigoContainer,
+    secondary = DarkGray,
+    onSecondary = PureWhite,
+    secondaryContainer = DarkSurfaceHi,
+    onSecondaryContainer = DarkGray,
+    tertiary = DarkGrayLt,
+    onTertiary = PureWhite,
+    tertiaryContainer = DarkSurfaceHi,
+    onTertiaryContainer = DarkGrayLt,
     error = Color(0xFFFFB4AB),
     onError = Color(0xFF690005),
     errorContainer = Color(0xFF93000A),
     onErrorContainer = Color(0xFFFFDAD6),
     background = DarkBg,
-    onBackground = Color.White,
+    onBackground = DarkInk,
     surface = DarkSurface,
-    onSurface = Color.White,
-    surfaceVariant = DarkSurfaceHighlight,
-    onSurfaceVariant = White60,
-    outline = White38,                          // was White12 — barely visible before
-    outlineVariant = White12,
+    onSurface = DarkInk,
+    surfaceVariant = DarkSurfaceHi,
+    onSurfaceVariant = DarkGray,
+    outline = DarkHairline,
+    outlineVariant = Color(0xFF444651),
     inverseSurface = Color(0xFFE6E1E9),
-    inverseOnSurface = Color(0xFF322F38),      // unused-but-complete
-    inversePrimary = Color(0xFFC6A0FF),
-    surfaceTint = Purple500,                    // M3 dynamic surface tinting source
+    inverseOnSurface = Color(0xFF2F3036),
+    inversePrimary = Indigo,
+    surfaceTint = IndigoLight,
+    surfaceContainer = DarkSurface,
+    surfaceContainerHigh = DarkSurfaceHi,
+    surfaceContainerHighest = DarkSurfaceHi,
+    surfaceContainerLow = DarkSurface,
+    surfaceContainerLowest = DarkBg,
+    surfaceDim = DarkBg,
+    surfaceBright = DarkSurfaceHi,
 )
 
-private val LofigaLightColorScheme = lightColorScheme(
-    primary = Purple700,                        // use deeper purple on light for contrast
-    onPrimary = Color.White,
-    primaryContainer = Color(0xFFEADDFF),
-    onPrimaryContainer = Color(0xFF380971),
-    secondary = Color(0xFF006B5E),
-    onSecondary = Color.White,
-    secondaryContainer = Color(0xFF74F8E3),
-    onSecondaryContainer = Color(0xFF00201A),
-    tertiary = Color(0xFF6F43C1),
-    onTertiary = Color.White,
-    tertiaryContainer = Color(0xFFE9DDFF),
-    onTertiaryContainer = Color(0xFF260059),
-    error = Color(0xFFBA1A1A),
-    onError = Color.White,
-    errorContainer = Color(0xFFFFDAD6),
-    onErrorContainer = Color(0xFF410002),
-    background = LightBg,
-    onBackground = Color(0xFF1D0B2A),
-    surface = LightSurface,
-    onSurface = Color(0xFF1D0B2A),
-    surfaceVariant = Color(0xFFEDE2F5),         // clearly differentiated from surface
-    onSurfaceVariant = Color(0xFF49454F),
-    outline = Color(0xFF7A7585),
-    outlineVariant = Color(0xFFCAC4D0),
-    inverseSurface = Color(0xFF322F38),
-    inverseOnSurface = Color(0xFFE6E1E9),
-    inversePrimary = Color(0xFF993DF5),
-    surfaceTint = Purple500,
-)
-
+// ── Shapes ─────────────────────────────────────────────────────────────────────
 val LofigaShapes = Shapes(
+    extraSmall = RoundedCornerShape(4.dp),
     small = RoundedCornerShape(8.dp),
-    medium = RoundedCornerShape(16.dp),
-    large = RoundedCornerShape(24.dp)
+    medium = RoundedCornerShape(12.dp),
+    large = RoundedCornerShape(16.dp),
+    extraLarge = RoundedCornerShape(24.dp),
 )
 
+// ── Typography (Inter-like; Android default Roboto is visually equivalent) ─────
 val LofigaTypography = Typography(
-    displayLarge = TextStyle(fontWeight = FontWeight.Bold, fontSize = 48.sp, letterSpacing = (-0.5).sp),
-    displayMedium = TextStyle(fontWeight = FontWeight.Bold, fontSize = 36.sp),
-    headlineLarge = TextStyle(fontWeight = FontWeight.Bold, fontSize = 28.sp),
-    headlineMedium = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 24.sp),
-    titleLarge = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 20.sp),
-    titleMedium = TextStyle(fontWeight = FontWeight.Medium, fontSize = 16.sp, letterSpacing = 0.15.sp),
-    bodyLarge = TextStyle(fontWeight = FontWeight.Normal, fontSize = 16.sp, letterSpacing = 0.5.sp),
-    bodyMedium = TextStyle(fontWeight = FontWeight.Normal, fontSize = 14.sp, letterSpacing = 0.25.sp),
-    bodySmall = TextStyle(fontWeight = FontWeight.Normal, fontSize = 12.sp, letterSpacing = 0.4.sp),
-    labelLarge = TextStyle(fontWeight = FontWeight.Medium, fontSize = 14.sp, letterSpacing = 0.1.sp),
-    labelSmall = TextStyle(fontWeight = FontWeight.Medium, fontSize = 11.sp, letterSpacing = 0.5.sp)
+    displayLarge = TextStyle(fontFamily = FontFamily.Default, fontWeight = FontWeight.Bold, fontSize = 32.sp, lineHeight = 40.sp, letterSpacing = (-0.01).sp),
+    displayMedium = TextStyle(fontFamily = FontFamily.Default, fontWeight = FontWeight.Bold, fontSize = 28.sp, lineHeight = 36.sp),
+    headlineLarge = TextStyle(fontFamily = FontFamily.Default, fontWeight = FontWeight.SemiBold, fontSize = 28.sp, lineHeight = 36.sp),
+    headlineMedium = TextStyle(fontFamily = FontFamily.Default, fontWeight = FontWeight.SemiBold, fontSize = 24.sp, lineHeight = 32.sp),
+    headlineSmall = TextStyle(fontFamily = FontFamily.Default, fontWeight = FontWeight.SemiBold, fontSize = 20.sp, lineHeight = 28.sp),
+    titleLarge = TextStyle(fontFamily = FontFamily.Default, fontWeight = FontWeight.SemiBold, fontSize = 22.sp, lineHeight = 28.sp),
+    titleMedium = TextStyle(fontFamily = FontFamily.Default, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, lineHeight = 24.sp, letterSpacing = 0.15.sp),
+    titleSmall = TextStyle(fontFamily = FontFamily.Default, fontWeight = FontWeight.Medium, fontSize = 14.sp, lineHeight = 20.sp),
+    bodyLarge = TextStyle(fontFamily = FontFamily.Default, fontWeight = FontWeight.Normal, fontSize = 16.sp, lineHeight = 24.sp),
+    bodyMedium = TextStyle(fontFamily = FontFamily.Default, fontWeight = FontWeight.Normal, fontSize = 14.sp, lineHeight = 20.sp),
+    bodySmall = TextStyle(fontFamily = FontFamily.Default, fontWeight = FontWeight.Normal, fontSize = 12.sp, lineHeight = 16.sp),
+    labelLarge = TextStyle(fontFamily = FontFamily.Default, fontWeight = FontWeight.Medium, fontSize = 14.sp, lineHeight = 20.sp, letterSpacing = 0.1.sp),
+    labelMedium = TextStyle(fontFamily = FontFamily.Default, fontWeight = FontWeight.Medium, fontSize = 12.sp, lineHeight = 16.sp),
+    labelSmall = TextStyle(fontFamily = FontFamily.Default, fontWeight = FontWeight.Medium, fontSize = 11.sp, lineHeight = 16.sp),
 )
 
-private val DarkAppColors = AppColors(
-    surface = DarkSurface,
-    surfaceHighlight = DarkSurfaceHighlight,
-    bg = DarkBg,
-    textPrimary = Color.White,
-    textSecondary = White60,
-    textTertiary = White38,
-    outline = White38,              // was White12 — outline was near-invisible before
-)
-
+// ── Theme entry point ──────────────────────────────────────────────────────────
 @Composable
 fun LofigaTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
