@@ -28,13 +28,13 @@ import com.dhanuk.lofiga.ui.theme.*
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /**
- * No-op ambient background. The v2 design uses pure white surfaces — no
- * gradients, no coloured circles. Kept as a transparent placeholder so
- * existing callsites compile without modification.
+ * Ambient page background. The v2.1 design keeps the page a very light
+ * off-white and lets cards/pop surfaces sit cleanly on top.
  */
 @Composable
 fun AmbientBackground(modifier: Modifier = Modifier) {
-    // Intentionally empty — v2 is flat white.
+    val colors = LocalAppColors.current
+    Box(modifier = modifier.background(colors.pageBg))
 }
 
 /**
@@ -84,11 +84,12 @@ fun LofigaNavigationBar(
                 },
                 colors = NavigationBarItemDefaults.colors(
                     selectedIconColor = Indigo,
-                    unselectedIconColor = colors.textTertiary,
+                    unselectedIconColor = colors.textSecondary,
                     selectedTextColor = Indigo,
-                    unselectedTextColor = colors.textTertiary,
+                    unselectedTextColor = colors.textSecondary,
                     indicatorColor = IndigoContainer
-                )
+                ),
+                label = { Text(label, style = MaterialTheme.typography.labelSmall) }
             )
         }
     }
@@ -149,8 +150,16 @@ fun ExpandableSection(
                     .padding(horizontal = 16.dp, vertical = 14.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(icon, contentDescription = null, tint = Indigo, modifier = Modifier.size(20.dp))
-                Spacer(Modifier.width(10.dp))
+                Surface(
+                    shape = CircleShape,
+                    color = IndigoContainer,
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(icon, contentDescription = null, tint = Indigo, modifier = Modifier.size(18.dp))
+                    }
+                }
+                Spacer(Modifier.width(12.dp))
                 Text(
                     title,
                     style = MaterialTheme.typography.titleMedium,
@@ -162,7 +171,7 @@ fun ExpandableSection(
                     if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
                     contentDescription = null,
                     tint = colors.textTertiary,
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.size(22.dp)
                 )
             }
             if (expanded) {
@@ -264,16 +273,25 @@ fun SongItem(
             Box(
                 modifier = Modifier
                     .size(48.dp)
-                    .clip(RoundedCornerShape(8.dp))
+                    .clip(RoundedCornerShape(10.dp))
                     .background(if (isCurrentlyPlaying) IndigoContainer else colors.surfaceHighlight),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    imageVector = if (isCurrentlyPlaying) Icons.Outlined.Equalizer else Icons.Outlined.MusicNote,
-                    contentDescription = null,
-                    tint = if (isCurrentlyPlaying) Indigo else colors.textTertiary,
-                    modifier = Modifier.size(22.dp)
-                )
+                if (isCurrentlyPlaying) {
+                    Icon(
+                        imageVector = Icons.Outlined.Equalizer,
+                        contentDescription = null,
+                        tint = Indigo,
+                        modifier = Modifier.size(22.dp)
+                    )
+                } else {
+                    Text(
+                        text = titleWordMonogram(title),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Indigo.copy(alpha = 0.7f),
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
             }
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
@@ -282,7 +300,7 @@ fun SongItem(
                     maxLines = 1,
                     style = MaterialTheme.typography.bodyLarge,
                     color = if (isCurrentlyPlaying) Indigo else colors.textPrimary,
-                    fontWeight = if (isCurrentlyPlaying) FontWeight.SemiBold else FontWeight.Normal
+                    fontWeight = if (isCurrentlyPlaying) FontWeight.SemiBold else FontWeight.Medium
                 )
                 Text(
                     artist,
@@ -302,22 +320,40 @@ fun SongItem(
 }
 
 /**
- * Small uppercase section label.
+ * First letter(s) of the most significant words from a title, for a text-based placeholder.
+ */
+private fun titleWordMonogram(title: String): String {
+    val words = title.trim().split(Regex("\\s+")).filter { it.isNotBlank() }
+    return when {
+        words.isEmpty() -> "?"
+        words.size == 1 -> words.first().take(2).uppercase()
+        else -> (words.first().take(1) + words[1].take(1)).uppercase()
+    }
+}
+
+/**
+ * Section label with action affordance.
  */
 @Composable
 fun SectionHeader(
     title: String,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    action: @Composable (() -> Unit)? = null
 ) {
     val colors = LocalAppColors.current
-    Text(
-        title,
-        modifier = modifier.padding(vertical = 6.dp),
-        style = MaterialTheme.typography.labelMedium,
-        color = colors.textTertiary,
-        fontWeight = FontWeight.SemiBold,
-        letterSpacing = 1.5.sp
-    )
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            title,
+            style = MaterialTheme.typography.titleMedium,
+            color = colors.textPrimary,
+            fontWeight = FontWeight.SemiBold
+        )
+        action?.invoke()
+    }
 }
 
 /**
@@ -370,7 +406,7 @@ fun EffectCard(
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(12.dp),
-        color = colors.surface,
+        color = colors.surfaceHighlight,
         border = BorderStroke(1.dp, colors.outline)
     ) {
         Column(modifier = Modifier.padding(12.dp)) {

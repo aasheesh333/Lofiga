@@ -29,12 +29,13 @@ val IndigoContainer = Color(0xFFDCE1FF) // primary container (light)
 val Ink          = Color(0xFF111111)   // text-primary
 val Gray         = Color(0xFF666666)   // text-secondary
 val GrayLight    = Color(0xFF999999)   // text-tertiary
-val Hairline     = Color(0xFFEEEEEE)   // 1px outline
-val Subtle       = Color(0xFFF5F5F5)   // surface variant / subtle bg
+val Hairline     = Color(0xFFE0E0E0)   // 1px outline (slightly stronger than #EEE)
+val Subtle       = Color(0xFFF5F5F7)   // surface variant / subtle bg (warm light grey)
 val PureWhite    = Color(0xFFFFFFFF)   // surface
+val PageBg       = Color(0xFFFAFAFB)   // off-white page background for layering
 
 // Dark-theme neutrals
-val DarkBg       = Color(0xFF1A1B21)
+val DarkBg       = Color(0xFF121318)
 val DarkSurface  = Color(0xFF1A1B21)
 val DarkSurfaceHi = Color(0xFF2F3036)
 val DarkHairline = Color(0xFF444651)
@@ -68,28 +69,31 @@ data class AppColors(
     val textSecondary: Color,
     val textTertiary: Color,
     val outline: Color,
+    val pageBg: Color = bg,
 )
 
 val LocalAppColors = staticCompositionLocalOf {
     AppColors(
         surface = PureWhite,
         surfaceHighlight = Subtle,
-        bg = PureWhite,
+        bg = PageBg,
         textPrimary = Ink,
         textSecondary = Gray,
         textTertiary = GrayLight,
         outline = Hairline,
+        pageBg = PageBg,
     )
 }
 
 private val LightAppColors = AppColors(
     surface = PureWhite,
     surfaceHighlight = Subtle,
-    bg = PureWhite,
+    bg = PageBg,
     textPrimary = Ink,
     textSecondary = Gray,
     textTertiary = GrayLight,
     outline = Hairline,
+    pageBg = PageBg,
 )
 
 private val DarkAppColors = AppColors(
@@ -100,6 +104,7 @@ private val DarkAppColors = AppColors(
     textSecondary = DarkGray,
     textTertiary = DarkGrayLt,
     outline = DarkHairline,
+    pageBg = DarkBg,
 )
 
 // ── M3 Color Schemes ───────────────────────────────────────────────────────────
@@ -120,14 +125,14 @@ private val LofigaLightColorScheme = lightColorScheme(
     onError = PureWhite,
     errorContainer = ErrorContainer,
     onErrorContainer = Color(0xFF93000A),
-    background = PureWhite,
+    background = PageBg,
     onBackground = Ink,
     surface = PureWhite,
     onSurface = Ink,
     surfaceVariant = Subtle,
     onSurfaceVariant = Gray,
     outline = Hairline,
-    outlineVariant = Color(0xFFF5F5F5),
+    outlineVariant = Color(0xFFF5F5F7),
     inverseSurface = Color(0xFF2F3036),
     inverseOnSurface = Color(0xFFF1F0F7),
     inversePrimary = IndigoLight,
@@ -136,7 +141,7 @@ private val LofigaLightColorScheme = lightColorScheme(
     surfaceContainerHigh = Subtle,
     surfaceContainerHighest = Subtle,
     surfaceContainerLow = PureWhite,
-    surfaceContainerLowest = PureWhite,
+    surfaceContainerLowest = PageBg,
     surfaceDim = Subtle,
     surfaceBright = PureWhite,
 )
