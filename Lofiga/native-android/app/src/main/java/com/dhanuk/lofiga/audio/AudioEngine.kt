@@ -801,8 +801,18 @@ class AudioEngine(private val context: Context) {
         }
         val meanCentroid = centroidSum / frames.size
         val tag = MoodTag.fromCentroid(meanCentroid)
-        _moodTags.value = _moodTags.value + (currentTrackId to tag)
+        val updated = _moodTags.value + (currentTrackId to tag)
+        // Bound the map: mood tags are session-scoped (never persisted) and
+        // re-derived on the next play, so keep only the most recent tags.
+        _moodTags.value = if (updated.size > MAX_MOOD_TAGS) {
+            updated.toList().drop(updated.size - MAX_MOOD_TAGS).toMap()
+        } else {
+            updated
+        }
     }
+
+    /** Max per-track mood tags held in memory (LRU-ish trim above). */
+    private val MAX_MOOD_TAGS = 500
 
     /**
      * Cap on the number of precomputed FFT frames we keep.

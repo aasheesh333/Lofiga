@@ -37,6 +37,7 @@ fun SettingsScreen(
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val customPresets by viewModel.customPresets.collectAsState()
+    val isAdFree by AdManager.isAdFree.collectAsState()
 
     var showBitrateMenu by remember { mutableStateOf(false) }
     var snackbarMessage by remember { mutableStateOf<String?>(null) }
@@ -171,16 +172,24 @@ fun SettingsScreen(
                 }
                 HorizontalDivider(color = colors.outline, thickness = 1.dp)
                 ActionRow(
-                    title = "Watch ad for 1 hour ad-free",
-                    subtitle = "Watch a short ad to remove ads temporarily"
+                    title = if (isAdFree) "Ad-free active" else "Watch ad for 1 hour ad-free",
+                    subtitle = if (isAdFree) {
+                        "Ads are hidden. Watch another ad to extend."
+                    } else {
+                        "Watch a short ad to remove ads temporarily"
+                    }
                 ) {
                     TextButton(
+                        enabled = !isAdFree,
                         onClick = {
                             val activity = context.findActivity()
                             if (activity != null) {
                                 AdManager.showRewarded(
                                     activity = activity,
-                                    onRewarded = { snackbarMessage = "Enjoy 1 hour of ad-free listening!" },
+                                    onRewarded = {
+                                        AdManager.grantAdFree(60 * 60 * 1000L)
+                                        snackbarMessage = "Enjoy 1 hour of ad-free listening!"
+                                    },
                                     onDismissed = { snackbarMessage = "Ad not available right now" }
                                 )
                             } else {
@@ -192,7 +201,7 @@ fun SettingsScreen(
                     ) {
                         Icon(Icons.Outlined.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text("Watch ad", fontWeight = FontWeight.SemiBold)
+                        Text(if (isAdFree) "Active" else "Watch ad", fontWeight = FontWeight.SemiBold)
                     }
                 }
                 HorizontalDivider(color = colors.outline, thickness = 1.dp)

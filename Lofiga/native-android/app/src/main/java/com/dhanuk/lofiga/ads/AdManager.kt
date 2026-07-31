@@ -33,13 +33,20 @@ object AdManager {
     // Play/AdMob policy-safe cooldowns (per user spec):
     //  - Interstitial: at most once every 2 minutes, and only on explicit tab switches.
     //  - Rewarded: strictly user-initiated, at most once every 3 minutes.
-    private const val MIN_INTERSTITIAL_INTERVAL = 120_000L
+    const val MIN_INTERSTITIAL_INTERVAL = 120_000L
     private const val MIN_REWARDED_INTERVAL = 180_000L
     private const val MAX_FAILED_LOADS = 3
     private const val BANNER_REFRESH_INTERVAL_MS = 60_000L
 
+    /** Duration of a rewarded-ad ad-free window (1 hour). */
+    private const val AD_FREE_DURATION_MS = 60 * 60 * 1000L
+
     private val refreshScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var bannerRefreshJob: Job? = null
+
+    /** Wall-clock time (ms) until which ads stay suppressed. 0 = not ad-free. */
+    private var adFreeUntilMs = 0L
+    private var adFreeExpiryJob: Job? = null
 
     private var interstitialAd: InterstitialAd? = null
     private var rewardedAd: RewardedAd? = null
@@ -286,6 +293,11 @@ object AdManager {
      * Shows a rewarded ad. This must ONLY be invoked as a direct result of a
      * user action (e.g. tapping an explicit "watch ad to unlock" button) to stay
      * compliant with AdMob's rewarded-ad policy. A 3-minute cooldown applies.
+     *
+     * [onRewarded] fires exactly when the user earns the reward (AdMob calls it
+     * only after the ad is fully watched). [onDismissed] fires when the user
+     * does NOT earn the reward: cooldown skip, no ad ready, ad failed to show,
+     * or the user closed the ad early.
      */
     fun showRewarded(
         activity: Activity,
@@ -300,17 +312,19 @@ object AdManager {
         }
         if (rewardedAd != null) {
             lastRewardedTime = now
+            var rewardGranted = false
             rewardedAd?.fullScreenContentCallback = object : FullScreenContentCallback() {
                 override fun onAdDismissedFullScreenContent() {
                     rewardedAd = null
-                    onDismissed()
+                    if (!rewardGranted) onDismissed()
                 }
                 override fun onAdFailedToShowFullScreenContent(error: AdError) {
                     rewardedAd = null
-                    onDismissed()
+                    if (!rewardGranted) onDismissed()
                 }
             }
             rewardedAd?.show(activity) {
+                rewardGranted = true
                 onRewarded()
             }
         } else {
@@ -434,9 +448,46 @@ object AdManager {
     }
 
     fun setAdFree(adFree: Boolean) {
-        _isAdFree.value = adFree
         if (adFree) {
-            destroyBanner()
+            grantAdFree(AD_FREE_DURATION_MS)
+        } else {
+            revokeAdFree()
         }
+    }
+
+    /**
+     * Grants an ad-free window for [durationMs], suppressing interstitial,
+     * rewarded and banner ads until it expires. The banner is destroyed while
+     * ad-free and recreated on expiry (callers observing [isAdFree] should
+     * recreate their AndroidView via a `key(isAdFree)` to re-attach it).
+     */
+    fun grantAdFree(durationMs: Long) {
+        adFreeUntilMs = System.currentTimeMillis() + durationMs
+        _isAdFree.value = true
+        destroyBanner()
+        adFreeExpiryJob?.cancel()
+        adFreeExpiryJob = refreshScope.launch {
+            delay(durationMs)
+            if (System.currentTimeMillis() >= adFreeUntilMs) {
+                _isAdFree.value = false
+                // Force a fresh banner load on the next attach.
+                lastBannerLoadTime = 0L
+                Log.d(TAG, "Ad-free window expired")
+            }
+        }
+        Log.d(TAG, "Ad-free granted for ${durationMs / 60_000L} minutes")
+    }
+
+    /** Remaining ad-free time in ms (0 if not ad-free). */
+    fun adFreeRemainingMs(): Long {
+        val remaining = adFreeUntilMs - System.currentTimeMillis()
+        return if (_isAdFree.value && remaining > 0) remaining else 0L
+    }
+
+    fun revokeAdFree() {
+        adFreeExpiryJob?.cancel()
+        adFreeExpiryJob = null
+        adFreeUntilMs = 0L
+        _isAdFree.value = false
     }
 }

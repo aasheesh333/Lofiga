@@ -106,7 +106,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) { 
             if (isPlaying) {
                 val intent = Intent(app, MediaPlaybackService::class.java)
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    app.startForegroundService(intent)
+                    // The media notification can't be shown if POST_NOTIFICATIONS
+                    // was denied, and starting a foreground service from the
+                    // background can throw — neither should crash the app.
+                    try {
+                        app.startForegroundService(intent)
+                    } catch (e: Exception) {
+                        android.util.Log.w("MainViewModel", "startForegroundService failed: ${e.message}")
+                    }
                 } else {
                     app.startService(intent)
                 }

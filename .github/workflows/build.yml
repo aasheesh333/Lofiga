@@ -76,6 +76,12 @@ jobs:
             -PKEY_PASSWORD="$KEY_PASSWORD" \
             -PONESIGNAL_APP_ID="$ONESIGNAL_APP_ID"
 
+      - name: Run Lint
+        run: |
+          cd Lofiga/native-android
+          ./gradlew :app:lintRelease \
+            -PONESIGNAL_APP_ID="$ONESIGNAL_APP_ID"
+
       - name: Verify APK Signature
         run: |
           echo "=== Keystore Certificate ==="

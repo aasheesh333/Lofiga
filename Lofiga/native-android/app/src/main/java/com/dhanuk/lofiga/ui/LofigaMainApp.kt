@@ -25,8 +25,7 @@ fun Context.findActivity(): Activity? = when (this) {
 }
 
 // Interstitials on tab switch are policy-safe only with a long cooldown.
-// Keep this in sync with AdManager.MIN_INTERSTITIAL_INTERVAL (2 minutes).
-private const val TAB_SWITCH_AD_COOLDOWN_MS = 120_000L
+private const val TAB_SWITCH_AD_COOLDOWN_MS = AdManager.MIN_INTERSTITIAL_INTERVAL
 
 @Composable
 fun LofigaMainApp(
@@ -44,14 +43,20 @@ fun LofigaMainApp(
     val currentTrack by viewModel.currentTrack.collectAsState()
     val showNowPlayingBadge = currentTrack != null && selectedIndex != 2
 
+    val isAdFree by AdManager.isAdFree.collectAsState()
+
     LaunchedEffect(selectedIndex) {
         if (previousIndex != selectedIndex) {
-            val now = System.currentTimeMillis()
-            if (now - lastInterstitialTime >= TAB_SWITCH_AD_COOLDOWN_MS) {
-                context.findActivity()?.let { act ->
-                    AdManager.showInterstitial(act)
+            // Never interrupt the Player tab — the user just picked a track and
+            // an interstitial before seeing it is a bad experience.
+            if (selectedIndex != 2) {
+                val now = System.currentTimeMillis()
+                if (now - lastInterstitialTime >= TAB_SWITCH_AD_COOLDOWN_MS) {
+                    context.findActivity()?.let { act ->
+                        AdManager.showInterstitial(act)
+                    }
+                    lastInterstitialTime = now
                 }
-                lastInterstitialTime = now
             }
             previousIndex = selectedIndex
         }
@@ -106,10 +111,14 @@ fun LofigaMainApp(
                 )
             }
 
-            BannerAd(
-                visible = selectedIndex != 2,
-                modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()
-            )
+            // Recreate the banner when the ad-free state flips: AdManager destroys
+            // the AdView on grant, so it must be rebuilt on expiry.
+            key(isAdFree) {
+                BannerAd(
+                    visible = selectedIndex != 2,
+                    modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                )
+            }
         }
     }
 }

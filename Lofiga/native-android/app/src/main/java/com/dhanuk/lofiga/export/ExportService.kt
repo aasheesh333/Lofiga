@@ -89,6 +89,11 @@ object ExportService {
 
             if (outputFile.exists()) {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    // The export itself is written to the app-private Music dir
+                    // (readable by the app's FileProvider for sharing). Insert a
+                    // MediaStore row AND copy the file into it, so the exported
+                    // mix actually appears in the user's music library instead of
+                    // leaving a dangling entry pointing at nothing.
                     val values = ContentValues().apply {
                         put(MediaStore.Audio.Media.DISPLAY_NAME, outputFile.name)
                         put(MediaStore.Audio.Media.MIME_TYPE,
@@ -96,7 +101,19 @@ object ExportService {
                         put(MediaStore.Audio.Media.RELATIVE_PATH, "${Environment.DIRECTORY_MUSIC}/Lofiga")
                         put(MediaStore.Audio.Media.IS_MUSIC, true)
                     }
-                    context.contentResolver.insert(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, values)
+                    val uri = context.contentResolver.insert(
+                        MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, values
+                    )
+                    if (uri != null) {
+                        try {
+                            context.contentResolver.openOutputStream(uri)?.use { out ->
+                                outputFile.inputStream().use { it.copyTo(out) }
+                            }
+                        } catch (e: Exception) {
+                            Log.e("ExportService", "Failed to publish export to MediaStore, removing entry", e)
+                            runCatching { context.contentResolver.delete(uri, null, null) }
+                        }
+                    }
                 } else {
                     // Pre-Q (API 26..28): there is no MediaStore.RELATIVE_PATH, so we
                     // wrote the file into the app's external Music directory directly.
@@ -112,6 +129,13 @@ object ExportService {
             }
 
             return@withContext outputFile.absolutePath
+        } catch (e: OutOfMemoryError) {
+            Log.e("ExportService", "Export ran out of memory", e)
+            if (outputFile.exists()) outputFile.delete()
+            throw RuntimeException(
+                "Export ran out of memory. Try a shorter track or fewer atmosphere layers.",
+                e
+            )
         } catch (e: Exception) {
             Log.e("ExportService", "Export failed: ${e.message}", e)
             if (outputFile.exists()) outputFile.delete()
@@ -781,7 +805,10 @@ object ExportService {
             "wind" to preset.windVolume, "tape" to preset.tapeVolume)
             .filter { it.second > 0.01f }
             .forEach { (key, vol) ->
-                readAtmospherePcm(context, key, sampleRate, pcm.size)?.let { atmosPcm ->
+                // readAtmospherePcm returns the processed loop PCM (NOT tiled to
+                // the track length) so mixing 4 layers never allocates 4x the
+                // track size in memory. The loop is cycled with modulo below.
+                readAtmospherePcm(context, key, sampleRate)?.let { atmosPcm ->
                     val scaledVol = (vol * 0.8f * 32768f).toInt()
                     activeLayers.add(AtmosLayer(atmosPcm, scaledVol))
                 }
@@ -791,13 +818,13 @@ object ExportService {
 
         // Single pass: mix all layers + clip in one loop
         val result = ShortArray(pcm.size)
-        val minLayerSize = activeLayers.minOfOrNull { it.pcm.size } ?: 0
 
         for (i in result.indices) {
             var sample = pcm[i].toInt()
-            if (i < minLayerSize) {
-                for (layer in activeLayers) {
-                    sample += (layer.pcm[i].toInt() * layer.scaledVolume) shr 15
+            for (layer in activeLayers) {
+                val loopSize = layer.pcm.size
+                if (loopSize > 0) {
+                    sample += (layer.pcm[i % loopSize].toInt() * layer.scaledVolume) shr 15
                 }
             }
             // Clamp the mixed sample to 16-bit range. Adding Short.MIN_VALUE here previously
@@ -808,23 +835,13 @@ object ExportService {
         return result
     }
 
-    private fun readAtmospherePcm(context: Context, key: String, targetRate: Int, targetLength: Int): ShortArray? {
+    private fun readAtmospherePcm(context: Context, key: String, targetRate: Int): ShortArray? {
         val assetPath = getAtmosphereAssetPath(key) ?: return null
 
-        // Check LRU cache first
+        // Check LRU cache first (processed loop at the target rate, not tiled).
         val cacheKey = "${key}_${targetRate}"
         val cached = AtmosphereCache.get(cacheKey)
-        if (cached != null) {
-            val result = ShortArray(targetLength)
-            var pos = 0
-            val copySize = cached.size
-            while (pos < targetLength) {
-                val len = minOf(copySize, targetLength - pos)
-                System.arraycopy(cached, 0, result, pos, len)
-                pos += len
-            }
-            return result
-        }
+        if (cached != null) return cached
 
         return try {
             val input = context.assets.open(assetPath)
@@ -889,15 +906,7 @@ object ExportService {
             // Cache the processed atmosphere at target rate for next time
             AtmosphereCache.put(cacheKey, pcm)
 
-            val result = ShortArray(targetLength)
-            var pos = 0
-            val copySize = pcm.size
-            while (pos < targetLength) {
-                val len = minOf(copySize, targetLength - pos)
-                System.arraycopy(pcm, 0, result, pos, len)
-                pos += len
-            }
-            result
+            pcm
         } catch (e: Exception) {
             Log.e("ExportService", "Failed to read atmosphere PCM for '$key': ${e.message}", e)
             null
