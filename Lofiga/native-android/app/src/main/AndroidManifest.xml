@@ -35,11 +35,6 @@
             android:value="${ONESIGNAL_APP_ID}" />
 
         <service
-            android:name="com.onesignal.NotificationRestoreService"
-            android:permission="android.permission.BIND_JOB_SERVICE"
-            android:exported="false" />
-
-        <service
             android:name=".media.MediaPlaybackService"
             android:foregroundServiceType="mediaPlayback"
             android:exported="true">

@@ -79,8 +79,13 @@ jobs:
       - name: Run Lint
         run: |
           cd Lofiga/native-android
+          set +e
           ./gradlew :app:lintRelease \
             -PONESIGNAL_APP_ID="$ONESIGNAL_APP_ID"
+          LINT_EXIT=$?
+          echo "=== Full lint report ==="
+          cat app/build/reports/lint-results-release.txt 2>/dev/null || true
+          exit $LINT_EXIT
 
       - name: Verify APK Signature
         run: |
