@@ -502,7 +502,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) { 
                 )
                 if (result != null) {
                     _exportedFilePath.value = result
-                        _exportCompleted.tryEmit(Unit)
+                    _exportCompleted.tryEmit(Unit)
                 } else {
                     _snackbarMessage.tryEmit("Export cancelled")
                 }

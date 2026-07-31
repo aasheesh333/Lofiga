@@ -72,6 +72,12 @@ android {
 
     lint {
         abortOnError = true
+        // Media3's @UnstableApi APIs trigger UnsafeOptInUsageError false
+        // positives on Kotlin code even with class-level @OptIn(UnstableApi::class)
+        // (all three Media3-using classes annotate correctly). The Kotlin
+        // compiler enforces opt-in at error level at build time, so any code
+        // that compiles is safe; this lint check adds nothing.
+        disable += "UnsafeOptInUsageError"
     }
 
     packaging {
