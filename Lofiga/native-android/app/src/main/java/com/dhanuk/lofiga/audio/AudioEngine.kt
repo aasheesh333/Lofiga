@@ -673,14 +673,19 @@ class AudioEngine(private val context: Context) {
     // --- Real FFT Visualization (radix-2 FFT, log-spaced bands) ---
 
     private fun startAnimatingWaveform() {
-        animatingWaveform = true
+        // Cancel any previous animation loop first so rapid track switches don't
+        // end up with two loops writing to the same flows.
+        animatingWaveform = false
         scope.launch {
+            // brief yield so any previous loop sees the flag and exits
+            delay(20)
+            animatingWaveform = true
             var phase = 0f
             while (animatingWaveform && isActive) {
-                // Produce a subtle animated pattern while waiting for FFT
-                phase += 0.15f
+                // Produce a clearly-visible animated pattern while waiting for FFT.
+                phase += 0.18f
                 val animated = List(16) { i ->
-                    val base = 0.05f + 0.15f * (kotlin.math.sin(phase + i * 0.5f) * 0.5f + 0.5f)
+                    val base = 0.10f + 0.35f * (kotlin.math.sin(phase + i * 0.55f) * 0.5f + 0.5f)
                     base.coerceIn(0f, 1f)
                 }
                 synchronized(framesLock) {
