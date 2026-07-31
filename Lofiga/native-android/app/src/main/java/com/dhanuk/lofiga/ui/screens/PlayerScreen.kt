@@ -42,6 +42,7 @@ import com.dhanuk.lofiga.ui.components.*
 import com.dhanuk.lofiga.ui.theme.*
 import java.io.File
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 
 private fun Context.findActivity(): Activity? = when (this) {
     is Activity -> this
