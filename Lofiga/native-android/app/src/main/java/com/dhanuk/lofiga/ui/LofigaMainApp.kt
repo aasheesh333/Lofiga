@@ -33,16 +33,17 @@ private const val TAB_SWITCH_AD_COOLDOWN_MS = 120_000L
 fun LofigaMainApp(
     viewModel: MainViewModel
 ) {
+    // ═════════════════════════════════════════════════════════════════════════════
+    // Lofiga v2 tab order: Home (0), Library (1), Player (2), Settings (3)
+    // ═════════════════════════════════════════════════════════════════════════════
     var selectedIndex by remember { mutableStateOf(0) }
     var previousIndex by remember { mutableStateOf(0) }
     var lastInterstitialTime by remember { mutableStateOf(0L) }
     val context = LocalContext.current
 
-    // Track-loaded state drives the "now playing" badge on the Player tab.
-    // Show it whenever a track has been loaded, regardless of play/pause,
-    // and only when the user isn't already on the Player tab (avoids redundancy).
+    // Show the now-playing dot when a track is loaded and the user isn't on Player.
     val currentTrack by viewModel.currentTrack.collectAsState()
-    val showNowPlayingBadge = currentTrack != null && selectedIndex != 1
+    val showNowPlayingBadge = currentTrack != null && selectedIndex != 2
 
     LaunchedEffect(selectedIndex) {
         if (previousIndex != selectedIndex) {
@@ -71,8 +72,6 @@ fun LofigaMainApp(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                // Scaffold already accounts for bottom-bar insets; also respect the
-                // status bar so content isn't drawn under it in edge-to-edge mode.
                 .statusBarsPadding()
                 .padding(paddingValues)
         ) {
@@ -81,25 +80,28 @@ fun LofigaMainApp(
                     viewModel = viewModel,
                     onSongSelected = { track ->
                         viewModel.loadTrack(track)
-                        selectedIndex = 1
+                        selectedIndex = 2
                     },
                     onEditConfig = { config ->
                         val success = viewModel.editConfig(config)
-                        if (success) {
-                            selectedIndex = 1
-                        }
+                        if (success) selectedIndex = 2
+                    },
+                    onBrowseAll = { selectedIndex = 1 },
+                    onMixSelected = { path, name ->
+                        viewModel.loadTrackFromFile(path, name)
+                        selectedIndex = 2
                     }
                 )
-                1 -> PlayerScreen(
+                1 -> LibraryScreen(
+                    viewModel = viewModel,
+                    onSongSelected = { track ->
+                        viewModel.loadTrack(track)
+                        selectedIndex = 2
+                    }
+                )
+                2 -> PlayerScreen(
                     viewModel = viewModel,
                     onBack = { selectedIndex = 0 }
-                )
-                2 -> LibraryScreen(
-                    viewModel = viewModel,
-                    onFileSelected = { path, name ->
-                        viewModel.loadTrackFromFile(path, name)
-                        selectedIndex = 1
-                    }
                 )
                 3 -> SettingsScreen(
                     viewModel = viewModel
@@ -107,7 +109,7 @@ fun LofigaMainApp(
             }
 
             BannerAd(
-                visible = selectedIndex != 1,
+                visible = selectedIndex != 2,
                 modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()
             )
         }

@@ -1,0 +1,320 @@
+================================================================================
+LOFIGA v2.0 — SESSION STATUS FILE
+Created: Thu Jul 30 2026
+Branch: native-android-rewrite
+Latest green CI commit: c84ebf8 (fix F.3 audiofx race + routing rebind)
+================================================================================
+
+This file tracks the work done across CLI sessions for Lofiga (Android
+slowed+reverb / lofi music converter). Read this first to resume context.
+When you finish a task, update the relevant section below ("REMAINING").
+
+--------------------------------------------------------------------------------
+GOLDEN RULES (read these every session)
+--------------------------------------------------------------------------------
+- NEVER build locally. All builds via GitHub Actions only:
+    git push  ->  sleep 240  ->  gh run list --branch native-android-rewrite
+                                            --limit 1
+  Typical CI cycle is ~6 min total. On failure inspect with:
+    gh run view <run-id> --log-failed | grep -iE "^e: |error:|Unresolved|FAIL"
+- git config already set: user.name "opencode", user.email "opencode@local".
+- Be careful with the `write` tool — earlier a file was written to a wrong
+  relative path creating a duplicate; verify writes land under
+  /home/ubuntu/Lofiga/Lofiga/native-android/...
+- Package: com.dhanuk.lofiga
+- versionCode 3, versionName 2.0.0
+- compileSdk/targetSdk 36, minSdk 26
+- Media3 1.5.1, OneSignal 5.1.31, Compose BOM 2025.03.01
+- Do NOT commit unless the user explicitly asks.
+
+--------------------------------------------------------------------------------
+WHAT IS DONE (every commit on native-android-rewrite branch)
+--------------------------------------------------------------------------------
+Phase A — 13 bug fixes:
+  A1 atmosphere export corruption
+  A2 tempo/pitch export decoupling (WSOLA-lite)
+  A4 NPE
+  A5 unified reverb paths
+  A6 atmosphere duck
+  A7 rewarded ad user-initiated (3-min cooldown) + interstitial 2-min
+  A8 silent catches -> log
+  A9 null-safe codec buffers + loop escape
+  A10 AdView context leak
+  A11 Room migration safe
+  A12 index reset
+  A13 progress math + sort key
+
+Phase E — SDK 36 bump, edge-to-edge, OneSignal pinned, Media3 deps added.
+
+Phase B1 — ExoPlayer preview engine (was MediaPlayer) + Sonic tempo/pitch
+          via PlaybackParameters (commit ba021ff)
+Phase B2 — Media3 session + notification (MediaSessionService, ControllerInfo)
+Phase B3 — Export fix: removed 20M-sample truncation cap; fixed progress
+          curve (decode 0->0.5, effects 0.55->0.95, encode 0.95->0.99)
+Phase B4 — Real radix-2 Cooley-Tukey FFT visualizer (16 log bands, Hann
+          window, adaptive hop)
+Loose-ends — fftGeneration token (race-safe FFT cancel/reload)
+
+Phase D.1 — M3 expressive theme tokens around #993DF5 seed; DarkAppColors
+            + LightAppColors named vals; full M3 role set
+Phase D.2 — NavigationBar M3 expressive: surfaceContainer + primaryContainer
+            pill indicator; now-playing badge plumbed via currentTrack StateFlow
+Phase D.3a — HeaderChip composable extracted (empty-state pills)
+Phase D.3b — ExpandableSection composable extracted; BOTH EFFECTS and
+              ATMOSPHERE PlayerScreen blocks collapsed into ~10-line calls
+              using it.
+
+Phase C.1 — Preset carryover across track loads (first track of session
+            keeps LofiSlow; later loads keep user's tweaks via
+            applyCurrentValuesToEngine)
+Phase C.2 — Auto mood tagging: MoodTag enum (CHILL/MID/ENERGETIC) computed
+            from mean spectral centroid; FilterChip row in HomeScreen
+
+Pre-Q   — Export MediaScanner fallback for API 26..28 (pre-scoped-storage)
+
+Phase F.0 (release-readiness pass, audit + ProGuard):
+  - ProGuard rules audit: explicit keeps added for LofigaApplication, MediaPlaybackService,
+    Media3MediaSessionManager, BuildConfig, blanket androidx.media3.** keep+dontwarn,
+    enum valueOf rule for MoodTag.
+  - AndroidManifest FGS type="mediaPlayback" — already declared in Phase E.
+  - OneSignal init off main thread — already deferred 500ms via applicationScope.
+  - Ads fresh-install safety — confirmed cooldowns start at 0L; ad-not-ready
+    branches return early without burning timestamps.
+  - AAB signing config — present in app/build.gradle.kts (signingConfigs.release
+    reads keystore path/alias/password from env or gradle.properties).
+  Commit: 4690ee1
+
+Phase F.2 (consent flow fix — CRITICAL):
+  Root cause: AdManager.requestConsent was called once from MainActivity, but
+  the _isConsentObtained StateFlow was only WRITTEN, never READ. Ads loaded
+  unconditionally 500ms after Application.onCreate, before consent had even
+  started — in EEA/UK/CH this served ads to users before they consented.
+  Fix:
+  - requestConsent now uses ConsentInformation.canRequestAds() (true when user
+    consented OR no form required in their region) instead of synthesising
+    "obtained" on error paths. Removed 4 places that wrote
+    _isConsentObtained=true on UMP errors.
+  - All four ad-load paths now gate on _isConsentObtained:
+      loadInterstitial / loadRewarded — early-return when !consent
+      resetFailureCounters (foreground re-entry) — early-return when !consent
+      startBannerRefresh (first banner load + refresh loop) — early-return
+      AdManager.onConsentResolved(Context) — new hook fires first banner load
+        + restarts refresh loop after consent resolves
+  - LofigaApplication init coroutine: OneSignal inits immediately (push
+    isn't personalised); awaits isConsentObtained.first { it } with
+    60-second withTimeoutOrNull fallback; skips ad init on timeout/no-consent;
+    calls onConsentResolved(Context) after init to kick the banner.
+  - UMP 3.1.0 exposes canRequestAds() as a METHOD (not a property) — every
+    callsite uses the () form.
+  Commits: 6b21e4e (consent flow gate), 1ff407c (canRequestAds() fix)
+
+Phase F.3 (audio edge-case fixes):
+  - setHandleAudioBecomingNoisy(true) added to ExoPlayer.Builder — headphone
+    unplug now pauses playback (Android UX convention + Play review safety).
+  - hasAudioFocus + re-request focus in play(): AUDIOFOCUS_LOSS now clears
+    hasAudioFocus + nulls audioFocusRequest; play() early-returns with a
+    user-facing error ("Another app is using audio") if consent would be
+    denied; otherwise re-requests focus before resuming.
+  - initEffects vs releaseEffects race fixed: removed the
+    scope.launch(Dispatchers.Default) wrapper — initEffects now runs inline
+    on the Player.Listener callback thread, eliminating the half-built
+    audiofx leak on rapid track switches.
+  - onAudioSessionIdChanged listener added: re-runs initEffects() on the new
+    session id after a routing change (BT disconnect); initEffects() now
+    releaseEffects() first (defensive) so re-binds don't leak.
+  Commit: 438524b (headphone + focus), c84ebf8 (init race + routing rebind)
+
+
+--------------------------------------------------------------------------------
+WHAT IN-PROGRESS / NEXT STEPS (NOT YET DONE)
+================================================================================
+
+(1) STITCH UI REDESIGN / COMPOSE PORT (complete, not yet committed)
+--------------------------------------------------------------------------------
+User wants the app redesigned with a simpler Material 3 light theme. The work is
+now complete on the Compose side (not committed):
+  - New design system: light default, pure white #FFFFFF surfaces, 1px #EEEEEE
+    outlines, single deep indigo #1F3A8A accent, Inter/Roboto typography, no
+    gradients/purple/glassmorphism.
+  - 4-tab NavigationBar: Home / Library / Player / Settings.
+  - All four screens rewritten in Kotlin Compose:
+      Home:       landing page with hero "Create New Mix", recent tracks,
+                  recent mixes, recent edits.
+      Library:    full device-song browser with search, sort chips, mood chips,
+                  flat list with dividers.
+      Player:     track info + waveform visualizer + presets + effects +
+                  atmosphere + export (all existing functionality preserved).
+      Settings:   Appearance, Export, Ads & Premium, About, plus custom presets.
+  - Theme.kt updated: light default, indigo M3 color scheme, flat AppColors.
+  - SettingsManager.kt: isDarkMode default false, audio bitrate default 256k.
+  - CommonComponents.kt updated: nav labels, indigo accents, outlined cards,
+    flat song rows.
+  - LofigaMainApp.kt tab order updated: 0 Home, 1 Library, 2 Player, 3 Settings.
+
+REMAINING:
+  - Commit in logical chunks and push to native-android-rewrite.
+  - Run GitHub Actions CI for each commit and fix any build issues.
+
+PROMPT TEMPLATE for remaining 3 screens
+  (same DESIGN SYSTEM preamble as Home, see below — only the CONTENT section
+  changes per screen):
+
+--- LIBRARY SCREEN ---
+Design a mobile Library screen for the Lofiga Android app — the screen where
+the user browses all the songs on their device to pick one to slow down + reverb.
+
+DESIGN SYSTEM (apply strictly to every element):
+- Light theme is the DEFAULT. Pure white #FFFFFF surfaces everywhere — no dark
+  gradients, no glassmorphism, no multi-color backgrounds.
+- Cards/surfaces white with a subtle 1px outline border #EEEEEE, NO heavy
+  shadows.
+- Single restrained accent colour: deep indigo #1F3A8A, used sparingly only on
+  primary actions/CTAs and the active bottom-nav indicator.
+- Ink text near-black #111111 for headings, gray #666666 for body, #999999 for
+  tertiary.
+- No colourful gradients. No purple. Calm, beginner-friendly, like a 2026
+  Material 3 design from a top Play Store utility app.
+- Material 3 type tokens. Inter font family throughout.
+- Generous whitespace, 16dp outer padding, 12dp inner card padding, 48dp min tap
+  targets, 8dp corner radius on inputs, 12dp on cards, full pill on primary
+  buttons.
+- Material 3 NavigationBar at bottom: 4 tabs (Home, Library, Player, Settings),
+  surface white, near-black icons + indigo pill indicator above active tab, gray
+  when inactive, short text labels below each icon. Active tab is "Library".
+
+LIBRARY SCREEN CONTENT:
+- Top app bar: white background, title "Library" left-aligned (headline-medium),
+  no back arrow (root tab). A search icon button on the right.
+- A search text field directly below the app bar (outlined, thin gray border,
+  8dp radius, leading search icon, placeholder "Search songs or artists").
+- Sort/menu chips row: 3 FilterChips horizontally ("Recent", "Title A-Z",
+  "Artist A-Z") + a "Mood" overflow icon button on the right. Active chip uses
+  indigo outline + indigo text, inactive chips white outline + near-black text.
+- Mood filter chips row (only visible when any mood tag exists): 4 chips — All,
+  Chill, Mid, Energetic — same chip styling as the sort row.
+- List (LazyColumn) of device tracks: each row a flat card with no border, just
+  bottom divider line #EEEEEE: track artwork thumbnail (48dp, 8dp radius) left,
+  title (one line, body-large, near-black), artist (body-medium, gray), duration
+  (label-medium, tertiary) on the right. Tapping a row loads it into the Player
+  and switches tab.
+- Empty state: centered circle icon + "No tracks found" + subtitle "Pull to
+  refresh or check storage permission" if device has zero tracks.
+- Loading skeleton: shimmer placeholder rows when content is loading.
+
+--- PLAYER SCREEN ---
+Design a mobile Player screen for the Lofiga Android app — the screen where the
+user previews the selected track, applies tempo/pitch/reverb/atmosphere effects,
+and exports the slowed+reverb mix.
+
+DESIGN SYSTEM (apply strictly to every element):
+[same DESIGN SYSTEM block as Library screen above]
+
+PLAYER SCREEN CONTENT:
+- Top app bar: white background, title "Now Playing" left-aligned, NO back arrow
+  (root tab). A small "more" icon button (3-dots) on the right.
+- Track info card near the top: track artwork thumbnail centre (96dp, 12dp
+  radius, 1px outline), track title (headline-small, near-black) below,
+  artist (body-medium, gray) below.
+- Waveform visualizer: a thin horizontal Canvas strip showing 16 log-magnitude
+  bands as rounded vertical bars (1dp wide, indigo fill). Animates while
+  playing. Height ~80dp, full width with 16dp horizontal padding.
+- Playback controls row: prev / play-pause (filled indigo circle, white play
+  icon) / next, with a seekbar above showing current position left + duration
+  right (label-large, tertiary).
+- Two expandable section cards below (use Material 3 ExpandableSection pattern —
+  12dp radius, 1px outline, white surface): each with an icon + title
+  (title-medium, near-black) + expand/collapse chevron on the right.
+    Card 1 "EFFECTS": four sliders — Tempo (-50% to +50%), Pitch (-12 to +12
+    semitones), Reverb (0-100%), Bass Boost (0-100%). Each slider row:
+    leading icon (near-black, 18dp), label (body-medium, near-black), value
+    (label-medium, indigo) on the right, then the slider below (indigo active
+    track, gray inactive track, white thumb).
+    Card 2 "ATMOSPHERE": four atmosphere sliders — Rain, Vinyl, Wind, Tape —
+    same row pattern as effects. Each slider shows 0% in tertiary when off.
+- Primary export button at the very bottom (full-pill, indigo fill, white text,
+  label-large, "Export slowed+reverb mix"). Above it, a secondary ghost button
+  ("Save preset" — outlined, indigo text).
+- Bottom NavigationBar with the same 4 tabs as Library screen. Active tab is
+  "Player".
+
+--- SETTINGS SCREEN ---
+Design a mobile Settings screen for the Lofiga Android app — preferences,
+export-quality, ad-free upgrade, about.
+
+DESIGN SYSTEM (apply strictly to every element):
+[same DESIGN SYSTEM block as Library screen above]
+
+SETTINGS SCREEN CONTENT:
+- Top app bar: white background, title "Settings" left-aligned, no back arrow.
+- A single scrollable Column of section cards (each: 12dp radius, 1px outline,
+  white surface; section header in title-small with 4dp top padding inside the
+  card):
+    Section 1 "APPEARANCE":
+      - Dark mode toggle (Material 3 Switch, default off since light is default)
+      with label "Dark mode" and helper text "Use dark surfaces instead of
+      light" (gray body-small).
+      - Accent colour: row showing current colour swatch + a horizontal palette
+      of 4 swatches: indigo #1F3A8A (selected, ringed),
+      plum #6750A4, teal #1B5E5B, charcoal #1F1F1F.
+    Section 2 "EXPORT":
+      - Quality dropdown (Material 3 outlined dropdown menu): 128 / 192 / 256 /
+      320 kbps (default 256).
+      - Format toggle: SegmentedButton row with "MP3" / "WAV" (MP3 default).
+      - Mono mixdown toggle (Switch, default off) with helper text.
+    Section 3 "ADS & PREMIUM":
+      - "Remove ads" row with a primary indigo action button on the right
+      ("Upgrade"), label-large.
+      - "Watch ad for 1 hour ad-free" row with a small ghost button on the
+      right ("Watch ad").
+      - "Reset ad counters" row with a text-only button.
+    Section 4 "NOTIFICATIONS":
+      - OneSignal push notifications toggle (default on).
+      - "What we send" expandable card with description text.
+    Section 5 "ABOUT":
+      - App version row ("Lofiga v2.0.0").
+      - "Rate on Play Store" row (opens external, indigo text link).
+      - "Send feedback" row.
+      - "Open source licenses" row.
+      - Privacy policy link.
+- Bottom NavigationBar with the same 4 tabs. Active tab is "Settings".
+
+--------------------------------------------------------------------------------
+(2) Port generated Stitch designs to Kotlin Compose code
+--------------------------------------------------------------------------------
+After all 4 Stitch screens are generated and user is happy with them:
+  - Replace current Lofiga/native-android/app/src/main/java/com/dhanuk/lofiga/ui/
+    screens/*.kt files with new Compose implementations matching the Stitch
+    designs.
+  - Update Theme.kt to make light theme the default (currently dark default).
+  - Update SettingsManager default for isDarkMode to false.
+  - The existing AudioEngine / MainViewModel / ExportService / ads-back-end /
+    Room / mood tagging logic stays UNCHANGED — only the UI layer is rewritten.
+  - Commit the redesign in logical chunks per screen.
+  - Run CI for each commit.
+
+--------------------------------------------------------------------------------
+(3) LOW-PRIORITY DEFERRED ITEMS
+--------------------------------------------------------------------------------
+- F.2 re-request consent on resume — UMP SDK auto-caches consent across
+  sessions, so re-requesting on resume is redundant in practice. Skip unless
+  Play Store review flags it.
+- OneSignal explicit push-subscription opt-in/opt-out tied to user consent —
+  OneSignal 5.x defaults to opt-out pending explicit opt-in; not blocking
+  since push isn't personalised. Policy-level work; deferred.
+- Stitch MCP tools rather than website (use only if website flow breaks).
+- Play Store listing prep (graphics, screenshots, descriptions) — explicitly
+  skipped per user's earlier instruction ("no creative work").
+- UnhandledExceptionHandler for OOM during FFT decode of huge tracks — out of
+  scope for audio safety.
+
+--------------------------------------------------------------------------------
+HOW TO RESUME IN A FRESH CLI SESSION
+--------------------------------------------------------------------------------
+1) Read this file (/home/ubuntu/Lofiga/SESSION_STATUS.txt) for full context.
+2) Confirm any uncommitted work with:  git status && git log --oneline -10
+3) To continue the Stitch redesign: open Chrome DevTools on the Stitch
+   project URL above, take a snapshot, then resume generating the remaining
+   3 screens using the prompts in this file.
+4) After all 4 Stitch screens are done, port to Kotlin Compose per the plan
+   above (section 2 of the REMAINING block).
+5) Verify porting commits with CI: each push triggers .github/workflows/build.yml.
