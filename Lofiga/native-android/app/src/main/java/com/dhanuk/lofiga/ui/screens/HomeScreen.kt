@@ -1,15 +1,17 @@
 package com.dhanuk.lofiga.ui.screens
 
+import android.content.Intent
+import android.os.Environment
 import androidx.compose.foundation.background
-import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
@@ -18,365 +20,391 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.content.FileProvider
 import com.dhanuk.lofiga.model.AudioTrack
 import com.dhanuk.lofiga.model.SavedConfig
 import com.dhanuk.lofiga.ui.MainViewModel
 import com.dhanuk.lofiga.ui.components.*
 import com.dhanuk.lofiga.ui.theme.*
-import com.dhanuk.lofiga.ui.theme.LocalAppColors
-
-enum class SortOption(val label: String) {
-    DATE_ADDED("Date Added"),
-    NAME("Name"),
-    DURATION("Duration"),
-    SIZE("Size"),
-    ARTIST("Artist")
-}
-
-/**
- * C.2 — library filter by auto-detected track mood. ALL shows every track
- * (including ones whose mood hasn't been computed yet); the others narrow
- * the list to tracks whose [com.dhanuk.lofiga.model.MoodTag] matches.
- */
-enum class MoodFilterOption(val label: String, val tag: com.dhanuk.lofiga.model.MoodTag?) {
-    ALL("All", null),
-    CHILL("Chill", com.dhanuk.lofiga.model.MoodTag.CHILL),
-    MID("Mid", com.dhanuk.lofiga.model.MoodTag.MID),
-    ENERGETIC("Energetic", com.dhanuk.lofiga.model.MoodTag.ENERGETIC)
-}
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     viewModel: MainViewModel,
-    onSongSelected: (com.dhanuk.lofiga.model.AudioTrack) -> Unit,
+    onSongSelected: (AudioTrack) -> Unit,
     onEditConfig: (SavedConfig) -> Unit,
+    onBrowseAll: () -> Unit,
+    onMixSelected: (String, String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val colors = LocalAppColors.current
-    val recentEdits by viewModel.recentEdits.collectAsState()
+    val context = LocalContext.current
     val allSongs by viewModel.allSongs.collectAsState()
-    val filteredSongs by viewModel.filteredSongs.collectAsState()
-    val searchQuery by viewModel.searchQuery.collectAsState()
+    val recentEdits by viewModel.recentEdits.collectAsState()
     val currentTrack by viewModel.currentTrack.collectAsState()
-    val moodTags by viewModel.moodTags.collectAsState()   // C.2: id -> MoodTag
-
-    var sortOption by remember { mutableStateOf(SortOption.DATE_ADDED) }
-    var showSortMenu by remember { mutableStateOf(false) }
     var isRefreshing by remember { mutableStateOf(false) }
-    var moodFilter by remember { mutableStateOf(MoodFilterOption.ALL) }
+
+    // ── Exported mixes (moved from old LibraryScreen) ─────────────────────────
+    var exportedFiles by remember { mutableStateOf<List<File>>(emptyList()) }
+
+    LaunchedEffect(Unit) {
+        exportedFiles = loadExportedFiles(context)
+    }
+    LaunchedEffect(viewModel) {
+        viewModel.exportCompleted.collect {
+            exportedFiles = loadExportedFiles(context)
+        }
+    }
 
     LaunchedEffect(isRefreshing) {
         if (isRefreshing) {
             viewModel.loadSongs()
+            exportedFiles = loadExportedFiles(context)
             kotlinx.coroutines.delay(600)
             isRefreshing = false
         }
     }
 
-    val sortedSongs = remember(filteredSongs, sortOption, moodFilter, moodTags) {
-        // C.2: apply mood filter BEFORE sort so the chip count reflects only
-        // tagged-matching tracks. ALL keeps untagged tracks visible too.
-        val moodFiltered = if (moodFilter.tag == null) {
-            filteredSongs
-        } else {
-            filteredSongs.filter { track -> moodTags[track.id] == moodFilter.tag }
-        }
-        when (sortOption) {
-            SortOption.DATE_ADDED -> moodFiltered.sortedByDescending { it.dateAdded }
-            SortOption.NAME -> moodFiltered.sortedBy { it.title.lowercase() }
-            SortOption.DURATION -> moodFiltered.sortedBy { it.durationMs }
-            SortOption.SIZE -> moodFiltered.sortedByDescending { it.fileSize }
-            SortOption.ARTIST -> moodFiltered.sortedBy { it.artist.lowercase() }
-        }
-    }
+    PullToRefreshBox(
+        isRefreshing = isRefreshing,
+        onRefresh = { isRefreshing = true },
+        modifier = modifier.fillMaxSize()
+    ) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(bottom = 80.dp)
+        ) {
+            // ── Top bar ────────────────────────────────────────────────────────
+            item {
+                Text(
+                    "Lofiga",
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = colors.textPrimary,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(start = 20.dp, top = 16.dp, bottom = 4.dp)
+                )
+            }
 
-    Box(modifier = modifier.fillMaxSize()) {
-        AmbientBackground()
-
-        Column(modifier = Modifier.fillMaxSize()) {
-            PullToRefreshBox(
-                isRefreshing = isRefreshing,
-                onRefresh = { isRefreshing = true },
-                modifier = Modifier.weight(1f)
-            ) {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 80.dp)
+            // ── Hero CTA card ──────────────────────────────────────────────────
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(Indigo)
+                        .padding(24.dp)
                 ) {
-                    item {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.Bottom
-                        ) {
-                            Column {
-                                Text(
-                                    text = "Lofiga",
-                                    style = MaterialTheme.typography.displayLarge,
-                                    color = colors.textPrimary,
-                                )
-                                Text(
-                                    text = "Turn Any Song Into Lofi",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = colors.textPrimary,
-                                    modifier = Modifier.padding(bottom = 20.dp)
-                                )
-                            }
-                        }
-                    }
-
-                    item {
-                        OutlinedTextField(
-                            value = searchQuery,
-                            onValueChange = { viewModel.setSearchQuery(it) },
-                            placeholder = { Text("Search songs...", color = colors.textTertiary) },
-                            leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = "Search", tint = colors.textTertiary) },
-                            trailingIcon = {
-                                if (searchQuery.isNotEmpty()) {
-                                    IconButton(onClick = { viewModel.setSearchQuery("") }) {
-                                        Icon(Icons.Outlined.Clear, contentDescription = "Clear", tint = colors.textTertiary)
-                                    }
-                                }
-                            },
-                            modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
-                            singleLine = true,
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedTextColor = colors.textPrimary,
-                                unfocusedTextColor = colors.textPrimary,
-                                cursorColor = colors.textPrimary,
-                                focusedBorderColor = colors.textPrimary,
-                                unfocusedBorderColor = colors.outline,
-                                focusedContainerColor = colors.surface,
-                                unfocusedContainerColor = colors.surface
-                            ),
-                            shape = MaterialTheme.shapes.medium
+                    Column {
+                        Text(
+                            "Transform your sound",
+                            style = MaterialTheme.typography.headlineSmall,
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold
                         )
-                    }
-
-                    item {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                "${allSongs.size} songs",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = colors.textTertiary
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            "Slow down, add reverb, and create your perfect lofi mix.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.White.copy(alpha = 0.8f)
+                        )
+                        Spacer(Modifier.height(16.dp))
+                        OutlinedButton(
+                            onClick = onBrowseAll,
+                            shape = RoundedCornerShape(24.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color.White),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = Color.White
                             )
-                            Box {
-                                TextButton(onClick = { showSortMenu = true }) {
-                                    Icon(Icons.Outlined.Sort, contentDescription = null, tint = colors.textPrimary, modifier = Modifier.size(16.dp))
-                                    Spacer(Modifier.width(4.dp))
-                                    Text(sortOption.label, color = colors.textPrimary, style = MaterialTheme.typography.bodySmall)
-                                }
-                                DropdownMenu(
-                                    expanded = showSortMenu,
-                                    onDismissRequest = { showSortMenu = false },
-                                    containerColor = colors.surface
-                                ) {
-                                    SortOption.entries.forEach { option ->
-                                        DropdownMenuItem(
-                                            text = {
-                                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                                    if (sortOption == option) {
-                                                        Icon(Icons.Outlined.Check, contentDescription = null, tint = colors.textPrimary, modifier = Modifier.size(16.dp))
-                                                        Spacer(Modifier.width(8.dp))
-                                                    }
-                                                    Text(option.label, color = colors.textPrimary)
-                                                }
-                                            },
-                                            onClick = {
-                                                sortOption = option
-                                                showSortMenu = false
-                                            }
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    // C.2 — Mood filter chip row. Visible only when there's at
-                    // least one tagged track so first-time users with an untagged
-                    // library don't see a useless empty row. Updates as moodTags
-                    // fills in via background precompute.
-                    if (moodTags.isNotEmpty()) {
-                        item {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .horizontalScroll(rememberScrollState())
-                                    .padding(bottom = 8.dp),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                MoodFilterOption.entries.forEach { option ->
-                                    FilterChip(
-                                        selected = moodFilter == option,
-                                        onClick = { moodFilter = option },
-                                        label = { Text(option.label, style = MaterialTheme.typography.labelMedium) },
-                                        leadingIcon = if (moodFilter == option) {
-                                            {
-                                                Icon(
-                                                    Icons.Outlined.Check,
-                                                    contentDescription = null,
-                                                    modifier = Modifier.size(14.dp)
-                                                )
-                                            }
-                                        } else null
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    if (recentEdits.isNotEmpty()) {
-                        item {
-                            SectionHeader("RECENT EDITS")
-                        }
-                        items(recentEdits.take(3), key = { it.id }) { edit ->
-                            RecentEditItem(
-                                edit = edit,
-                                onClick = { onEditConfig(edit) },
-                                onDelete = { viewModel.deleteConfig(edit.id) }
-                            )
-                        }
-                        item { Spacer(Modifier.height(16.dp)) }
-                    }
-
-                    item {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            SectionHeader("YOUR SONGS")
+                            Icon(Icons.Outlined.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("Create New Mix", fontWeight = FontWeight.SemiBold)
                         }
                     }
+                }
+            }
 
-                    if (sortedSongs.isEmpty()) {
-                        item {
-                            Box(
-                                modifier = Modifier.fillMaxWidth().padding(vertical = 48.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Column(
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    modifier = Modifier.padding(24.dp)
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(100.dp)
-                                            .clip(CircleShape)
-                                            .background(
-                                                Brush.linearGradient(
-                                                    colors = listOf(
-                                                        colors.textPrimary.copy(alpha = 0.3f),
-                                                        colors.textPrimary.copy(alpha = 0.2f)
-                                                    )
-                                                )
-                                            ),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(
-                                            if (searchQuery.isNotEmpty()) Icons.Outlined.SearchOff else Icons.Outlined.LibraryMusic,
-                                            contentDescription = null,
-                                            tint = colors.textPrimary,
-                                            modifier = Modifier.size(48.dp)
-                                        )
-                                    }
-
-                                    Spacer(Modifier.height(24.dp))
-
-                                    Text(
-                                        if (searchQuery.isNotEmpty())
-                                            "No songs match \"$searchQuery\""
-                                        else
-                                            "No songs yet!",
-                                        color = colors.textPrimary,
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.SemiBold
-                                    )
-
-                                    Spacer(Modifier.height(8.dp))
-
-                                    Text(
-                                        if (searchQuery.isNotEmpty())
-                                            "Try a different search term"
-                                        else
-                                            "Add music files to your device to get started",
-                                        color = colors.textTertiary,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        modifier = Modifier.padding(horizontal = 32.dp),
-                                        textAlign = TextAlign.Center
-                                    )
-
-                                    if (searchQuery.isEmpty()) {
-                                        Spacer(Modifier.height(24.dp))
-
-                                        Row(
-                                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                                        ) {
-                                            Button(
-                                                onClick = { viewModel.loadSongs() },
-                                                colors = ButtonDefaults.buttonColors(
-                                                    containerColor = colors.textPrimary
-                                                ),
-                                                shape = RoundedCornerShape(12.dp)
-                                            ) {
-                                                Icon(
-                                                    Icons.Filled.Refresh,
-                                                    contentDescription = null,
-                                                    modifier = Modifier.size(18.dp)
-                                                )
-                                                Spacer(Modifier.width(8.dp))
-                                                Text("Scan Music")
-                                            }
-                                        }
-
-                                        Spacer(Modifier.height(8.dp))
-
-                                        Text(
-                                            "Make sure music files are stored on your device",
-                                            color = colors.textTertiary,
-                                            style = MaterialTheme.typography.bodySmall
-                                        )
-                                    }
-                                }
-                            }
+            // ── Recent Tracks ──────────────────────────────────────────────────
+            if (allSongs.isNotEmpty()) {
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        SectionHeader("Recent Tracks")
+                        TextButton(onClick = onBrowseAll) {
+                            Text("See all", color = Indigo, style = MaterialTheme.typography.labelMedium)
                         }
-                    } else {
-                        items(sortedSongs, key = {
-                            // dataPath is non-nullable (default ""); build a stable,
-                            // collision-free key with sensible fallbacks.
-                            when {
-                                it.dataPath.isNotEmpty() -> it.dataPath
-                                it.uri != null -> it.uri.toString()
-                                else -> "song_${it.id}_${it.title}"
-                            }
-                        }) { song ->
-                            SongItem(
+                    }
+                }
+                item {
+                    LazyRow(
+                        contentPadding = PaddingValues(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        items(allSongs.take(8), key = { it.id }) { song ->
+                            CompactTrackCard(
                                 title = song.title,
                                 artist = song.artist,
-                                duration = song.formattedDuration,
-                                gradientThumb = true,
-                                thumbTitle = song.title,
-                                isCurrentlyPlaying = currentTrack?.dataPath == song.dataPath || (currentTrack?.uri != null && currentTrack?.uri == song.uri),
+                                isPlaying = currentTrack?.dataPath == song.dataPath,
                                 onClick = { onSongSelected(song) }
                             )
                         }
                     }
+                }
+            } else {
+                item {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                Icons.Outlined.LibraryMusic,
+                                contentDescription = null,
+                                tint = colors.textTertiary,
+                                modifier = Modifier.size(48.dp)
+                            )
+                            Spacer(Modifier.height(12.dp))
+                            Text("No music found", style = MaterialTheme.typography.titleMedium, color = colors.textPrimary)
+                            Spacer(Modifier.height(4.dp))
+                            Text("Add music files to your device", style = MaterialTheme.typography.bodySmall, color = colors.textTertiary)
+                            Spacer(Modifier.height(16.dp))
+                            Button(
+                                onClick = { viewModel.loadSongs() },
+                                shape = RoundedCornerShape(24.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = Indigo)
+                            ) {
+                                Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text("Scan Music")
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ── Recent Mixes ───────────────────────────────────────────────────
+            if (exportedFiles.isNotEmpty()) {
+                item {
+                    SectionHeader(
+                        "Recent Mixes",
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
+                }
+                items(exportedFiles.take(3), key = { it.absolutePath }) { file ->
+                    MixItem(
+                        fileName = file.name,
+                        filePath = file.absolutePath,
+                        onPlay = { onMixSelected(file.absolutePath, file.name) },
+                        context = context
+                    )
+                }
+            }
+
+            // ── Recent Edits ───────────────────────────────────────────────────
+            if (recentEdits.isNotEmpty()) {
+                item {
+                    SectionHeader(
+                        "Recent Edits",
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
+                }
+                items(recentEdits.take(3), key = { it.id }) { edit ->
+                    RecentEditItem(
+                        edit = edit,
+                        onClick = { onEditConfig(edit) },
+                        onDelete = { viewModel.deleteConfig(edit.id) }
+                    )
                 }
             }
         }
     }
 }
 
+// ── Helper: load exported mix files ────────────────────────────────────────────
+private suspend fun loadExportedFiles(context: android.content.Context): List<File> {
+    return withContext(Dispatchers.IO) {
+        val fileList = mutableListOf<File>()
+        val musDir = context.getExternalFilesDir(Environment.DIRECTORY_MUSIC)
+        val dirs = mutableListOf<File>()
+        if (musDir != null) dirs.add(File(musDir, "Lofiga"))
+        try {
+            dirs.add(File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC), "Lofiga"))
+            dirs.add(File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "Lofiga"))
+        } catch (_: Exception) {}
+        dirs.forEach { dir ->
+            if (dir.exists()) {
+                fileList.addAll(
+                    dir.listFiles { f -> f.extension in listOf("wav", "m4a", "aac") }
+                        ?.sortedByDescending { it.lastModified() }
+                        ?: emptyList()
+                )
+            }
+        }
+        fileList.distinctBy { it.absolutePath }
+    }
+}
+
+// ── Compact track card for horizontal scroll ───────────────────────────────────
+@Composable
+private fun CompactTrackCard(
+    title: String,
+    artist: String,
+    isPlaying: Boolean,
+    onClick: () -> Unit
+) {
+    val colors = LocalAppColors.current
+    Column(
+        modifier = Modifier
+            .width(140.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick)
+            .padding(8.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(124.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(if (isPlaying) IndigoContainer else colors.surfaceHighlight),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                if (isPlaying) Icons.Outlined.Equalizer else Icons.Outlined.MusicNote,
+                contentDescription = null,
+                tint = if (isPlaying) Indigo else colors.textTertiary,
+                modifier = Modifier.size(40.dp)
+            )
+        }
+        Spacer(Modifier.height(8.dp))
+        Text(
+            title,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (isPlaying) Indigo else colors.textPrimary,
+            fontWeight = FontWeight.Medium
+        )
+        Text(
+            artist,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            style = MaterialTheme.typography.bodySmall,
+            color = colors.textTertiary
+        )
+    }
+}
+
+// ── Mix item row ───────────────────────────────────────────────────────────────
+@Composable
+private fun MixItem(
+    fileName: String,
+    filePath: String,
+    onPlay: () -> Unit,
+    context: android.content.Context
+) {
+    val colors = LocalAppColors.current
+    var showMenu by remember { mutableStateOf(false) }
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+
+    if (showDeleteConfirm) {
+        DeleteConfirmDialog(
+            title = "Delete Mix",
+            message = "Delete \"$fileName\"? This cannot be undone.",
+            onConfirm = {
+                File(filePath).delete()
+                showDeleteConfirm = false
+            },
+            onDismiss = { showDeleteConfirm = false }
+        )
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+            .clickable(onClick = onPlay)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(IndigoContainer),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Outlined.PlayArrow, contentDescription = null, tint = Indigo, modifier = Modifier.size(22.dp))
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    fileName,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = colors.textPrimary,
+                    fontWeight = FontWeight.Medium
+                )
+                Text("Exported mix", style = MaterialTheme.typography.bodySmall, color = colors.textTertiary)
+            }
+            Box {
+                IconButton(onClick = { showMenu = true }) {
+                    Icon(Icons.Outlined.MoreVert, contentDescription = "More", tint = colors.textTertiary)
+                }
+                DropdownMenu(
+                    expanded = showMenu,
+                    onDismissRequest = { showMenu = false },
+                    containerColor = colors.surface
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Share") },
+                        onClick = {
+                            showMenu = false
+                            try {
+                                val file = File(filePath)
+                                if (file.exists()) {
+                                    val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+                                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                        type = "audio/*"
+                                        putExtra(Intent.EXTRA_STREAM, uri)
+                                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                    }
+                                    context.startActivity(Intent.createChooser(shareIntent, "Share track"))
+                                }
+                            } catch (_: Exception) {}
+                        },
+                        leadingIcon = { Icon(Icons.Outlined.Share, contentDescription = null, modifier = Modifier.size(18.dp)) }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Delete", color = Color(0xFFBA1A1A)) },
+                        onClick = {
+                            showDeleteConfirm = true
+                            showMenu = false
+                        },
+                        leadingIcon = { Icon(Icons.Outlined.Delete, contentDescription = null, tint = Color(0xFFBA1A1A), modifier = Modifier.size(18.dp)) }
+                    )
+                }
+            }
+        }
+        HorizontalDivider(color = colors.outline, thickness = 1.dp)
+    }
+}
+
+// ── Recent edit row ────────────────────────────────────────────────────────────
 @Composable
 private fun RecentEditItem(
     edit: SavedConfig,
@@ -384,48 +412,41 @@ private fun RecentEditItem(
     onDelete: () -> Unit
 ) {
     val colors = LocalAppColors.current
-    Card(
-        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-        shape = MaterialTheme.shapes.medium,
-        colors = CardDefaults.cardColors(containerColor = colors.surface),
-        onClick = onClick
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+            .clickable(onClick = onClick)
     ) {
         Row(
-            modifier = Modifier.padding(12.dp),
+            modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
-                modifier = Modifier.size(48.dp),
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(colors.surfaceHighlight),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    imageVector = Icons.Outlined.MusicNote,
-                    contentDescription = null,
-                    tint = colors.textPrimary,
-                    modifier = Modifier.size(24.dp)
-                )
+                Icon(Icons.Outlined.Edit, contentDescription = null, tint = colors.textSecondary, modifier = Modifier.size(22.dp))
             }
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = edit.fileName,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.W600,
-                    color = colors.textPrimary
+                    edit.fileName,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = colors.textPrimary,
+                    fontWeight = FontWeight.Medium
                 )
-                Text(
-                    text = "Saved recently",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = colors.textTertiary
-                )
+                Text("Saved recently", style = MaterialTheme.typography.bodySmall, color = colors.textTertiary)
             }
             IconButton(onClick = onDelete) {
-                Icon(
-                    Icons.Outlined.Delete,
-                    contentDescription = "Delete",
-                    tint = colors.textTertiary
-                )
+                Icon(Icons.Outlined.Delete, contentDescription = "Delete", tint = colors.textTertiary, modifier = Modifier.size(20.dp))
             }
         }
+        HorizontalDivider(color = colors.outline, thickness = 1.dp)
     }
 }
