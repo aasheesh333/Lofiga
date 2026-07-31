@@ -56,13 +56,10 @@ fun SettingsScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(bottom = 80.dp)
         ) {
-            // ── Title ──────────────────────────────────────────────────────────
-            Text(
-                "Settings",
-                style = MaterialTheme.typography.headlineMedium,
-                color = colors.textPrimary,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(start = 20.dp, top = 16.dp, bottom = 16.dp)
+            // ── Top app bar ────────────────────────────────────────────────────
+            TopAppBar(
+                title = { Text("Settings", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.headlineMedium) },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = colors.bg)
             )
 
             // ════════════════════════════════════════════════════════════════════
@@ -307,17 +304,18 @@ private fun SettingsSection(
     val colors = LocalAppColors.current
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
         Text(
-            title,
-            style = MaterialTheme.typography.labelMedium,
-            color = colors.textTertiary,
+            title.replaceFirstChar { it.uppercase() },
+            style = MaterialTheme.typography.titleSmall,
+            color = colors.textPrimary,
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
         )
         Surface(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp),
+            shape = RoundedCornerShape(16.dp),
             color = colors.surface,
-            border = BorderStroke(1.dp, colors.outline)
+            border = BorderStroke(1.dp, colors.outline),
+            shadowElevation = 1.dp
         ) {
             Column(content = content)
         }

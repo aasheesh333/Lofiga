@@ -41,6 +41,7 @@ import com.dhanuk.lofiga.ui.MainViewModel
 import com.dhanuk.lofiga.ui.components.*
 import com.dhanuk.lofiga.ui.theme.*
 import java.io.File
+import kotlinx.coroutines.delay
 
 private fun Context.findActivity(): Activity? = when (this) {
     is Activity -> this
@@ -78,7 +79,6 @@ fun PlayerScreen(
     var showAllPresets by remember { mutableStateOf(false) }
     var showEffects by remember { mutableStateOf(true) }
     var showAtmosphere by remember { mutableStateOf(false) }
-    var showExportInfo by remember { mutableStateOf(false) }
     var showPostExportSupportPrompt by remember { mutableStateOf(false) }
     val scrollState = rememberScrollState()
 
@@ -128,6 +128,46 @@ fun PlayerScreen(
             EmptyPlayerState()
         } else {
             Column(modifier = Modifier.fillMaxSize()) {
+                // ── Top app bar ──────────────────────────────────────────────
+                TopAppBar(
+                    title = { Text("Now Playing", fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.titleLarge) },
+                    navigationIcon = {
+                        IconButton(onClick = onBack) {
+                            Icon(Icons.Outlined.ArrowBack, contentDescription = "Back", tint = colors.textPrimary)
+                        }
+                    },
+                    actions = {
+                        var showActionsMenu by remember { mutableStateOf(false) }
+                        Box {
+                            IconButton(onClick = { showActionsMenu = true }) {
+                                Icon(Icons.Outlined.MoreVert, contentDescription = "Actions", tint = colors.textPrimary)
+                            }
+                            DropdownMenu(
+                                expanded = showActionsMenu,
+                                onDismissRequest = { showActionsMenu = false },
+                                containerColor = colors.surface
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("Export") },
+                                    onClick = { viewModel.exportTrack(context); showActionsMenu = false },
+                                    leadingIcon = { Icon(Icons.Outlined.FileDownload, contentDescription = null, tint = Indigo, modifier = Modifier.size(18.dp)) }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Save Config") },
+                                    onClick = { viewModel.saveCurrentConfig(); showActionsMenu = false },
+                                    leadingIcon = { Icon(Icons.Outlined.Save, contentDescription = null, tint = Indigo, modifier = Modifier.size(18.dp)) }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Save as Preset") },
+                                    onClick = { showSavePresetSheet = true; showActionsMenu = false },
+                                    leadingIcon = { Icon(Icons.Outlined.BookmarkAdd, contentDescription = null, tint = Indigo, modifier = Modifier.size(18.dp)) }
+                                )
+                            }
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = colors.bg)
+                )
+
                 // ── Scrollable content ───────────────────────────────────────
                 Column(
                     modifier = Modifier
@@ -136,8 +176,6 @@ fun PlayerScreen(
                         .verticalScroll(scrollState)
                         .padding(horizontal = 16.dp)
                 ) {
-                    Spacer(Modifier.height(8.dp))
-
                     // Track info card with centered large artwork
                     TrackInfoCard(
                         title = currentTrack?.title.orEmpty(),
@@ -263,31 +301,19 @@ fun PlayerScreen(
                     Spacer(Modifier.height(12.dp))
 
                     // ── Export button ────────────────────────────────────────
-                    OutlinedButton(
-                        onClick = { showExportInfo = !showExportInfo },
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
-                        shape = RoundedCornerShape(24.dp),
-                        border = BorderStroke(1.dp, Indigo.copy(alpha = 0.3f)),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Indigo)
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 4.dp, vertical = 6.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        color = colors.surfaceHighlight
                     ) {
-                        Icon(Icons.Outlined.Info, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text("How export works", fontWeight = FontWeight.Medium)
-                    }
-                    if (showExportInfo) {
-                        Surface(
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 6.dp),
-                            shape = RoundedCornerShape(12.dp),
-                            color = colors.surfaceHighlight
-                        ) {
-                            Text(
-                                "Export saves your current mix with all effects applied to Music/Lofiga. " +
-                                "M4A offers the best balance of quality and file size; WAV is uncompressed.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = colors.textSecondary,
-                                modifier = Modifier.padding(12.dp)
-                            )
-                        }
+                        Text(
+                            "Export saves your mix with all effects to Music/Lofiga.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = colors.textSecondary,
+                            modifier = Modifier.padding(12.dp)
+                        )
                     }
 
                     Button(
@@ -307,7 +333,7 @@ fun PlayerScreen(
                         } else {
                             Icon(Icons.Outlined.FileDownload, contentDescription = null, tint = Color.White)
                             Spacer(Modifier.width(8.dp))
-                            Text("Export slowed+reverb mix", color = Color.White, fontWeight = FontWeight.Bold)
+                            Text("Export slowed+reverb mix", color = Color.White, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.labelLarge)
                         }
                     }
 
@@ -520,19 +546,23 @@ private fun TrackInfoCard(
     onAction: (TrackAction) -> Unit
 ) {
     val colors = LocalAppColors.current
-    var showActionsMenu by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Box(
-            modifier = Modifier.size(160.dp).clip(RoundedCornerShape(16.dp)).background(colors.surfaceHighlight),
-            contentAlignment = Alignment.Center
+        Surface(
+            modifier = Modifier.size(220.dp),
+            shape = RoundedCornerShape(20.dp),
+            color = colors.surfaceHighlight,
+            border = BorderStroke(1.dp, colors.outline),
+            shadowElevation = 1.dp
         ) {
-            Icon(Icons.Outlined.Album, contentDescription = null, tint = colors.textTertiary, modifier = Modifier.size(64.dp))
+            Box(contentAlignment = Alignment.Center) {
+                Icon(Icons.Outlined.Album, contentDescription = null, tint = Indigo.copy(alpha = 0.4f), modifier = Modifier.size(80.dp))
+            }
         }
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(20.dp))
         Text(
             title,
             style = MaterialTheme.typography.headlineSmall,
@@ -541,39 +571,31 @@ private fun TrackInfoCard(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
-        Spacer(Modifier.height(2.dp))
+        Spacer(Modifier.height(4.dp))
         Text(
             artist.ifBlank { "Unknown Artist" },
-            style = MaterialTheme.typography.bodyMedium,
-            color = colors.textTertiary,
+            style = MaterialTheme.typography.bodyLarge,
+            color = colors.textSecondary,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
-        Spacer(Modifier.height(8.dp))
-        Box {
-            IconButton(onClick = { showActionsMenu = true }) {
-                Icon(Icons.Outlined.MoreVert, contentDescription = "Actions", tint = colors.textSecondary)
-            }
-            DropdownMenu(
-                expanded = showActionsMenu,
-                onDismissRequest = { showActionsMenu = false },
-                containerColor = colors.surface
+        Spacer(Modifier.height(16.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            OutlinedIconButton(
+                onClick = { onAction(TrackAction.SavePreset) },
+                modifier = Modifier.size(44.dp),
+                shape = CircleShape,
+                border = BorderStroke(1.dp, colors.outline)
             ) {
-                DropdownMenuItem(
-                    text = { Text("Export") },
-                    onClick = { onAction(TrackAction.Export); showActionsMenu = false },
-                    leadingIcon = { Icon(Icons.Outlined.FileDownload, contentDescription = null, tint = Indigo, modifier = Modifier.size(18.dp)) }
-                )
-                DropdownMenuItem(
-                    text = { Text("Save Config") },
-                    onClick = { onAction(TrackAction.SaveConfig); showActionsMenu = false },
-                    leadingIcon = { Icon(Icons.Outlined.Save, contentDescription = null, tint = Indigo, modifier = Modifier.size(18.dp)) }
-                )
-                DropdownMenuItem(
-                    text = { Text("Save as Preset") },
-                    onClick = { onAction(TrackAction.SavePreset); showActionsMenu = false },
-                    leadingIcon = { Icon(Icons.Outlined.BookmarkAdd, contentDescription = null, tint = Indigo, modifier = Modifier.size(18.dp)) }
-                )
+                Icon(Icons.Outlined.BookmarkAdd, contentDescription = "Save preset", tint = Indigo, modifier = Modifier.size(20.dp))
+            }
+            OutlinedIconButton(
+                onClick = { onAction(TrackAction.Export) },
+                modifier = Modifier.size(44.dp),
+                shape = CircleShape,
+                border = BorderStroke(1.dp, colors.outline)
+            ) {
+                Icon(Icons.Outlined.FileDownload, contentDescription = "Export", tint = Indigo, modifier = Modifier.size(20.dp))
             }
         }
     }
@@ -581,21 +603,47 @@ private fun TrackInfoCard(
 
 @Composable
 private fun WaveformVisualizer(viewModel: MainViewModel) {
-    val fftData by viewModel.audioEngine.fftData.collectAsState()
-    val colors = LocalAppColors.current
-    Canvas(modifier = Modifier.fillMaxWidth().height(80.dp)) {
+    val rawFftData by viewModel.audioEngine.fftData.collectAsState()
+    val isPlaying by viewModel.audioEngine.isPlaying.collectAsState()
+
+    // Smooth the FFT data so the bars don't jump too abruptly.
+    // Persist mutable state across recompositions; read the latest raw values inside the loop
+    // rather than using them as keys, otherwise the producer restarts every time fftData emits.
+    val engine = viewModel.audioEngine
+    val smoothed = remember { mutableStateListOf<Float>().apply { repeat(rawFftData.size.coerceAtLeast(16)) { add(0f) } } }
+    LaunchedEffect(Unit) {
+        while (isActive) {
+            val target = engine.fftData.value
+            for (i in smoothed.indices) {
+                val t = target.getOrNull(i)?.coerceIn(0f, 1f) ?: 0f
+                smoothed[i] = (smoothed[i] * 0.72f + t * 0.28f).coerceIn(0f, 1f)
+            }
+            if (!engine.isPlaying.value && smoothed.all { it < 0.02f }) {
+                smoothed.replaceAll { 0f }
+            }
+            delay(32)
+        }
+    }
+
+    Canvas(modifier = Modifier.fillMaxWidth().height(96.dp)) {
         val width = size.width
         val height = size.height
-        val barCount = fftData.size.coerceAtLeast(1)
-        val barWidth = width / barCount
-        val corner = 4.dp.toPx()
+        val barCount = smoothed.size.coerceAtLeast(1)
+        val gapRatio = 0.35f
+        val barWidth = (width / barCount) * (1f - gapRatio)
+        val gap = (width / barCount) * gapRatio
+        val radius = barWidth / 2f
+
         for (i in 0 until barCount) {
-            val barHeight = (fftData.getOrNull(i) ?: 0f) * height * 0.55f
+            val magnitude = smoothed.getOrNull(i) ?: 0f
+            val barHeight = magnitude * height * 0.85f
+            val x = i * (barWidth + gap) + gap / 2f
+            val y = height - barHeight
             drawRoundRect(
-                color = Indigo.copy(alpha = 0.8f),
-                topLeft = Offset(x = i * barWidth + 1.dp.toPx(), y = height - barHeight),
-                size = Size(width = barWidth - 2.dp.toPx(), height = barHeight),
-                cornerRadius = androidx.compose.ui.geometry.CornerRadius(corner, corner)
+                color = if (magnitude > 0.05f) Indigo else Indigo.copy(alpha = 0.25f),
+                topLeft = Offset(x = x, y = y),
+                size = Size(width = barWidth, height = barHeight.coerceAtLeast(radius * 2)),
+                cornerRadius = androidx.compose.ui.geometry.CornerRadius(radius, radius)
             )
         }
     }
@@ -708,7 +756,7 @@ private fun AtmosphereSlider(
     Surface(
         modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
         shape = RoundedCornerShape(12.dp),
-        color = colors.surface,
+        color = colors.surfaceHighlight,
         border = BorderStroke(1.dp, if (isActive) Indigo.copy(alpha = 0.3f) else colors.outline)
     ) {
         Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
@@ -745,13 +793,13 @@ private fun PlaybackControls(viewModel: MainViewModel) {
         modifier = Modifier.fillMaxWidth(),
         color = colors.surface,
         tonalElevation = 0.dp,
-        shadowElevation = 0.dp,
-        border = BorderStroke(1.dp, colors.outline)
+        shadowElevation = 6.dp,
+        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
     ) {
-        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
             // Seek bar
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                Text(formatDuration(sliderDisplayValue.toLong()), style = MaterialTheme.typography.bodySmall, color = colors.textTertiary, modifier = Modifier.width(40.dp))
+                Text(formatDuration(sliderDisplayValue.toLong()), style = MaterialTheme.typography.labelMedium, color = colors.textTertiary, modifier = Modifier.width(40.dp))
                 Slider(
                     value = sliderDisplayValue,
                     onValueChange = { dragPosition = it; isDragging = true },
@@ -763,12 +811,12 @@ private fun PlaybackControls(viewModel: MainViewModel) {
                     modifier = Modifier.weight(1f).height(24.dp),
                     colors = SliderDefaults.colors(thumbColor = Indigo, activeTrackColor = Indigo, inactiveTrackColor = colors.outline)
                 )
-                Text(formatDuration(duration), style = MaterialTheme.typography.bodySmall, color = colors.textTertiary, modifier = Modifier.width(40.dp))
+                Text(formatDuration(duration), style = MaterialTheme.typography.labelMedium, color = colors.textTertiary, modifier = Modifier.width(40.dp))
             }
             // Controls
             Row(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
-                horizontalArrangement = Arrangement.Center,
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = { viewModel.audioEngine.seekTo((position - 10000).coerceAtLeast(0)) }, modifier = Modifier.size(44.dp)) {
@@ -777,12 +825,11 @@ private fun PlaybackControls(viewModel: MainViewModel) {
                 IconButton(onClick = { viewModel.previousTrack() }, modifier = Modifier.size(44.dp)) {
                     Icon(Icons.Filled.SkipPrevious, contentDescription = "Previous", tint = colors.textSecondary, modifier = Modifier.size(28.dp))
                 }
-                Spacer(Modifier.width(12.dp))
                 Surface(
                     modifier = Modifier.size(64.dp),
                     shape = CircleShape,
                     color = Indigo,
-                    border = BorderStroke(1.dp, Indigo)
+                    shadowElevation = 4.dp
                 ) {
                     IconButton(onClick = { viewModel.audioEngine.togglePlayPause() }, modifier = Modifier.fillMaxSize()) {
                         Icon(
@@ -793,20 +840,15 @@ private fun PlaybackControls(viewModel: MainViewModel) {
                         )
                     }
                 }
-                Spacer(Modifier.width(12.dp))
                 IconButton(onClick = { viewModel.nextTrack() }, modifier = Modifier.size(44.dp)) {
                     Icon(Icons.Filled.SkipNext, contentDescription = "Next", tint = colors.textSecondary, modifier = Modifier.size(28.dp))
                 }
-                IconButton(onClick = { viewModel.audioEngine.seekTo((position + 10000).coerceAtMost(duration)) }, modifier = Modifier.size(44.dp)) {
-                    Icon(Icons.Filled.Forward10, contentDescription = "+10s", tint = colors.textSecondary, modifier = Modifier.size(24.dp))
-                }
-                Spacer(Modifier.width(8.dp))
-                IconButton(onClick = { viewModel.audioEngine.toggleLoop() }, modifier = Modifier.size(40.dp)) {
+                IconButton(onClick = { viewModel.audioEngine.toggleLoop() }, modifier = Modifier.size(44.dp)) {
                     Icon(
                         if (isLooping) Icons.Filled.RepeatOne else Icons.Outlined.Repeat,
                         contentDescription = "Loop",
-                        tint = if (isLooping) Indigo else colors.textTertiary,
-                        modifier = Modifier.size(22.dp)
+                        tint = if (isLooping) Indigo else colors.textSecondary,
+                        modifier = Modifier.size(24.dp)
                     )
                 }
             }

@@ -2,7 +2,9 @@ package com.dhanuk.lofiga.ui.screens
 
 import android.content.Intent
 import android.os.Environment
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -80,55 +82,84 @@ fun HomeScreen(
         modifier = modifier.fillMaxSize()
     ) {
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding(),
             contentPadding = PaddingValues(bottom = 80.dp)
         ) {
             // ── Top bar ────────────────────────────────────────────────────────
             item {
-                Text(
-                    "Lofiga",
-                    style = MaterialTheme.typography.headlineMedium,
-                    color = colors.textPrimary,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(start = 20.dp, top = 16.dp, bottom = 4.dp)
-                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, top = 16.dp, bottom = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            "Good vibes",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = colors.textTertiary
+                        )
+                        Text(
+                            "Lofiga",
+                            style = MaterialTheme.typography.headlineMedium,
+                            color = colors.textPrimary,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
             }
 
             // ── Hero CTA card ──────────────────────────────────────────────────
             item {
-                Box(
+                Surface(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(Indigo)
-                        .padding(24.dp)
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    shape = RoundedCornerShape(20.dp),
+                    color = colors.surface,
+                    border = BorderStroke(1.dp, colors.outline),
+                    shadowElevation = 2.dp
                 ) {
-                    Column {
-                        Text(
-                            "Transform your sound",
-                            style = MaterialTheme.typography.headlineSmall,
-                            color = Color.White,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            "Slow down, add reverb, and create your perfect lofi mix.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color.White.copy(alpha = 0.8f)
-                        )
-                        Spacer(Modifier.height(16.dp))
-                        OutlinedButton(
+                    Column(modifier = Modifier.padding(24.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Surface(
+                                shape = CircleShape,
+                                color = IndigoContainer,
+                                modifier = Modifier.size(48.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(Icons.Outlined.AutoAwesome, contentDescription = null, tint = Indigo, modifier = Modifier.size(24.dp))
+                                }
+                            }
+                            Spacer(Modifier.width(16.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    "Create your lofi mix",
+                                    style = MaterialTheme.typography.titleLarge,
+                                    color = colors.textPrimary,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(Modifier.height(2.dp))
+                                Text(
+                                    "Slow + reverb for any song",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = colors.textSecondary
+                                )
+                            }
+                        }
+                        Spacer(Modifier.height(20.dp))
+                        Button(
                             onClick = onBrowseAll,
-                            shape = RoundedCornerShape(24.dp),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, Color.White),
-                            colors = ButtonDefaults.outlinedButtonColors(
-                                contentColor = Color.White
-                            )
+                            modifier = Modifier.fillMaxWidth().height(52.dp),
+                            shape = RoundedCornerShape(26.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Indigo)
                         ) {
-                            Icon(Icons.Outlined.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Icon(Icons.Outlined.Add, contentDescription = null, modifier = Modifier.size(20.dp), tint = Color.White)
                             Spacer(Modifier.width(8.dp))
-                            Text("Create New Mix", fontWeight = FontWeight.SemiBold)
+                            Text("Create New Mix", color = Color.White, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.labelLarge)
                         }
                     }
                 }
@@ -137,16 +168,15 @@ fun HomeScreen(
             // ── Recent Tracks ──────────────────────────────────────────────────
             if (allSongs.isNotEmpty()) {
                 item {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        SectionHeader("Recent Tracks")
-                        TextButton(onClick = onBrowseAll) {
-                            Text("See all", color = Indigo, style = MaterialTheme.typography.labelMedium)
+                    SectionHeader(
+                        title = "Recent Tracks",
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        action = {
+                            TextButton(onClick = onBrowseAll, contentPadding = PaddingValues(0.dp)) {
+                                Text("See all", color = Indigo, style = MaterialTheme.typography.labelLarge)
+                            }
                         }
-                    }
+                    )
                 }
                 item {
                     LazyRow(
@@ -268,34 +298,46 @@ private fun CompactTrackCard(
     val colors = LocalAppColors.current
     Column(
         modifier = Modifier
-            .width(140.dp)
-            .clip(RoundedCornerShape(12.dp))
+            .width(152.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(colors.surface)
+            .border(1.dp, colors.outline, RoundedCornerShape(16.dp))
             .clickable(onClick = onClick)
-            .padding(8.dp)
+            .padding(12.dp)
     ) {
         Box(
             modifier = Modifier
-                .size(124.dp)
+                .size(128.dp)
                 .clip(RoundedCornerShape(12.dp))
                 .background(if (isPlaying) IndigoContainer else colors.surfaceHighlight),
             contentAlignment = Alignment.Center
         ) {
-            Icon(
-                if (isPlaying) Icons.Outlined.Equalizer else Icons.Outlined.MusicNote,
-                contentDescription = null,
-                tint = if (isPlaying) Indigo else colors.textTertiary,
-                modifier = Modifier.size(40.dp)
-            )
+            if (isPlaying) {
+                Icon(
+                    Icons.Outlined.Equalizer,
+                    contentDescription = null,
+                    tint = Indigo,
+                    modifier = Modifier.size(40.dp)
+                )
+            } else {
+                Text(
+                    text = titleWordMonogram(title),
+                    style = MaterialTheme.typography.titleLarge,
+                    color = Indigo.copy(alpha = 0.6f),
+                    fontWeight = FontWeight.Bold
+                )
+            }
         }
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(12.dp))
         Text(
             title,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             style = MaterialTheme.typography.bodyMedium,
             color = if (isPlaying) Indigo else colors.textPrimary,
-            fontWeight = FontWeight.Medium
+            fontWeight = FontWeight.SemiBold
         )
+        Spacer(Modifier.height(2.dp))
         Text(
             artist,
             maxLines = 1,
@@ -303,6 +345,15 @@ private fun CompactTrackCard(
             style = MaterialTheme.typography.bodySmall,
             color = colors.textTertiary
         )
+    }
+}
+
+private fun titleWordMonogram(title: String): String {
+    val words = title.trim().split(Regex("\\s+")).filter { it.isNotBlank() }
+    return when {
+        words.isEmpty() -> "?"
+        words.size == 1 -> words.first().take(2).uppercase()
+        else -> (words.first().take(1) + words[1].take(1)).uppercase()
     }
 }
 
@@ -330,42 +381,50 @@ private fun MixItem(
         )
     }
 
-    Column(
+    Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp)
-            .clickable(onClick = onPlay)
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+        shape = RoundedCornerShape(12.dp),
+        color = colors.surface,
+        border = BorderStroke(1.dp, colors.outline)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onPlay)
+                .padding(horizontal = 12.dp, vertical = 10.dp)
         ) {
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(IndigoContainer),
-                contentAlignment = Alignment.Center
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(Icons.Outlined.PlayArrow, contentDescription = null, tint = Indigo, modifier = Modifier.size(22.dp))
-            }
-            Spacer(Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    fileName,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = colors.textPrimary,
-                    fontWeight = FontWeight.Medium
-                )
-                Text("Exported mix", style = MaterialTheme.typography.bodySmall, color = colors.textTertiary)
-            }
-            Box {
-                IconButton(onClick = { showMenu = true }) {
-                    Icon(Icons.Outlined.MoreVert, contentDescription = "More", tint = colors.textTertiary)
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(IndigoContainer),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Outlined.PlayArrow, contentDescription = null, tint = Indigo, modifier = Modifier.size(22.dp))
                 }
-                DropdownMenu(
+                Spacer(Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        fileName,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = colors.textPrimary,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text("Exported mix", style = MaterialTheme.typography.bodySmall, color = colors.textTertiary)
+                }
+                Box {
+                    IconButton(onClick = { showMenu = true }) {
+                        Icon(Icons.Outlined.MoreVert, contentDescription = "More", tint = colors.textTertiary)
+                    }
+                    DropdownMenu(
                     expanded = showMenu,
                     onDismissRequest = { showMenu = false },
                     containerColor = colors.surface
@@ -400,7 +459,6 @@ private fun MixItem(
                 }
             }
         }
-        HorizontalDivider(color = colors.outline, thickness = 1.dp)
     }
 }
 
@@ -412,20 +470,25 @@ private fun RecentEditItem(
     onDelete: () -> Unit
 ) {
     val colors = LocalAppColors.current
-    Column(
+    Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp)
-            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+        shape = RoundedCornerShape(12.dp),
+        color = colors.surface,
+        border = BorderStroke(1.dp, colors.outline)
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onClick)
+                .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
                 modifier = Modifier
                     .size(48.dp)
-                    .clip(RoundedCornerShape(8.dp))
+                    .clip(RoundedCornerShape(10.dp))
                     .background(colors.surfaceHighlight),
                 contentAlignment = Alignment.Center
             ) {
@@ -447,6 +510,5 @@ private fun RecentEditItem(
                 Icon(Icons.Outlined.Delete, contentDescription = "Delete", tint = colors.textTertiary, modifier = Modifier.size(20.dp))
             }
         }
-        HorizontalDivider(color = colors.outline, thickness = 1.dp)
     }
 }

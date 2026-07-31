@@ -84,23 +84,35 @@ fun LibraryScreen(
         modifier = modifier.fillMaxSize()
     ) {
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding(),
             contentPadding = PaddingValues(bottom = 80.dp)
         ) {
-            // ── Title ──────────────────────────────────────────────────────────
+            // ── Top bar ────────────────────────────────────────────────────────
             item {
-                Text(
-                    "Library",
-                    style = MaterialTheme.typography.headlineMedium,
-                    color = colors.textPrimary,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(start = 20.dp, top = 16.dp, bottom = 4.dp)
-                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 20.dp, top = 16.dp, end = 12.dp, bottom = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "Library",
+                        style = MaterialTheme.typography.headlineMedium,
+                        color = colors.textPrimary,
+                        fontWeight = FontWeight.Bold
+                    )
+                    IconButton(onClick = { /* scroll to search */ }) {
+                        Icon(Icons.Outlined.Search, contentDescription = "Search", tint = colors.textPrimary)
+                    }
+                }
             }
 
             // ── Search bar ─────────────────────────────────────────────────────
             item {
-                OutlinedTextField(
+                TextField(
                     value = searchQuery,
                     onValueChange = { viewModel.setSearchQuery(it) },
                     placeholder = { Text("Search songs or artists", color = colors.textTertiary) },
@@ -115,14 +127,16 @@ fun LibraryScreen(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
                     singleLine = true,
                     shape = RoundedCornerShape(12.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
+                    colors = TextFieldDefaults.colors(
                         focusedTextColor = colors.textPrimary,
                         unfocusedTextColor = colors.textPrimary,
                         cursorColor = Indigo,
-                        focusedBorderColor = Indigo,
-                        unfocusedBorderColor = colors.outline,
-                        focusedContainerColor = colors.surface,
-                        unfocusedContainerColor = colors.surface
+                        focusedIndicatorColor = Color.Transparent,
+                        unfocusedIndicatorColor = Color.Transparent,
+                        focusedContainerColor = colors.surfaceHighlight,
+                        unfocusedContainerColor = colors.surfaceHighlight,
+                        focusedLeadingIconColor = colors.textTertiary,
+                        unfocusedLeadingIconColor = colors.textTertiary
                     )
                 )
             }
@@ -210,21 +224,21 @@ fun LibraryScreen(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             modifier = Modifier.padding(24.dp)
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(80.dp)
-                                    .clip(CircleShape)
-                                    .background(colors.surfaceHighlight),
-                                contentAlignment = Alignment.Center
+                            Surface(
+                                shape = CircleShape,
+                                color = IndigoContainer,
+                                modifier = Modifier.size(88.dp)
                             ) {
-                                Icon(
-                                    if (searchQuery.isNotEmpty()) Icons.Outlined.SearchOff else Icons.Outlined.LibraryMusic,
-                                    contentDescription = null,
-                                    tint = colors.textTertiary,
-                                    modifier = Modifier.size(36.dp)
-                                )
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        if (searchQuery.isNotEmpty()) Icons.Outlined.SearchOff else Icons.Outlined.LibraryMusic,
+                                        contentDescription = null,
+                                        tint = Indigo,
+                                        modifier = Modifier.size(36.dp)
+                                    )
+                                }
                             }
-                            Spacer(Modifier.height(16.dp))
+                            Spacer(Modifier.height(20.dp))
                             Text(
                                 if (searchQuery.isNotEmpty()) "No songs match \"$searchQuery\"" else "No songs yet",
                                 style = MaterialTheme.typography.titleMedium,
@@ -234,12 +248,12 @@ fun LibraryScreen(
                             Spacer(Modifier.height(4.dp))
                             Text(
                                 if (searchQuery.isNotEmpty()) "Try a different search" else "Add music files to your device",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = colors.textTertiary,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = colors.textSecondary,
                                 textAlign = TextAlign.Center
                             )
                             if (searchQuery.isEmpty()) {
-                                Spacer(Modifier.height(16.dp))
+                                Spacer(Modifier.height(20.dp))
                                 Button(
                                     onClick = { viewModel.loadSongs() },
                                     shape = RoundedCornerShape(24.dp),
