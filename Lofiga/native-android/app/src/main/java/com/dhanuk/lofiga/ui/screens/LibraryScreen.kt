@@ -1,11 +1,10 @@
 package com.dhanuk.lofiga.ui.screens
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -57,6 +56,8 @@ fun LibraryScreen(
     var sortOption by remember { mutableStateOf(SortOption.DATE_ADDED) }
     var moodFilter by remember { mutableStateOf(MoodFilterOption.ALL) }
     var isRefreshing by remember { mutableStateOf(false) }
+    var showSortMenu by remember { mutableStateOf(false) }
+    var showFilterMenu by remember { mutableStateOf(false) }
 
     LaunchedEffect(isRefreshing) {
         if (isRefreshing) {
@@ -84,187 +85,198 @@ fun LibraryScreen(
         onRefresh = { isRefreshing = true },
         modifier = modifier.fillMaxSize()
     ) {
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = 80.dp)
-        ) {
-            item { LofigaTopBar(title = "Library") }
+        Column(modifier = Modifier.fillMaxSize()) {
+            LofigaTopBar(title = "Library")
 
-            // ── Search bar ─────────────────────────────────────────────────────
-            item {
-                TextField(
-                    value = searchQuery,
-                    onValueChange = { viewModel.setSearchQuery(it) },
-                    placeholder = { Text("Search songs or artists", color = colors.textTertiary) },
-                    leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = "Search", tint = colors.textTertiary) },
-                    trailingIcon = {
-                        if (searchQuery.isNotEmpty()) {
-                            IconButton(onClick = { viewModel.setSearchQuery("") }) {
-                                Icon(Icons.Outlined.Clear, contentDescription = "Clear", tint = colors.textTertiary)
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(bottom = 80.dp)
+            ) {
+                item {
+                    TextField(
+                        value = searchQuery,
+                        onValueChange = { viewModel.setSearchQuery(it) },
+                        placeholder = { Text("Search songs or artists", color = colors.textTertiary) },
+                        leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = "Search", tint = colors.textTertiary) },
+                        trailingIcon = {
+                            if (searchQuery.isNotEmpty()) {
+                                IconButton(onClick = { viewModel.setSearchQuery("") }) {
+                                    Icon(Icons.Outlined.Clear, contentDescription = "Clear", tint = colors.textTertiary)
+                                }
                             }
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                    singleLine = true,
-                    shape = RoundedCornerShape(12.dp),
-                    colors = TextFieldDefaults.colors(
-                        focusedTextColor = colors.textPrimary,
-                        unfocusedTextColor = colors.textPrimary,
-                        cursorColor = Indigo,
-                        focusedIndicatorColor = Color.Transparent,
-                        unfocusedIndicatorColor = Color.Transparent,
-                        focusedContainerColor = colors.surfaceHighlight,
-                        unfocusedContainerColor = colors.surfaceHighlight,
-                        focusedLeadingIconColor = colors.textTertiary,
-                        unfocusedLeadingIconColor = colors.textTertiary
-                    )
-                )
-            }
-
-            // ── Sort chips ─────────────────────────────────────────────────────
-            item {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState())
-                        .padding(horizontal = 16.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    SortOption.entries.forEach { option ->
-                        FilterChip(
-                            selected = sortOption == option,
-                            onClick = { sortOption = option },
-                            label = { Text(option.label, style = MaterialTheme.typography.labelMedium) },
-                            shape = RoundedCornerShape(20.dp),
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = IndigoContainer,
-                                selectedLabelColor = Indigo,
-                                containerColor = colors.surface,
-                                labelColor = colors.textPrimary
-                            ),
-                            border = androidx.compose.foundation.BorderStroke(
-                                1.dp,
-                                if (sortOption == option) Indigo.copy(alpha = 0.3f) else colors.outline
-                            )
+                        },
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        colors = TextFieldDefaults.colors(
+                            focusedTextColor = colors.textPrimary,
+                            unfocusedTextColor = colors.textPrimary,
+                            cursorColor = colors.accent,
+                            focusedIndicatorColor = Color.Transparent,
+                            unfocusedIndicatorColor = Color.Transparent,
+                            focusedContainerColor = colors.surfaceHighlight,
+                            unfocusedContainerColor = colors.surfaceHighlight,
+                            focusedLeadingIconColor = colors.textTertiary,
+                            unfocusedLeadingIconColor = colors.textTertiary
                         )
-                    }
+                    )
                 }
-            }
 
-            // ── Mood filter chips ──────────────────────────────────────────────
-            if (moodTags.isNotEmpty()) {
                 item {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState())
                             .padding(horizontal = 16.dp, vertical = 4.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        MoodFilterOption.entries.forEach { option ->
+                        Text(
+                            "${sortedSongs.size} songs",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = colors.textTertiary,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Box {
                             FilterChip(
-                                selected = moodFilter == option,
-                                onClick = { moodFilter = option },
-                                label = { Text(option.label, style = MaterialTheme.typography.labelMedium) },
+                                selected = moodFilter != MoodFilterOption.ALL,
+                                onClick = { showFilterMenu = true },
+                                label = { Text("Filter: ${moodFilter.label}", style = MaterialTheme.typography.labelMedium) },
                                 shape = RoundedCornerShape(20.dp),
                                 colors = FilterChipDefaults.filterChipColors(
                                     selectedContainerColor = IndigoContainer,
-                                    selectedLabelColor = Indigo,
+                                    selectedLabelColor = colors.accent,
                                     containerColor = colors.surface,
                                     labelColor = colors.textPrimary
                                 ),
                                 border = androidx.compose.foundation.BorderStroke(
                                     1.dp,
-                                    if (moodFilter == option) Indigo.copy(alpha = 0.3f) else colors.outline
+                                    if (moodFilter != MoodFilterOption.ALL) colors.accent.copy(alpha = 0.3f) else colors.outline
                                 )
                             )
-                        }
-                    }
-                }
-            }
-
-            // ── Song count ─────────────────────────────────────────────────────
-            item {
-                Text(
-                    "${sortedSongs.size} songs",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = colors.textTertiary,
-                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
-                )
-            }
-
-            // ── Song list or empty state ───────────────────────────────────────
-            if (sortedSongs.isEmpty()) {
-                item {
-                    Box(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 48.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            modifier = Modifier.padding(24.dp)
-                        ) {
-                            Surface(
-                                shape = CircleShape,
-                                color = IndigoContainer,
-                                modifier = Modifier.size(88.dp)
+                            DropdownMenu(
+                                expanded = showFilterMenu,
+                                onDismissRequest = { showFilterMenu = false },
+                                containerColor = colors.surface
                             ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        if (searchQuery.isNotEmpty()) Icons.Outlined.SearchOff else Icons.Outlined.LibraryMusic,
-                                        contentDescription = null,
-                                        tint = Indigo,
-                                        modifier = Modifier.size(36.dp)
+                                MoodFilterOption.entries.forEach { option ->
+                                    DropdownMenuItem(
+                                        text = { Text(option.label, color = if (moodFilter == option) colors.accent else colors.textPrimary) },
+                                        onClick = { moodFilter = option; showFilterMenu = false },
+                                        leadingIcon = if (moodFilter == option) {
+                                            { Icon(Icons.Outlined.Check, contentDescription = null, tint = colors.accent, modifier = Modifier.size(16.dp)) }
+                                        } else null
                                     )
                                 }
                             }
-                            Spacer(Modifier.height(20.dp))
-                            Text(
-                                if (searchQuery.isNotEmpty()) "No songs match \"$searchQuery\"" else "No songs yet",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = colors.textPrimary,
-                                fontWeight = FontWeight.SemiBold
+                        }
+                        Box {
+                            FilterChip(
+                                selected = sortOption != SortOption.DATE_ADDED,
+                                onClick = { showSortMenu = true },
+                                label = { Text("Sort: ${sortOption.label}", style = MaterialTheme.typography.labelMedium) },
+                                shape = RoundedCornerShape(20.dp),
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = IndigoContainer,
+                                    selectedLabelColor = colors.accent,
+                                    containerColor = colors.surface,
+                                    labelColor = colors.textPrimary
+                                ),
+                                border = androidx.compose.foundation.BorderStroke(
+                                    1.dp,
+                                    if (sortOption != SortOption.DATE_ADDED) colors.accent.copy(alpha = 0.3f) else colors.outline
+                                )
                             )
-                            Spacer(Modifier.height(4.dp))
-                            Text(
-                                if (searchQuery.isNotEmpty()) "Try a different search" else "Add music files to your device",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = colors.textSecondary,
-                                textAlign = TextAlign.Center
-                            )
-                            if (searchQuery.isEmpty()) {
-                                Spacer(Modifier.height(20.dp))
-                                Button(
-                                    onClick = { viewModel.loadSongs() },
-                                    shape = RoundedCornerShape(24.dp),
-                                    colors = ButtonDefaults.buttonColors(containerColor = Indigo)
-                                ) {
-                                    Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
-                                    Spacer(Modifier.width(8.dp))
-                                    Text("Scan Music")
+                            DropdownMenu(
+                                expanded = showSortMenu,
+                                onDismissRequest = { showSortMenu = false },
+                                containerColor = colors.surface
+                            ) {
+                                SortOption.entries.forEach { option ->
+                                    DropdownMenuItem(
+                                        text = { Text(option.label, color = if (sortOption == option) colors.accent else colors.textPrimary) },
+                                        onClick = { sortOption = option; showSortMenu = false },
+                                        leadingIcon = if (sortOption == option) {
+                                            { Icon(Icons.Outlined.Check, contentDescription = null, tint = colors.accent, modifier = Modifier.size(16.dp)) }
+                                        } else null
+                                    )
                                 }
                             }
                         }
                     }
                 }
-            } else {
-                items(sortedSongs, key = {
-                    when {
-                        it.dataPath.isNotEmpty() -> it.dataPath
-                        it.uri != null -> it.uri.toString()
-                        else -> "song_${it.id}_${it.title}"
+
+                if (sortedSongs.isEmpty()) {
+                    item {
+                        Box(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 48.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier.padding(24.dp)
+                            ) {
+                                Surface(
+                                    shape = CircleShape,
+                                    color = IndigoContainer,
+                                    modifier = Modifier.size(88.dp)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            if (searchQuery.isNotEmpty()) Icons.Outlined.SearchOff else Icons.Outlined.LibraryMusic,
+                                            contentDescription = null,
+                                            tint = colors.accent,
+                                            modifier = Modifier.size(36.dp)
+                                        )
+                                    }
+                                }
+                                Spacer(Modifier.height(20.dp))
+                                Text(
+                                    if (searchQuery.isNotEmpty()) "No songs match \"$searchQuery\"" else "No songs yet",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = colors.textPrimary,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    if (searchQuery.isNotEmpty()) "Try a different search" else "Add music files to your device",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = colors.textSecondary,
+                                    textAlign = TextAlign.Center
+                                )
+                                if (searchQuery.isEmpty()) {
+                                    Spacer(Modifier.height(20.dp))
+                                    Button(
+                                        onClick = { viewModel.loadSongs() },
+                                        shape = RoundedCornerShape(24.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = Indigo)
+                                    ) {
+                                        Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                                        Spacer(Modifier.width(8.dp))
+                                        Text("Scan Music")
+                                    }
+                                }
+                            }
+                        }
                     }
-                }) { song ->
-                    SongItem(
-                        title = song.title,
-                        artist = song.artist,
-                        duration = song.formattedDuration,
-                        isCurrentlyPlaying = currentTrack?.dataPath == song.dataPath ||
-                            (currentTrack?.uri != null && currentTrack?.uri == song.uri),
-                        onClick = { onSongSelected(song) },
-                        modifier = Modifier.padding(horizontal = 16.dp),
-                        albumArtUri = song.albumArtUri
-                    )
+                } else {
+                    items(sortedSongs, key = {
+                        when {
+                            it.dataPath.isNotEmpty() -> it.dataPath
+                            it.uri != null -> it.uri.toString()
+                            else -> "song_${it.id}_${it.title}"
+                        }
+                    }) { song ->
+                        SongItem(
+                            title = song.title,
+                            artist = song.artist,
+                            duration = song.formattedDuration,
+                            isCurrentlyPlaying = currentTrack?.dataPath == song.dataPath ||
+                                (currentTrack?.uri != null && currentTrack?.uri == song.uri),
+                            onClick = { onSongSelected(song) },
+                            modifier = Modifier.padding(horizontal = 16.dp),
+                            albumArtUri = song.albumArtUri
+                        )
+                    }
                 }
             }
         }

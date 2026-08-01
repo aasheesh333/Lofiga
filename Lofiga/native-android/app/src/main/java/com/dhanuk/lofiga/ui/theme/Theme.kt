@@ -70,6 +70,7 @@ data class AppColors(
     val textTertiary: Color,
     val outline: Color,
     val pageBg: Color = bg,
+    val accent: Color = Indigo,
 )
 
 val LocalAppColors = staticCompositionLocalOf {
@@ -82,6 +83,7 @@ val LocalAppColors = staticCompositionLocalOf {
         textTertiary = GrayLight,
         outline = Hairline,
         pageBg = PageBg,
+        accent = Indigo,
     )
 }
 
@@ -94,6 +96,7 @@ private val LightAppColors = AppColors(
     textTertiary = GrayLight,
     outline = Hairline,
     pageBg = PageBg,
+    accent = Indigo,
 )
 
 private val DarkAppColors = AppColors(
@@ -105,6 +108,7 @@ private val DarkAppColors = AppColors(
     textTertiary = DarkGrayLt,
     outline = DarkHairline,
     pageBg = DarkBg,
+    accent = IndigoLight,
 )
 
 // ── M3 Color Schemes ───────────────────────────────────────────────────────────

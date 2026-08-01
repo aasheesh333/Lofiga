@@ -145,17 +145,17 @@ fun PlayerScreen(
                                 DropdownMenuItem(
                                     text = { Text("Export") },
                                     onClick = { viewModel.exportTrack(context); showActionsMenu = false },
-                                    leadingIcon = { Icon(Icons.Outlined.FileDownload, contentDescription = null, tint = Indigo, modifier = Modifier.size(18.dp)) }
+                                    leadingIcon = { Icon(Icons.Outlined.FileDownload, contentDescription = null, tint = colors.accent, modifier = Modifier.size(18.dp)) }
                                 )
                                 DropdownMenuItem(
                                     text = { Text("Save Config") },
                                     onClick = { viewModel.saveCurrentConfig(); showActionsMenu = false },
-                                    leadingIcon = { Icon(Icons.Outlined.Save, contentDescription = null, tint = Indigo, modifier = Modifier.size(18.dp)) }
+                                    leadingIcon = { Icon(Icons.Outlined.Save, contentDescription = null, tint = colors.accent, modifier = Modifier.size(18.dp)) }
                                 )
                                 DropdownMenuItem(
                                     text = { Text("Save as Preset") },
                                     onClick = { showSavePresetSheet = true; showActionsMenu = false },
-                                    leadingIcon = { Icon(Icons.Outlined.BookmarkAdd, contentDescription = null, tint = Indigo, modifier = Modifier.size(18.dp)) }
+                                    leadingIcon = { Icon(Icons.Outlined.BookmarkAdd, contentDescription = null, tint = colors.accent, modifier = Modifier.size(18.dp)) }
                                 )
                             }
                         }
@@ -305,7 +305,7 @@ fun PlayerScreen(
                         }
                     }
 
-                    Spacer(Modifier.height(80.dp))
+                    Spacer(Modifier.height(16.dp))
                 }
 
                 // ── Fixed bottom playback controls ───────────────────────────
@@ -403,7 +403,7 @@ fun PlayerScreen(
                                 onDismissed = {}
                             )
                         }
-                    }) { Text("Watch Ad", color = Indigo, fontWeight = FontWeight.Bold) }
+                    }) { Text("Watch Ad", color = colors.accent, fontWeight = FontWeight.Bold) }
                 },
                 dismissButton = {
                     TextButton(onClick = { showPostExportSupportPrompt = false }) { Text("No Thanks", color = colors.textSecondary) }
@@ -542,7 +542,7 @@ private fun TrackInfoCard(
                         modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(16.dp))
                     )
                 } else {
-                    Icon(Icons.Outlined.Album, contentDescription = null, tint = Indigo.copy(alpha = 0.4f), modifier = Modifier.size(40.dp))
+                    Icon(Icons.Outlined.Album, contentDescription = null, tint = colors.accent.copy(alpha = 0.4f), modifier = Modifier.size(40.dp))
                 }
             }
         }
@@ -572,7 +572,7 @@ private fun TrackInfoCard(
                     shape = CircleShape,
                     border = BorderStroke(1.dp, colors.outline)
                 ) {
-                    Icon(Icons.Outlined.BookmarkAdd, contentDescription = "Save preset", tint = Indigo, modifier = Modifier.size(18.dp))
+                    Icon(Icons.Outlined.BookmarkAdd, contentDescription = "Save preset", tint = colors.accent, modifier = Modifier.size(18.dp))
                 }
                 OutlinedIconButton(
                     onClick = { onAction(TrackAction.Export) },
@@ -580,7 +580,7 @@ private fun TrackInfoCard(
                     shape = CircleShape,
                     border = BorderStroke(1.dp, colors.outline)
                 ) {
-                    Icon(Icons.Outlined.FileDownload, contentDescription = "Export", tint = Indigo, modifier = Modifier.size(18.dp))
+                    Icon(Icons.Outlined.FileDownload, contentDescription = "Export", tint = colors.accent, modifier = Modifier.size(18.dp))
                 }
             }
         }
@@ -626,7 +626,7 @@ private fun WaveformVisualizer(viewModel: MainViewModel) {
             val x = i * (barWidth + gap) + gap / 2f
             val y = height - barHeight
             drawRoundRect(
-                color = if (magnitude > 0.05f) Indigo else Indigo.copy(alpha = 0.25f),
+                color = if (magnitude > 0.05f) colors.accent else colors.accent.copy(alpha = 0.25f),
                 topLeft = Offset(x = x, y = y),
                 size = Size(width = barWidth, height = barHeight.coerceAtLeast(radius * 2)),
                 cornerRadius = androidx.compose.ui.geometry.CornerRadius(radius, radius)
@@ -662,10 +662,10 @@ private fun PresetsRow(
                         leadingIcon = { Icon(Icons.Outlined.BookmarkAdd, contentDescription = null, modifier = Modifier.size(14.dp)) },
                         colors = AssistChipDefaults.assistChipColors(
                             containerColor = IndigoContainer,
-                            labelColor = Indigo,
-                            leadingIconContentColor = Indigo
+                            labelColor = colors.accent,
+                            leadingIconContentColor = colors.accent
                         ),
-                        border = BorderStroke(1.dp, Indigo.copy(alpha = 0.3f))
+                        border = BorderStroke(1.dp, colors.accent.copy(alpha = 0.3f))
                     )
                 }
             }
@@ -682,13 +682,13 @@ private fun PresetsRow(
                     shape = RoundedCornerShape(20.dp),
                     colors = FilterChipDefaults.filterChipColors(
                         selectedContainerColor = IndigoContainer,
-                        selectedLabelColor = Indigo,
+                        selectedLabelColor = colors.accent,
                         containerColor = colors.surface,
                         labelColor = colors.textPrimary
                     ),
                     border = FilterChipDefaults.filterChipBorder(
                         borderColor = colors.outline,
-                        selectedBorderColor = Indigo.copy(alpha = 0.3f),
+                        selectedBorderColor = colors.accent.copy(alpha = 0.3f),
                         enabled = true,
                         selected = currentPreset == preset
                     )
@@ -703,13 +703,13 @@ private fun PresetsRow(
                     shape = RoundedCornerShape(20.dp),
                     colors = FilterChipDefaults.filterChipColors(
                         selectedContainerColor = IndigoContainer,
-                        selectedLabelColor = Indigo,
+                        selectedLabelColor = colors.accent,
                         containerColor = colors.surface,
                         labelColor = colors.textPrimary
                     ),
                     border = FilterChipDefaults.filterChipBorder(
                         borderColor = colors.outline,
-                        selectedBorderColor = Indigo.copy(alpha = 0.3f),
+                        selectedBorderColor = colors.accent.copy(alpha = 0.3f),
                         enabled = true,
                         selected = isSelected
                     )
@@ -733,21 +733,21 @@ private fun AtmosphereSlider(
         modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
         shape = RoundedCornerShape(12.dp),
         color = colors.surfaceHighlight,
-        border = BorderStroke(1.dp, if (isActive) Indigo.copy(alpha = 0.3f) else colors.outline)
+        border = BorderStroke(1.dp, if (isActive) colors.accent.copy(alpha = 0.3f) else colors.outline)
     ) {
         Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(icon, contentDescription = label, tint = if (isActive) Indigo else colors.textTertiary, modifier = Modifier.size(18.dp))
+                Icon(icon, contentDescription = label, tint = if (isActive) colors.accent else colors.textTertiary, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
-                Text(label, style = MaterialTheme.typography.bodyMedium, color = if (isActive) Indigo else colors.textPrimary, fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Normal)
+                Text(label, style = MaterialTheme.typography.bodyMedium, color = if (isActive) colors.accent else colors.textPrimary, fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Normal)
                 Spacer(Modifier.weight(1f))
-                Text("${(volume * 100).toInt()}%", style = MaterialTheme.typography.labelMedium, color = Indigo, fontWeight = FontWeight.SemiBold)
+                Text("${(volume * 100).toInt()}%", style = MaterialTheme.typography.labelMedium, color = colors.accent, fontWeight = FontWeight.SemiBold)
             }
             Slider(
                 value = volume,
                 onValueChange = onVolumeChange,
                 modifier = Modifier.fillMaxWidth().height(24.dp),
-                colors = SliderDefaults.colors(thumbColor = Indigo, activeTrackColor = Indigo, inactiveTrackColor = colors.outline)
+                colors = SliderDefaults.colors(thumbColor = colors.accent, activeTrackColor = colors.accent, inactiveTrackColor = colors.outline)
             )
         }
     }
@@ -769,13 +769,12 @@ private fun PlaybackControls(viewModel: MainViewModel) {
         modifier = Modifier.fillMaxWidth(),
         color = colors.surface,
         tonalElevation = 0.dp,
-        shadowElevation = 6.dp,
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
+        shadowElevation = 4.dp,
+        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
     ) {
-        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-            // Seek bar
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                Text(formatDuration(sliderDisplayValue.toLong()), style = MaterialTheme.typography.labelMedium, color = colors.textTertiary, modifier = Modifier.width(40.dp))
+                Text(formatDuration(sliderDisplayValue.toLong()), style = MaterialTheme.typography.labelSmall, color = colors.textTertiary, modifier = Modifier.width(36.dp))
                 Slider(
                     value = sliderDisplayValue,
                     onValueChange = { dragPosition = it; isDragging = true },
@@ -784,47 +783,46 @@ private fun PlaybackControls(viewModel: MainViewModel) {
                         isDragging = false
                     },
                     valueRange = 0f..if (duration > 0) duration.toFloat() else 1f,
-                    modifier = Modifier.weight(1f).height(24.dp),
-                    colors = SliderDefaults.colors(thumbColor = Indigo, activeTrackColor = Indigo, inactiveTrackColor = colors.outline)
+                    modifier = Modifier.weight(1f).height(20.dp),
+                    colors = SliderDefaults.colors(thumbColor = colors.accent, activeTrackColor = colors.accent, inactiveTrackColor = colors.outline)
                 )
-                Text(formatDuration(duration), style = MaterialTheme.typography.labelMedium, color = colors.textTertiary, modifier = Modifier.width(40.dp))
+                Text(formatDuration(duration), style = MaterialTheme.typography.labelSmall, color = colors.textTertiary, modifier = Modifier.width(36.dp))
             }
-            // Controls
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = { viewModel.audioEngine.seekTo((position - 10000).coerceAtLeast(0)) }, modifier = Modifier.size(44.dp)) {
-                    Icon(Icons.Filled.Replay10, contentDescription = "-10s", tint = colors.textSecondary, modifier = Modifier.size(24.dp))
+                IconButton(onClick = { viewModel.audioEngine.seekTo((position - 10000).coerceAtLeast(0)) }, modifier = Modifier.size(36.dp)) {
+                    Icon(Icons.Filled.Replay10, contentDescription = "-10s", tint = colors.textSecondary, modifier = Modifier.size(20.dp))
                 }
-                IconButton(onClick = { viewModel.previousTrack() }, modifier = Modifier.size(44.dp)) {
-                    Icon(Icons.Filled.SkipPrevious, contentDescription = "Previous", tint = colors.textSecondary, modifier = Modifier.size(28.dp))
+                IconButton(onClick = { viewModel.previousTrack() }, modifier = Modifier.size(36.dp)) {
+                    Icon(Icons.Filled.SkipPrevious, contentDescription = "Previous", tint = colors.textSecondary, modifier = Modifier.size(24.dp))
                 }
                 Surface(
-                    modifier = Modifier.size(64.dp),
+                    modifier = Modifier.size(52.dp),
                     shape = CircleShape,
                     color = Indigo,
-                    shadowElevation = 4.dp
+                    shadowElevation = 2.dp
                 ) {
                     IconButton(onClick = { viewModel.audioEngine.togglePlayPause() }, modifier = Modifier.fillMaxSize()) {
                         Icon(
                             if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
                             contentDescription = if (isPlaying) "Pause" else "Play",
                             tint = Color.White,
-                            modifier = Modifier.size(32.dp)
+                            modifier = Modifier.size(28.dp)
                         )
                     }
                 }
-                IconButton(onClick = { viewModel.nextTrack() }, modifier = Modifier.size(44.dp)) {
-                    Icon(Icons.Filled.SkipNext, contentDescription = "Next", tint = colors.textSecondary, modifier = Modifier.size(28.dp))
+                IconButton(onClick = { viewModel.nextTrack() }, modifier = Modifier.size(36.dp)) {
+                    Icon(Icons.Filled.SkipNext, contentDescription = "Next", tint = colors.textSecondary, modifier = Modifier.size(24.dp))
                 }
-                IconButton(onClick = { viewModel.audioEngine.toggleLoop() }, modifier = Modifier.size(44.dp)) {
+                IconButton(onClick = { viewModel.audioEngine.toggleLoop() }, modifier = Modifier.size(36.dp)) {
                     Icon(
                         if (isLooping) Icons.Filled.RepeatOne else Icons.Outlined.Repeat,
                         contentDescription = "Loop",
-                        tint = if (isLooping) Indigo else colors.textSecondary,
-                        modifier = Modifier.size(24.dp)
+                        tint = if (isLooping) colors.accent else colors.textSecondary,
+                        modifier = Modifier.size(20.dp)
                     )
                 }
             }

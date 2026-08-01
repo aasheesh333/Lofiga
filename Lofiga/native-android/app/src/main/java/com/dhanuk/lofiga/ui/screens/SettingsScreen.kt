@@ -53,13 +53,15 @@ fun SettingsScreen(
     }
 
     Box(modifier = modifier.fillMaxSize()) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(bottom = 80.dp)
-        ) {
+        Column(modifier = Modifier.fillMaxSize()) {
             LofigaTopBar(title = "Settings")
+
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(bottom = 80.dp)
+            ) {
 
             // ════════════════════════════════════════════════════════════════════
             // Section 1 — APPEARANCE
@@ -97,7 +99,7 @@ fun SettingsScreen(
                         Text(
                             settings.audioBitrate,
                             style = MaterialTheme.typography.labelLarge,
-                            color = Indigo,
+                            color = colors.accent,
                             fontWeight = FontWeight.SemiBold
                         )
                         DropdownMenu(
@@ -109,10 +111,10 @@ fun SettingsScreen(
                                 DropdownMenuItem(
                                     text = {
                                         Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Text(label, color = if (settings.audioBitrate == value) Indigo else colors.textPrimary)
+                                            Text(label, color = if (settings.audioBitrate == value) colors.accent else colors.textPrimary)
                                             if (settings.audioBitrate == value) {
                                                 Spacer(Modifier.width(8.dp))
-                                                Icon(Icons.Outlined.Check, contentDescription = null, tint = Indigo, modifier = Modifier.size(16.dp))
+                                                Icon(Icons.Outlined.Check, contentDescription = null, tint = colors.accent, modifier = Modifier.size(16.dp))
                                             }
                                         }
                                     },
@@ -190,7 +192,7 @@ fun SettingsScreen(
                                 snackbarMessage = "Unable to show ad"
                             }
                         },
-                        colors = ButtonDefaults.textButtonColors(contentColor = Indigo),
+                        colors = ButtonDefaults.textButtonColors(contentColor = colors.accent),
                         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp)
                     ) {
                         Icon(Icons.Outlined.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -271,13 +273,10 @@ fun SettingsScreen(
                 LinkRow("Terms of use") {
                     context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://dhanuk.page.gd/Lofiga/Terms-Of-Use.html")))
                 }
-                HorizontalDivider(color = colors.outline, thickness = 1.dp)
-                LinkRow("Open source licenses") {
-                    snackbarMessage = "Licenses available at github.com/dhanuk/lofiga"
-                }
             }
 
             Spacer(Modifier.height(24.dp))
+            }
         }
 
         SnackbarHost(
@@ -336,7 +335,7 @@ private fun SwitchRow(
             onCheckedChange = onCheckedChange,
             colors = SwitchDefaults.colors(
                 checkedThumbColor = Color.White,
-                checkedTrackColor = Indigo,
+                checkedTrackColor = colors.accent,
                 uncheckedThumbColor = colors.textTertiary,
                 uncheckedTrackColor = colors.outline
             )
@@ -378,7 +377,7 @@ private fun LinkRow(
             .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(title, style = MaterialTheme.typography.bodyLarge, color = Indigo, modifier = Modifier.weight(1f))
+        Text(title, style = MaterialTheme.typography.bodyLarge, color = colors.accent, modifier = Modifier.weight(1f))
         Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = colors.textTertiary, modifier = Modifier.size(20.dp))
     }
 }

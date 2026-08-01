@@ -373,7 +373,7 @@ class AudioEngine(private val context: Context) {
             }
         }
         try {
-            if (!player.isPlaying) {
+            if (!_isPlaying.value) {
                 if (player.playbackState == Player.STATE_ENDED) {
                     player.seekTo(0)
                 }
@@ -403,7 +403,7 @@ class AudioEngine(private val context: Context) {
         if (player == null) return
         wasPlayingBeforeFocusLoss = false
         try {
-            if (player.isPlaying) {
+            if (_isPlaying.value) {
                 player.pause()
             }
             _isPlaying.value = false
@@ -423,7 +423,7 @@ class AudioEngine(private val context: Context) {
             return
         }
         try {
-            if (player.isPlaying) {
+            if (_isPlaying.value) {
                 player.pause()
                 _isPlaying.value = false
                 positionJob?.cancel()

@@ -4,6 +4,8 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -54,7 +56,7 @@ fun LofigaTopBar(
             Text(
                 title,
                 fontWeight = FontWeight.Bold,
-                style = MaterialTheme.typography.headlineMedium,
+                style = MaterialTheme.typography.titleLarge,
                 color = colors.textPrimary
             )
         },
@@ -82,6 +84,7 @@ fun LofigaTopBar(
             actions()
         },
         colors = TopAppBarDefaults.topAppBarColors(containerColor = colors.bg),
+        windowInsets = WindowInsets.statusBars,
         modifier = modifier
     )
 }

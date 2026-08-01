@@ -82,11 +82,13 @@ fun HomeScreen(
         onRefresh = { isRefreshing = true },
         modifier = modifier.fillMaxSize()
     ) {
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = 80.dp)
-        ) {
-            item { LofigaTopBar(title = "Lofiga") }
+        Column(modifier = Modifier.fillMaxSize()) {
+            LofigaTopBar(title = "Lofiga")
+
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(bottom = 80.dp)
+            ) {
 
             // ── Hero CTA card ──────────────────────────────────────────────────
             item {
@@ -196,11 +198,12 @@ fun HomeScreen(
                                 Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
                                 Spacer(Modifier.width(8.dp))
                                 Text("Scan Music")
-                            }
-                        }
-                    }
                 }
             }
+        }
+        }
+    }
+}
 
             // ── Recent Mixes ───────────────────────────────────────────────────
             if (exportedFiles.isNotEmpty()) {
