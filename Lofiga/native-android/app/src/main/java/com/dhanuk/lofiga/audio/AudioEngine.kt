@@ -19,9 +19,8 @@ import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
-import androidx.media3.common.audio.AudioFormat
+import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.common.audio.BaseAudioProcessor
-import androidx.media3.common.audio.UnhandledAudioFormatException
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.DefaultRenderersFactory
@@ -1306,9 +1305,9 @@ class AudioEngine(private val context: Context) {
         private val minEmitMs = 33L
         private var srcChannels = 1
 
-        override fun onConfigure(inputAudioFormat: AudioFormat): AudioFormat {
+        override fun onConfigure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
             if (inputAudioFormat.encoding != C.ENCODING_PCM_16BIT) {
-                throw UnhandledAudioFormatException(inputAudioFormat)
+                throw AudioProcessor.UnhandledAudioFormatException(inputAudioFormat)
             }
             srcChannels = inputAudioFormat.channelCount
             return inputAudioFormat

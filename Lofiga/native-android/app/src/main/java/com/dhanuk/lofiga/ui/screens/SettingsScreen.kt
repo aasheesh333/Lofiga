@@ -22,6 +22,7 @@ import com.dhanuk.lofiga.BuildConfig
 import com.dhanuk.lofiga.ads.AdManager
 import com.dhanuk.lofiga.ui.MainViewModel
 import com.dhanuk.lofiga.ui.components.DeleteConfirmDialog
+import com.dhanuk.lofiga.ui.components.LofigaTopBar
 import com.dhanuk.lofiga.ui.theme.*
 import com.dhanuk.lofiga.util.SettingsManager
 import kotlinx.coroutines.launch
