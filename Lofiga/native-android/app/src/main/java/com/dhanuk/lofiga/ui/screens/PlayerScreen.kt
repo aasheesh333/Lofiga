@@ -399,7 +399,6 @@ fun PlayerScreen(
                                 activity = act,
                                 onRewarded = {
                                     AdManager.grantAdFree(15 * 60 * 1000L)
-                                    snackbarHostState.showSnackbar("Enjoy 15 minutes of ad-free listening!")
                                 },
                                 onDismissed = {}
                             )
