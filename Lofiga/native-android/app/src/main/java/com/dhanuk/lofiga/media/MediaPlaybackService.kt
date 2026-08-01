@@ -22,13 +22,16 @@ class MediaPlaybackService : MediaSessionService() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val session = MediaSessionManagerHolder.mediaSession
         if (session == null) {
-            startForeground(
-                PLACEHOLDER_NOTIFICATION_ID,
-                buildPlaceholderNotification(),
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+            val notification = buildPlaceholderNotification()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(
+                    PLACEHOLDER_NOTIFICATION_ID,
+                    notification,
                     android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
-                else 0
-            )
+                )
+            } else {
+                startForeground(PLACEHOLDER_NOTIFICATION_ID, notification)
+            }
         }
         return super.onStartCommand(intent, flags, startId)
     }
