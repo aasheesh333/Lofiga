@@ -1,10 +1,8 @@
 package com.dhanuk.lofiga.model
 
+import android.content.ContentUris
 import android.net.Uri
 
-/**
- * Represents a song from the device's media store or a file on disk.
- */
 data class AudioTrack(
     val id: Long = 0,
     val title: String = "Unknown",
@@ -14,7 +12,8 @@ data class AudioTrack(
     val durationMs: Long = 0,
     val dateAdded: Long = 0,
     val fileSize: Long = 0,
-    val isMusic: Boolean = true
+    val isMusic: Boolean = true,
+    val albumId: Long = 0
 ) {
     val formattedDuration: String
         get() {
@@ -30,6 +29,11 @@ data class AudioTrack(
             val mb = fileSize / (1024.0 * 1024.0)
             return if (mb >= 1.0) "%.1f MB".format(mb) else "%d KB".format(fileSize / 1024)
         }
+
+    val albumArtUri: Uri?
+        get() = if (albumId > 0)
+            ContentUris.withAppendedId(Uri.parse("content://media/external/audio/albumart"), albumId)
+        else null
 }
 
 /**

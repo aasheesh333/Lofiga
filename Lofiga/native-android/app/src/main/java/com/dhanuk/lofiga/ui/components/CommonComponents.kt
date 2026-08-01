@@ -3,6 +3,7 @@ package com.dhanuk.lofiga.ui.components
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -20,6 +21,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil3.compose.AsyncImage
 import com.dhanuk.lofiga.ui.theme.*
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -35,6 +37,53 @@ import com.dhanuk.lofiga.ui.theme.*
 fun AmbientBackground(modifier: Modifier = Modifier) {
     val colors = LocalAppColors.current
     Box(modifier = modifier.background(colors.pageBg))
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun LofigaTopBar(
+    title: String,
+    modifier: Modifier = Modifier,
+    onBack: (() -> Unit)? = null,
+    onSearch: (() -> Unit)? = null,
+    actions: @Composable RowScope.() -> Unit = {}
+) {
+    val colors = LocalAppColors.current
+    TopAppBar(
+        title = {
+            Text(
+                title,
+                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.headlineMedium,
+                color = colors.textPrimary
+            )
+        },
+        navigationIcon = {
+            if (onBack != null) {
+                IconButton(onClick = onBack) {
+                    Icon(
+                        Icons.Outlined.ArrowBack,
+                        contentDescription = "Back",
+                        tint = colors.textPrimary
+                    )
+                }
+            }
+        },
+        actions = {
+            if (onSearch != null) {
+                IconButton(onClick = onSearch) {
+                    Icon(
+                        Icons.Outlined.Search,
+                        contentDescription = "Search",
+                        tint = colors.textPrimary
+                    )
+                }
+            }
+            actions()
+        },
+        colors = TopAppBarDefaults.topAppBarColors(containerColor = colors.bg),
+        modifier = modifier
+    )
 }
 
 /**
@@ -258,7 +307,8 @@ fun SongItem(
     isCurrentlyPlaying: Boolean = false,
     modifier: Modifier = Modifier,
     gradientThumb: Boolean = false,
-    thumbTitle: String = title
+    thumbTitle: String = title,
+    albumArtUri: android.net.Uri? = null
 ) {
     val colors = LocalAppColors.current
     Column(
@@ -283,6 +333,12 @@ fun SongItem(
                         contentDescription = null,
                         tint = Indigo,
                         modifier = Modifier.size(22.dp)
+                    )
+                } else if (albumArtUri != null) {
+                    AsyncImage(
+                        model = albumArtUri,
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(10.dp))
                     )
                 } else {
                     Text(
@@ -322,7 +378,7 @@ fun SongItem(
 /**
  * First letter(s) of the most significant words from a title, for a text-based placeholder.
  */
-private fun titleWordMonogram(title: String): String {
+fun titleWordMonogram(title: String): String {
     val words = title.trim().split(Regex("\\s+")).filter { it.isNotBlank() }
     return when {
         words.isEmpty() -> "?"

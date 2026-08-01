@@ -8,7 +8,6 @@ import android.content.ContextWrapper
 import android.content.Intent
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -77,9 +76,8 @@ fun PlayerScreen(
     val colors = LocalAppColors.current
 
     var showSavePresetSheet by remember { mutableStateOf(false) }
-    var showAllPresets by remember { mutableStateOf(false) }
     var showEffects by remember { mutableStateOf(true) }
-    var showAtmosphere by remember { mutableStateOf(false) }
+    var showAtmosphere by remember { mutableStateOf(true) }
     var showPostExportSupportPrompt by remember { mutableStateOf(false) }
     val scrollState = rememberScrollState()
 
@@ -129,14 +127,9 @@ fun PlayerScreen(
             EmptyPlayerState()
         } else {
             Column(modifier = Modifier.fillMaxSize()) {
-                // ── Top app bar ──────────────────────────────────────────────
-                TopAppBar(
-                    title = { Text("Now Playing", fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.titleLarge) },
-                    navigationIcon = {
-                        IconButton(onClick = onBack) {
-                            Icon(Icons.Outlined.ArrowBack, contentDescription = "Back", tint = colors.textPrimary)
-                        }
-                    },
+                LofigaTopBar(
+                    title = "Player",
+                    onBack = onBack,
                     actions = {
                         var showActionsMenu by remember { mutableStateOf(false) }
                         Box {
@@ -165,8 +158,7 @@ fun PlayerScreen(
                                 )
                             }
                         }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = colors.bg)
+                    }
                 )
 
                 // ── Scrollable content ───────────────────────────────────────
@@ -187,7 +179,8 @@ fun PlayerScreen(
                                 TrackAction.SaveConfig -> viewModel.saveCurrentConfig()
                                 TrackAction.SavePreset -> showSavePresetSheet = true
                             }
-                        }
+                        },
+                        albumArtUri = currentTrack?.albumArtUri
                     )
 
                     Spacer(Modifier.height(16.dp))
@@ -203,8 +196,6 @@ fun PlayerScreen(
                         currentPreset = currentPreset,
                         customPresets = customPresets,
                         selectedCustomPresetId = selectedCustomPresetId,
-                        showAllPresets = showAllPresets,
-                        onShowAllToggle = { showAllPresets = !showAllPresets },
                         onSavePreset = { showSavePresetSheet = true }
                     )
 
@@ -544,7 +535,8 @@ private fun EmptyPlayerState() {
 private fun TrackInfoCard(
     title: String,
     artist: String,
-    onAction: (TrackAction) -> Unit
+    onAction: (TrackAction) -> Unit,
+    albumArtUri: android.net.Uri? = null
 ) {
     val colors = LocalAppColors.current
 
@@ -560,7 +552,15 @@ private fun TrackInfoCard(
             shadowElevation = 1.dp
         ) {
             Box(contentAlignment = Alignment.Center) {
-                Icon(Icons.Outlined.Album, contentDescription = null, tint = Indigo.copy(alpha = 0.4f), modifier = Modifier.size(80.dp))
+                if (albumArtUri != null) {
+                    coil3.compose.AsyncImage(
+                        model = albumArtUri,
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(20.dp))
+                    )
+                } else {
+                    Icon(Icons.Outlined.Album, contentDescription = null, tint = Indigo.copy(alpha = 0.4f), modifier = Modifier.size(80.dp))
+                }
             }
         }
         Spacer(Modifier.height(20.dp))
@@ -626,7 +626,7 @@ private fun WaveformVisualizer(viewModel: MainViewModel) {
         }
     }
 
-    Canvas(modifier = Modifier.fillMaxWidth().height(96.dp)) {
+    Canvas(modifier = Modifier.fillMaxWidth().height(140.dp)) {
         val width = size.width
         val height = size.height
         val barCount = smoothed.size.coerceAtLeast(1)
@@ -656,8 +656,6 @@ private fun PresetsRow(
     currentPreset: LofiPreset,
     customPresets: List<CustomPreset>,
     selectedCustomPresetId: Long?,
-    showAllPresets: Boolean,
-    onShowAllToggle: () -> Unit,
     onSavePreset: () -> Unit
 ) {
     val colors = LocalAppColors.current
@@ -686,20 +684,13 @@ private fun PresetsRow(
                     )
                 }
             }
-            TextButton(onClick = onShowAllToggle) {
-                Text(if (showAllPresets) "Less" else "All", color = Indigo, style = MaterialTheme.typography.bodySmall)
-            }
         }
-        Row(
-            modifier = Modifier.horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            val presetsToShow = if (showAllPresets) {
-                LofiPreset.entries.filter { it != LofiPreset.Custom }
-            } else {
-                LofiPreset.entries.filter { it != LofiPreset.Custom }.take(4)
-            }
-            presetsToShow.forEach { preset ->
+            LofiPreset.entries.filter { it != LofiPreset.Custom }.forEach { preset ->
                 FilterChip(
                     selected = currentPreset == preset,
                     onClick = { viewModel.applyPreset(preset) },

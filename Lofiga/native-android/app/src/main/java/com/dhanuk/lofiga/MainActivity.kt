@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
+import androidx.core.view.WindowCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.dhanuk.lofiga.ads.AdManager
 import com.dhanuk.lofiga.model.SavedConfig
@@ -134,6 +135,12 @@ class MainActivity : ComponentActivity() {
             val settings by viewModel.settingsManager.settingsFlow.collectAsState(initial = SettingsManager.AppSettings())
 
             LofigaTheme(darkTheme = settings.isDarkMode) {
+                SideEffect {
+                    val controller = WindowCompat.getInsetsController(window, window.decorView)
+                    controller.isAppearanceLightStatusBars = !settings.isDarkMode
+                    controller.isAppearanceLightNavigationBars = !settings.isDarkMode
+                }
+
                 var onboardingComplete by remember { mutableStateOf(false) }
 
                 LaunchedEffect(onboardingComplete) {

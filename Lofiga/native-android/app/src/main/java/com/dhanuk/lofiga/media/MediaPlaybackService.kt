@@ -1,27 +1,56 @@
 package com.dhanuk.lofiga.media
 
+import android.app.Notification
+import android.app.PendingIntent
 import android.content.Intent
+import android.os.Build
+import androidx.core.app.NotificationCompat
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSession.ControllerInfo
 import androidx.media3.session.MediaSessionService
+import com.dhanuk.lofiga.MainActivity
+import com.dhanuk.lofiga.R
 
-/**
- * Foreground service that hosts the Media3 [MediaSession] for background-playback
- * controls and lock-screen/notification media buttons.
- *
- * Replaces the legacy hand-rolled Service + static-companion state. Because this
- * is a [MediaSessionService], the framework produces the media notification and
- * binds controller connections here automatically; playback itself still lives in
- * [com.dhanuk.lofiga.audio.AudioEngine]'s ExoPlayer, owned by MainViewModel.
- */
 @OptIn(UnstableApi::class)
 class MediaPlaybackService : MediaSessionService() {
 
     override fun onGetSession(controllerInfo: ControllerInfo): MediaSession? {
-        // The session is owned by MediaSessionManagerHolder, set up once the
-        // ViewModel creates the player.
         return MediaSessionManagerHolder.mediaSession
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        val session = MediaSessionManagerHolder.mediaSession
+        if (session == null) {
+            startForeground(
+                PLACEHOLDER_NOTIFICATION_ID,
+                buildPlaceholderNotification(),
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
+                else 0
+            )
+        }
+        return super.onStartCommand(intent, flags, startId)
+    }
+
+    private fun buildPlaceholderNotification(): Notification {
+        val sessionActivityIntent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP
+        }
+        val pendingIntentFlags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M)
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        else PendingIntent.FLAG_UPDATE_CURRENT
+        val contentIntent = PendingIntent.getActivity(this, 0, sessionActivityIntent, pendingIntentFlags)
+
+        return NotificationCompat.Builder(this, CHANNEL_ID)
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setContentTitle("Lofiga")
+            .setContentText("Playing music…")
+            .setOngoing(true)
+            .setContentIntent(contentIntent)
+            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .build()
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
@@ -34,16 +63,15 @@ class MediaPlaybackService : MediaSessionService() {
     }
 
     override fun onDestroy() {
-        // Don't release the player here — AudioEngine owns it via the ViewModel.
         super.onDestroy()
+    }
+
+    companion object {
+        private const val PLACEHOLDER_NOTIFICATION_ID = 1001
+        private const val CHANNEL_ID = "lofiga_playback"
     }
 }
 
-/**
- * Process-wide holder for the current Media3 [MediaSession]. Set by MainViewModel
- * once the player/session is created. Far smaller surface than the prior static
- * state holding titles/managers byte-for-byte.
- */
 object MediaSessionManagerHolder {
     @Volatile var mediaSession: MediaSession? = null
 }

@@ -29,6 +29,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
+import coil3.compose.AsyncImage
 import com.dhanuk.lofiga.model.AudioTrack
 import com.dhanuk.lofiga.model.SavedConfig
 import com.dhanuk.lofiga.ui.MainViewModel
@@ -82,35 +83,10 @@ fun HomeScreen(
         modifier = modifier.fillMaxSize()
     ) {
         LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .statusBarsPadding(),
+            modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(bottom = 80.dp)
         ) {
-            // ── Top bar ────────────────────────────────────────────────────────
-            item {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = 20.dp, top = 16.dp, end = 20.dp, bottom = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column {
-                        Text(
-                            "Good vibes",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = colors.textTertiary
-                        )
-                        Text(
-                            "Lofiga",
-                            style = MaterialTheme.typography.headlineMedium,
-                            color = colors.textPrimary,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
-            }
+            item { LofigaTopBar(title = "Lofiga") }
 
             // ── Hero CTA card ──────────────────────────────────────────────────
             item {
@@ -188,7 +164,8 @@ fun HomeScreen(
                                 title = song.title,
                                 artist = song.artist,
                                 isPlaying = currentTrack?.dataPath == song.dataPath,
-                                onClick = { onSongSelected(song) }
+                                onClick = { onSongSelected(song) },
+                                albumArtUri = song.albumArtUri
                             )
                         }
                     }
@@ -247,7 +224,7 @@ fun HomeScreen(
             if (recentEdits.isNotEmpty()) {
                 item {
                     SectionHeader(
-                        "Recent Edits",
+                        "Your Remixes",
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                     )
                 }
@@ -293,7 +270,8 @@ private fun CompactTrackCard(
     title: String,
     artist: String,
     isPlaying: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    albumArtUri: android.net.Uri? = null
 ) {
     val colors = LocalAppColors.current
     Column(
@@ -318,6 +296,12 @@ private fun CompactTrackCard(
                     contentDescription = null,
                     tint = Indigo,
                     modifier = Modifier.size(40.dp)
+                )
+            } else if (albumArtUri != null) {
+                AsyncImage(
+                    model = albumArtUri,
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(12.dp))
                 )
             } else {
                 Text(
@@ -345,15 +329,6 @@ private fun CompactTrackCard(
             style = MaterialTheme.typography.bodySmall,
             color = colors.textTertiary
         )
-    }
-}
-
-private fun titleWordMonogram(title: String): String {
-    val words = title.trim().split(Regex("\\s+")).filter { it.isNotBlank() }
-    return when {
-        words.isEmpty() -> "?"
-        words.size == 1 -> words.first().take(2).uppercase()
-        else -> (words.first().take(1) + words[1].take(1)).uppercase()
     }
 }
 

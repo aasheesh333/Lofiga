@@ -85,31 +85,10 @@ fun LibraryScreen(
         modifier = modifier.fillMaxSize()
     ) {
         LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .statusBarsPadding(),
+            modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(bottom = 80.dp)
         ) {
-            // ── Top bar ────────────────────────────────────────────────────────
-            item {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = 20.dp, top = 16.dp, end = 12.dp, bottom = 4.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        "Library",
-                        style = MaterialTheme.typography.headlineMedium,
-                        color = colors.textPrimary,
-                        fontWeight = FontWeight.Bold
-                    )
-                    IconButton(onClick = { /* scroll to search */ }) {
-                        Icon(Icons.Outlined.Search, contentDescription = "Search", tint = colors.textPrimary)
-                    }
-                }
-            }
+            item { LofigaTopBar(title = "Library") }
 
             // ── Search bar ─────────────────────────────────────────────────────
             item {
@@ -283,7 +262,8 @@ fun LibraryScreen(
                         isCurrentlyPlaying = currentTrack?.dataPath == song.dataPath ||
                             (currentTrack?.uri != null && currentTrack?.uri == song.uri),
                         onClick = { onSongSelected(song) },
-                        modifier = Modifier.padding(horizontal = 16.dp)
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                        albumArtUri = song.albumArtUri
                     )
                 }
             }

@@ -29,7 +29,8 @@ object AudioQueryHelper {
             MediaStore.Audio.Media.DURATION,
             MediaStore.Audio.Media.DATE_ADDED,
             MediaStore.Audio.Media.IS_MUSIC,
-            MediaStore.Audio.Media.SIZE
+            MediaStore.Audio.Media.SIZE,
+            MediaStore.Audio.Media.ALBUM_ID
         )
 
         val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0"
@@ -43,12 +44,14 @@ object AudioQueryHelper {
             val durationCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
             val dateCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_ADDED)
             val sizeCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.SIZE)
+            val albumIdCol = cursor.getColumnIndex(MediaStore.Audio.Media.ALBUM_ID)
 
             while (cursor.moveToNext()) {
                 val data = cursor.getString(dataCol) ?: ""
                 if (data.isEmpty()) continue
 
                 val id = cursor.getLong(idCol)
+                val albumId = if (albumIdCol >= 0) cursor.getLong(albumIdCol) else 0L
                 songs.add(
                     AudioTrack(
                         id = id,
@@ -58,7 +61,8 @@ object AudioQueryHelper {
                         dataPath = data,
                         durationMs = cursor.getLong(durationCol),
                         dateAdded = cursor.getLong(dateCol),
-                        fileSize = cursor.getLong(sizeCol)
+                        fileSize = cursor.getLong(sizeCol),
+                        albumId = albumId
                     )
                 )
             }

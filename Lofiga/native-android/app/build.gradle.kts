@@ -131,5 +131,7 @@ dependencies {
     implementation("androidx.media3:media3-transformer:$media3Version")
     implementation("androidx.media3:media3-common:$media3Version")
 
+    implementation("io.coil-kt.coil3:coil-compose:3.2.0")
+
     debugImplementation("androidx.compose.ui:ui-tooling")
 }

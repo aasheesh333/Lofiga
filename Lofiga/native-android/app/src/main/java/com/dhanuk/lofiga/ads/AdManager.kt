@@ -248,7 +248,7 @@ object AdManager {
     // REWARDED
     // ========================
 
-    fun loadRewarded(context: Context) {
+    fun loadRewarded(context: Context, onLoaded: ((RewardedAd) -> Unit)? = null, onFailed: ((LoadAdError) -> Unit)? = null) {
         if (!_isConsentObtained.value) {
             Log.d(TAG, "loadRewarded: consent pending, deferring")
             return
@@ -272,10 +272,12 @@ object AdManager {
                             Log.e(TAG, "Rewarded failed to show: ${error.message}")
                         }
                     }
+                    onLoaded?.invoke(ad)
                 }
                 override fun onAdFailedToLoad(error: LoadAdError) {
                     consecutiveRewardedFailures++
                     Log.e(TAG, "Rewarded failed to load: code=${error.code} - ${error.message}")
+                    onFailed?.invoke(error)
                     if (consecutiveRewardedFailures < MAX_FAILED_LOADS) {
                         val retryDelay = 2000L * consecutiveRewardedFailures
                         Log.d(TAG, "Retrying rewarded load in ${retryDelay}ms")
@@ -304,8 +306,24 @@ object AdManager {
         onRewarded: () -> Unit,
         onDismissed: () -> Unit
     ) {
+        showRewardedInternal(
+            activity = activity,
+            bypassCooldown = false,
+            onRewarded = onRewarded,
+            onEarnedAndDismissed = { },
+            onDismissed = onDismissed
+        )
+    }
+
+    private fun showRewardedInternal(
+        activity: Activity,
+        bypassCooldown: Boolean,
+        onRewarded: () -> Unit,
+        onEarnedAndDismissed: () -> Unit,
+        onDismissed: () -> Unit
+    ) {
         val now = System.currentTimeMillis()
-        if (now - lastRewardedTime < MIN_REWARDED_INTERVAL) {
+        if (!bypassCooldown && now - lastRewardedTime < MIN_REWARDED_INTERVAL) {
             Log.d(TAG, "Rewarded skipped - within cooldown window")
             onDismissed()
             return
@@ -316,11 +334,11 @@ object AdManager {
             rewardedAd?.fullScreenContentCallback = object : FullScreenContentCallback() {
                 override fun onAdDismissedFullScreenContent() {
                     rewardedAd = null
-                    if (!rewardGranted) onDismissed()
+                    if (rewardGranted) onEarnedAndDismissed() else onDismissed()
                 }
                 override fun onAdFailedToShowFullScreenContent(error: AdError) {
                     rewardedAd = null
-                    if (!rewardGranted) onDismissed()
+                    if (rewardGranted) onEarnedAndDismissed() else onDismissed()
                 }
             }
             rewardedAd?.show(activity) {
@@ -330,6 +348,59 @@ object AdManager {
         } else {
             onDismissed()
         }
+    }
+
+    enum class AdPhase { Loading, Showing }
+
+    /**
+     * Shows [count] rewarded ads sequentially. The cooldown is enforced for ad 1
+     * and bypassed for ads 2..N. Each ad's reward grants [grantPerAdMs] incrementally
+     * (AdMob policy: every completed ad must receive a reward).
+     *
+     * [onProgress] is called with the 1-based ad index, total count, and current phase.
+     * [onAllRewarded] fires after the final ad's reward is earned and the ad is dismissed.
+     * [onDismissed] fires if any ad fails, is skipped, or is closed early without earning.
+     */
+    fun showRewardedSequence(
+        activity: Activity,
+        context: Context,
+        count: Int = 2,
+        grantPerAdMs: Long = 15 * 60 * 1000L,
+        onProgress: (adIndex: Int, total: Int, phase: AdPhase) -> Unit,
+        onAllRewarded: () -> Unit,
+        onDismissed: () -> Unit
+    ) {
+        var adsCompleted = 0
+
+        fun showAd(index: Int) {
+            onProgress(index, count, AdPhase.Showing)
+            showRewardedInternal(
+                activity = activity,
+                bypassCooldown = index > 1,
+                onRewarded = {
+                    grantAdFree(grantPerAdMs * (index))
+                    adsCompleted++
+                },
+                onEarnedAndDismissed = {
+                    if (index < count) {
+                        onProgress(index + 1, count, AdPhase.Loading)
+                        loadRewarded(context, onLoaded = { _ ->
+                            showAd(index + 1)
+                        }, onFailed = {
+                            Log.w(TAG, "Ad $index+1 load failed in sequence")
+                            onDismissed()
+                        })
+                    } else {
+                        onAllRewarded()
+                    }
+                },
+                onDismissed = {
+                    if (adsCompleted == 0) onDismissed()
+                }
+            )
+        }
+
+        showAd(1)
     }
 
     fun isRewardedReady(): Boolean = rewardedAd != null
@@ -489,5 +560,29 @@ object AdManager {
         adFreeExpiryJob = null
         adFreeUntilMs = 0L
         _isAdFree.value = false
+    }
+
+    fun extendAdFree(deltaMs: Long) {
+        if (!_isAdFree.value) {
+            grantAdFree(deltaMs)
+            return
+        }
+        adFreeUntilMs += deltaMs
+        adFreeExpiryJob?.cancel()
+        val remaining = adFreeUntilMs - System.currentTimeMillis()
+        if (remaining <= 0) {
+            _isAdFree.value = false
+            lastBannerLoadTime = 0L
+            return
+        }
+        adFreeExpiryJob = refreshScope.launch {
+            delay(remaining)
+            if (System.currentTimeMillis() >= adFreeUntilMs) {
+                _isAdFree.value = false
+                lastBannerLoadTime = 0L
+                Log.d(TAG, "Ad-free window expired")
+            }
+        }
+        Log.d(TAG, "Ad-free extended by ${deltaMs / 60_000L} minutes")
     }
 }

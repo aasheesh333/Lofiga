@@ -72,6 +72,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) { 
     private val _customPresets = MutableStateFlow<List<CustomPreset>>(emptyList())
     val customPresets: StateFlow<List<CustomPreset>> = _customPresets.asStateFlow()
 
+    private var remixAutoSaveJob: kotlinx.coroutines.Job? = null
+
     // --- UI State ---
     private val _isExporting = MutableStateFlow(false)
     val isExporting: StateFlow<Boolean> = _isExporting.asStateFlow()
@@ -282,6 +284,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) { 
         _currentPreset.value = LofiPreset.Custom
         _selectedCustomPresetId.value = null
         audioEngine.setSpeedAndPitch(value, newValues.pitch)
+        scheduleRemixAutoSave()
     }
 
     fun updatePitch(value: Float) {
@@ -290,6 +293,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) { 
         _currentPreset.value = LofiPreset.Custom
         _selectedCustomPresetId.value = null
         audioEngine.setSpeedAndPitch(newValues.tempo, value)
+        scheduleRemixAutoSave()
     }
 
     fun updateReverb(value: Float) {
@@ -298,6 +302,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) { 
         _currentPreset.value = LofiPreset.Custom
         _selectedCustomPresetId.value = null
         audioEngine.setReverbAndDelay(value, newValues.delay)
+        scheduleRemixAutoSave()
     }
 
     fun updateDelay(value: Float) {
@@ -306,6 +311,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) { 
         _currentPreset.value = LofiPreset.Custom
         _selectedCustomPresetId.value = null
         audioEngine.setReverbAndDelay(newValues.reverb, value)
+        scheduleRemixAutoSave()
     }
 
     fun updateBass(value: Float) {
@@ -314,6 +320,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) { 
         _currentPreset.value = LofiPreset.Custom
         _selectedCustomPresetId.value = null
         audioEngine.setBassBoost(value)
+        scheduleRemixAutoSave()
     }
 
     fun updateTrebleCut(value: Float) {
@@ -322,6 +329,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) { 
         _currentPreset.value = LofiPreset.Custom
         _selectedCustomPresetId.value = null
         audioEngine.setTrebleCut(value)
+        scheduleRemixAutoSave()
     }
 
     fun updateAtmosphere(key: String, volume: Float) {
@@ -337,6 +345,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) { 
         _currentPreset.value = LofiPreset.Custom
         _selectedCustomPresetId.value = null
         audioEngine.setAtmosphereVolume(key, volume)
+        scheduleRemixAutoSave()
     }
 
     // --- Recent Edits ---
@@ -355,6 +364,28 @@ class MainViewModel(application: Application) : AndroidViewModel(application) { 
             repository.saveConfig(
                 SavedConfig(
                     id = UUID.randomUUID().toString(),
+                    fileName = track.title,
+                    filePath = track.dataPath,
+                    savedAt = System.currentTimeMillis(),
+                    values = _currentValues.value
+                )
+            )
+            loadRecentEdits()
+        }
+    }
+
+    private fun scheduleRemixAutoSave() {
+        val track = _currentTrack.value ?: return
+        val values = _currentValues.value
+        if (values == PresetValues()) return
+        remixAutoSaveJob?.cancel()
+        remixAutoSaveJob = viewModelScope.launch {
+            kotlinx.coroutines.delay(2000)
+            val existing = _recentEdits.value.find { it.filePath == track.dataPath }
+            val configId = existing?.id ?: UUID.randomUUID().toString()
+            repository.saveConfig(
+                SavedConfig(
+                    id = configId,
                     fileName = track.title,
                     filePath = track.dataPath,
                     savedAt = System.currentTimeMillis(),

@@ -41,6 +41,7 @@ fun SettingsScreen(
 
     var showBitrateMenu by remember { mutableStateOf(false) }
     var snackbarMessage by remember { mutableStateOf<String?>(null) }
+    var adFlowProgress by remember { mutableStateOf<String?>(null) }
 
     val snackbarHostState = remember { SnackbarHostState() }
     LaunchedEffect(snackbarMessage) {
@@ -57,11 +58,7 @@ fun SettingsScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(bottom = 80.dp)
         ) {
-            // ── Top app bar ────────────────────────────────────────────────────
-            TopAppBar(
-                title = { Text("Settings", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.headlineMedium) },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = colors.bg)
-            )
+            LofigaTopBar(title = "Settings")
 
             // ════════════════════════════════════════════════════════════════════
             // Section 1 — APPEARANCE
@@ -157,40 +154,36 @@ fun SettingsScreen(
             // ════════════════════════════════════════════════════════════════════
             // Section 3 — ADS & PREMIUM
             // ════════════════════════════════════════════════════════════════════
-            SettingsSection("ADS & PREMIUM") {
+            SettingsSection("ADS") {
                 ActionRow(
-                    title = "Remove ads",
-                    subtitle = "Upgrade to premium for an ad-free experience"
-                ) {
-                    OutlinedButton(
-                        onClick = { snackbarMessage = "Premium coming soon" },
-                        shape = RoundedCornerShape(20.dp),
-                        border = BorderStroke(1.dp, Indigo),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Indigo),
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp)
-                    ) { Text("Upgrade", fontWeight = FontWeight.SemiBold) }
-                }
-                HorizontalDivider(color = colors.outline, thickness = 1.dp)
-                ActionRow(
-                    title = if (isAdFree) "Ad-free active" else "Watch ad for 1 hour ad-free",
+                    title = if (isAdFree) "Ad-free active" else "Remove ads for 30 minutes",
                     subtitle = if (isAdFree) {
-                        "Ads are hidden. Watch another ad to extend."
+                        "Ads are hidden. Watch 2 ads to extend by 30 min."
                     } else {
-                        "Watch a short ad to remove ads temporarily"
+                        "Watch 2 short ads to remove ads for 30 minutes"
                     }
                 ) {
                     TextButton(
-                        enabled = !isAdFree,
+                        enabled = !isAdFree && adFlowProgress == null,
                         onClick = {
                             val activity = context.findActivity()
                             if (activity != null) {
-                                AdManager.showRewarded(
+                                AdManager.showRewardedSequence(
                                     activity = activity,
-                                    onRewarded = {
-                                        AdManager.grantAdFree(60 * 60 * 1000L)
-                                        snackbarMessage = "Enjoy 1 hour of ad-free listening!"
+                                    context = context,
+                                    count = 2,
+                                    grantPerAdMs = 15 * 60 * 1000L,
+                                    onProgress = { index, total, phase ->
+                                        adFlowProgress = "${phase.name.lowercase()} ad $index of $total"
                                     },
-                                    onDismissed = { snackbarMessage = "Ad not available right now" }
+                                    onAllRewarded = {
+                                        adFlowProgress = null
+                                        snackbarMessage = "Enjoy 30 minutes of ad-free listening!"
+                                    },
+                                    onDismissed = {
+                                        adFlowProgress = null
+                                        snackbarMessage = "Ad not available right now"
+                                    }
                                 )
                             } else {
                                 snackbarMessage = "Unable to show ad"
@@ -201,22 +194,11 @@ fun SettingsScreen(
                     ) {
                         Icon(Icons.Outlined.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text(if (isAdFree) "Active" else "Watch ad", fontWeight = FontWeight.SemiBold)
+                        Text(
+                            if (isAdFree) "Active" else adFlowProgress ?: "Watch ad",
+                            fontWeight = FontWeight.SemiBold
+                        )
                     }
-                }
-                HorizontalDivider(color = colors.outline, thickness = 1.dp)
-                ActionRow(
-                    title = "Reset ad counters",
-                    subtitle = "Clear ad failure counters and retry"
-                ) {
-                    TextButton(
-                        onClick = {
-                            AdManager.resetFailureCounters(context)
-                            snackbarMessage = "Ad counters reset"
-                        },
-                        colors = ButtonDefaults.textButtonColors(contentColor = colors.textTertiary),
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp)
-                    ) { Text("Reset") }
                 }
             }
 
