@@ -197,7 +197,10 @@ fun HomeScreen(
                             ) {
                                 Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
                                 Spacer(Modifier.width(8.dp))
-                                Text("Scan Music"                    )
+                                Text("Scan Music")
+                            }
+                        }
+                    }
                 }
             }
 
