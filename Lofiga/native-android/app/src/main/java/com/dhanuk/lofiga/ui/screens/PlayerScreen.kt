@@ -8,6 +8,7 @@ import android.content.ContextWrapper
 import android.content.Intent
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -169,7 +170,6 @@ fun PlayerScreen(
                         .verticalScroll(scrollState)
                         .padding(horizontal = 16.dp)
                 ) {
-                    // Track info card with centered large artwork
                     TrackInfoCard(
                         title = currentTrack?.title.orEmpty(),
                         artist = currentTrack?.artist.orEmpty(),
@@ -183,12 +183,11 @@ fun PlayerScreen(
                         albumArtUri = currentTrack?.albumArtUri
                     )
 
-                    Spacer(Modifier.height(16.dp))
+                    Spacer(Modifier.height(12.dp))
 
-                    // Waveform visualizer
                     WaveformVisualizer(viewModel)
 
-                    Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(12.dp))
 
                     // ── Presets ──────────────────────────────────────────────
                     PresetsRow(
@@ -199,7 +198,7 @@ fun PlayerScreen(
                         onSavePreset = { showSavePresetSheet = true }
                     )
 
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(Modifier.height(8.dp))
 
                     // ── Effects section ──────────────────────────────────────
                     ExpandableSection(
@@ -269,7 +268,7 @@ fun PlayerScreen(
                         }
                     }
 
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(Modifier.height(8.dp))
 
                     // ── Atmosphere section ───────────────────────────────────
                     ExpandableSection(
@@ -278,44 +277,21 @@ fun PlayerScreen(
                         expanded = showAtmosphere,
                         onToggle = { showAtmosphere = !showAtmosphere }
                     ) {
-                        Text(
-                            "Add background ambience to your mix",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = colors.textTertiary,
-                            modifier = Modifier.padding(bottom = 12.dp)
-                        )
                         AtmosphereSlider(volume = currentValues.rainVolume, onVolumeChange = { viewModel.updateAtmosphere("rain", it) }, label = "Rain", icon = Icons.Outlined.WaterDrop)
                         AtmosphereSlider(volume = currentValues.vinylVolume, onVolumeChange = { viewModel.updateAtmosphere("vinyl", it) }, label = "Vinyl", icon = Icons.Outlined.DiscFull)
                         AtmosphereSlider(volume = currentValues.windVolume, onVolumeChange = { viewModel.updateAtmosphere("wind", it) }, label = "Wind", icon = Icons.Outlined.Air)
                         AtmosphereSlider(volume = currentValues.tapeVolume, onVolumeChange = { viewModel.updateAtmosphere("tape", it) }, label = "Tape", icon = Icons.Outlined.FiberManualRecord)
                     }
 
-                    Spacer(Modifier.height(12.dp))
-
-                    // ── Export button ────────────────────────────────────────
-                    Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 4.dp, vertical = 6.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        color = colors.surfaceHighlight
-                    ) {
-                        Text(
-                            "Export saves your mix with all effects to Music/Lofiga.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = colors.textSecondary,
-                            modifier = Modifier.padding(12.dp)
-                        )
-                    }
+                    Spacer(Modifier.height(8.dp))
 
                     Button(
                         onClick = { viewModel.exportTrack(context) },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 4.dp)
-                            .height(56.dp),
+                            .height(52.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = Indigo),
-                        shape = RoundedCornerShape(28.dp),
+                        shape = RoundedCornerShape(26.dp),
                         enabled = !isExporting
                     ) {
                         if (isExporting) {
@@ -325,11 +301,11 @@ fun PlayerScreen(
                         } else {
                             Icon(Icons.Outlined.FileDownload, contentDescription = null, tint = Color.White)
                             Spacer(Modifier.width(8.dp))
-                            Text("Export slowed+reverb mix", color = Color.White, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.labelLarge)
+                            Text("Export your mix", color = Color.White, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.labelLarge)
                         }
                     }
 
-                    Spacer(Modifier.height(100.dp))
+                    Spacer(Modifier.height(80.dp))
                 }
 
                 // ── Fixed bottom playback controls ───────────────────────────
@@ -540,63 +516,64 @@ private fun TrackInfoCard(
 ) {
     val colors = LocalAppColors.current
 
-    Column(
+    Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally
+        verticalAlignment = Alignment.CenterVertically
     ) {
         Surface(
-            modifier = Modifier.size(220.dp),
-            shape = RoundedCornerShape(20.dp),
+            modifier = Modifier.size(100.dp),
+            shape = RoundedCornerShape(16.dp),
             color = colors.surfaceHighlight,
-            border = BorderStroke(1.dp, colors.outline),
-            shadowElevation = 1.dp
+            border = BorderStroke(1.dp, colors.outline)
         ) {
             Box(contentAlignment = Alignment.Center) {
                 if (albumArtUri != null) {
                     coil3.compose.AsyncImage(
                         model = albumArtUri,
                         contentDescription = null,
-                        modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(20.dp))
+                        modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(16.dp))
                     )
                 } else {
-                    Icon(Icons.Outlined.Album, contentDescription = null, tint = Indigo.copy(alpha = 0.4f), modifier = Modifier.size(80.dp))
+                    Icon(Icons.Outlined.Album, contentDescription = null, tint = Indigo.copy(alpha = 0.4f), modifier = Modifier.size(40.dp))
                 }
             }
         }
-        Spacer(Modifier.height(20.dp))
-        Text(
-            title,
-            style = MaterialTheme.typography.headlineSmall,
-            color = colors.textPrimary,
-            fontWeight = FontWeight.Bold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-        Spacer(Modifier.height(4.dp))
-        Text(
-            artist.ifBlank { "Unknown Artist" },
-            style = MaterialTheme.typography.bodyLarge,
-            color = colors.textSecondary,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-        Spacer(Modifier.height(16.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            OutlinedIconButton(
-                onClick = { onAction(TrackAction.SavePreset) },
-                modifier = Modifier.size(44.dp),
-                shape = CircleShape,
-                border = BorderStroke(1.dp, colors.outline)
-            ) {
-                Icon(Icons.Outlined.BookmarkAdd, contentDescription = "Save preset", tint = Indigo, modifier = Modifier.size(20.dp))
-            }
-            OutlinedIconButton(
-                onClick = { onAction(TrackAction.Export) },
-                modifier = Modifier.size(44.dp),
-                shape = CircleShape,
-                border = BorderStroke(1.dp, colors.outline)
-            ) {
-                Icon(Icons.Outlined.FileDownload, contentDescription = "Export", tint = Indigo, modifier = Modifier.size(20.dp))
+        Spacer(Modifier.width(16.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                title,
+                style = MaterialTheme.typography.titleLarge,
+                color = colors.textPrimary,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                artist.ifBlank { "Unknown Artist" },
+                style = MaterialTheme.typography.bodyMedium,
+                color = colors.textSecondary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedIconButton(
+                    onClick = { onAction(TrackAction.SavePreset) },
+                    modifier = Modifier.size(36.dp),
+                    shape = CircleShape,
+                    border = BorderStroke(1.dp, colors.outline)
+                ) {
+                    Icon(Icons.Outlined.BookmarkAdd, contentDescription = "Save preset", tint = Indigo, modifier = Modifier.size(18.dp))
+                }
+                OutlinedIconButton(
+                    onClick = { onAction(TrackAction.Export) },
+                    modifier = Modifier.size(36.dp),
+                    shape = CircleShape,
+                    border = BorderStroke(1.dp, colors.outline)
+                ) {
+                    Icon(Icons.Outlined.FileDownload, contentDescription = "Export", tint = Indigo, modifier = Modifier.size(18.dp))
+                }
             }
         }
     }
@@ -626,7 +603,7 @@ private fun WaveformVisualizer(viewModel: MainViewModel) {
         }
     }
 
-    Canvas(modifier = Modifier.fillMaxWidth().height(140.dp)) {
+    Canvas(modifier = Modifier.fillMaxWidth().height(80.dp)) {
         val width = size.width
         val height = size.height
         val barCount = smoothed.size.coerceAtLeast(1)
@@ -685,10 +662,9 @@ private fun PresetsRow(
                 }
             }
         }
-        FlowRow(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+        Row(
+            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             LofiPreset.entries.filter { it != LofiPreset.Custom }.forEach { preset ->
                 FilterChip(
