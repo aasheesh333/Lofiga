@@ -19,13 +19,8 @@ import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
-import androidx.media3.common.audio.AudioProcessor
-import androidx.media3.common.audio.BaseAudioProcessor
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.exoplayer.DefaultRenderersFactory
-import androidx.media3.exoplayer.audio.AudioSink
-import androidx.media3.exoplayer.audio.DefaultAudioSink
 import com.dhanuk.lofiga.model.MoodTag
 import com.dhanuk.lofiga.model.PresetValues
 import kotlinx.coroutines.*
@@ -33,8 +28,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.io.File
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
 import java.util.concurrent.ConcurrentHashMap
 
 @OptIn(UnstableApi::class)
@@ -79,10 +72,6 @@ class AudioEngine(private val context: Context) {
      *  a mood classification once it has the spectrum in hand. */
     var currentTrackId: Long = 0
     var onPlaybackStateChanged: ((isPlaying: Boolean) -> Unit)? = null
-
-    private val vizAudioProcessor = VisualizationAudioProcessor { bands ->
-        _fftData.value = bands
-    }
 
     private var exoPlayer: ExoPlayer? = null
     private val atmospherePlayers = ConcurrentHashMap<String, MediaPlayer>()
@@ -261,18 +250,6 @@ class AudioEngine(private val context: Context) {
 
         return try {
             val player = ExoPlayer.Builder(context)
-                .setRenderersFactory(object : DefaultRenderersFactory(context) {
-                    override fun buildAudioSink(
-                        context: Context,
-                        enableFloatOutput: Boolean,
-                        enableAudioTrackPlaybackParams: Boolean
-                    ): AudioSink {
-                        return DefaultAudioSink.Builder(context)
-                            .setAudioProcessors(arrayOf(vizAudioProcessor))
-                            .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
-                            .build()
-                    }
-                })
                 .setAudioAttributes(
                     Media3AudioAttributes.Builder()
                         .setUsage(C.USAGE_MEDIA)
@@ -324,6 +301,7 @@ class AudioEngine(private val context: Context) {
                         fftJob = scope.launch(Dispatchers.IO) {
                             if (myGen == fftGeneration) initFft()
                         }
+                        startAnimatingWaveform()
                         Log.i("AudioEngine", "Track loaded, duration: ${player.duration}ms")
                     } else if (state == Player.STATE_ENDED) {
                         _isPlaying.value = false
@@ -726,7 +704,6 @@ class AudioEngine(private val context: Context) {
             precomputedFrames.clear()
         }
         animatingWaveform = false
-        vizAudioProcessor.flush()
         _waveformData.value = WaveformSnapshot(List(16) { 0f }, ++waveformSeq)
         _fftData.value = List(16) { 0f }
     }
@@ -1226,6 +1203,34 @@ class AudioEngine(private val context: Context) {
                         if (pos >= 0) {
                             _position.value = pos
                         }
+                        val dur = _duration.value
+                        synchronized(framesLock) {
+                            val frameCount = precomputedFrames.size
+                            if (!animatingWaveform && frameCount > 0 && dur > 0 && pos >= 0) {
+                                var left = 0
+                                var right = frameCount - 1
+                                var bestIdx = 0
+                                while (left <= right) {
+                                    val mid = (left + right) / 2
+                                    if (precomputedFrames[mid].timeMs <= pos) {
+                                        bestIdx = mid
+                                        left = mid + 1
+                                    } else {
+                                        right = mid - 1
+                                    }
+                                }
+
+                                val bestFrame = precomputedFrames[bestIdx]
+                                val frame = if (pos - bestFrame.timeMs > 1000) {
+                                    List(16) { 0f }
+                                } else {
+                                    bestFrame.magnitudes
+                                }
+
+                                _fftData.value = frame
+                                _waveformData.value = WaveformSnapshot(frame, ++waveformSeq)
+                            }
+                        }
                     } catch (_: Exception) {}
                 }
                 delay(32)
@@ -1287,74 +1292,5 @@ class AudioEngine(private val context: Context) {
         reverb = null
         bassBoost = null
         equalizer = null
-    }
-
-    /**
-     * Real-time audio tap inserted into ExoPlayer's audio sink. Intercepts PCM
-     * output (post-decode, pre-tempo/pitch) and computes 16 log-spaced FFT
-     * magnitude bands at ~30 Hz for the waveform visualizer.
-     */
-    inner class VisualizationAudioProcessor(
-        private val onBands: (List<Float>) -> Unit
-    ) : BaseAudioProcessor() {
-
-        private val window = 1024
-        private val mono = ShortArray(window)
-        private var filled = 0
-        private var lastEmitMs = 0L
-        private val minEmitMs = 33L
-        private var srcChannels = 1
-
-        override fun onConfigure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
-            if (inputAudioFormat.encoding != C.ENCODING_PCM_16BIT) {
-                throw AudioProcessor.UnhandledAudioFormatException(inputAudioFormat)
-            }
-            srcChannels = inputAudioFormat.channelCount
-            return inputAudioFormat
-        }
-
-        override fun queueInput(inputBuffer: ByteBuffer) {
-            val remaining = inputBuffer.remaining()
-            val out = replaceOutputBuffer(remaining)
-            out.put(inputBuffer)
-            out.flip()
-
-            val dup = inputBuffer.duplicate().order(ByteOrder.nativeOrder())
-            dup.position(inputBuffer.position() - remaining)
-            dup.limit(inputBuffer.position())
-            val shorts = dup.asShortBuffer()
-            val n = shorts.remaining()
-            val frames = n / srcChannels
-
-            for (f in 0 until frames) {
-                var sum = 0
-                for (ch in 0 until srcChannels) {
-                    sum += shorts.get().toInt()
-                }
-                val m = (sum / srcChannels).coerceIn(-32768, 32767).toShort()
-                mono[filled++] = m
-                if (filled == window) {
-                    val bands = computeFFTMagnitudes(mono.copyOf())
-                    val now = android.os.SystemClock.elapsedRealtime()
-                    if (now - lastEmitMs >= minEmitMs) {
-                        lastEmitMs = now
-                        onBands(bands)
-                    }
-                    filled = 0
-                }
-            }
-        }
-
-        override fun onQueueEndOfStream() { }
-
-        override fun onFlush() {
-            filled = 0
-            lastEmitMs = 0L
-        }
-
-        override fun onReset() {
-            filled = 0
-            lastEmitMs = 0L
-        }
     }
 }

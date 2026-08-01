@@ -187,7 +187,7 @@ fun PlayerScreen(
 
                     WaveformVisualizer(viewModel)
 
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(Modifier.height(20.dp))
 
                     // ── Presets ──────────────────────────────────────────────
                     PresetsRow(
