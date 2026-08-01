@@ -435,6 +435,7 @@ private fun MixItem(
                         leadingIcon = { Icon(Icons.Outlined.Delete, contentDescription = null, tint = Color(0xFFBA1A1A), modifier = Modifier.size(18.dp)) }
                     )
                 }
+                }
             }
         }
     }
