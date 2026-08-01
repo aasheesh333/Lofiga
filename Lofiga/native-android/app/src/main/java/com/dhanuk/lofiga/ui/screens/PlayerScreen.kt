@@ -390,11 +390,20 @@ fun PlayerScreen(
                 onDismissRequest = { showPostExportSupportPrompt = false },
                 containerColor = colors.surface,
                 title = { Text("Mix exported!", fontWeight = FontWeight.Bold, color = colors.textPrimary) },
-                text = { Text("Enjoying Lofiga? You can support development by watching a short ad — totally optional.", color = colors.textSecondary) },
+                text = { Text("Enjoying Lofiga? Watch a short ad to get 15 minutes of ad-free listening.", color = colors.textSecondary) },
                 confirmButton = {
                     TextButton(onClick = {
                         showPostExportSupportPrompt = false
-                        context.findActivity()?.let { act -> AdManager.showRewarded(act, onRewarded = {}, onDismissed = {}) }
+                        context.findActivity()?.let { act ->
+                            AdManager.showRewarded(
+                                activity = act,
+                                onRewarded = {
+                                    AdManager.grantAdFree(15 * 60 * 1000L)
+                                    snackbarHostState.showSnackbar("Enjoy 15 minutes of ad-free listening!")
+                                },
+                                onDismissed = {}
+                            )
+                        }
                     }) { Text("Watch Ad", color = Indigo, fontWeight = FontWeight.Bold) }
                 },
                 dismissButton = {
