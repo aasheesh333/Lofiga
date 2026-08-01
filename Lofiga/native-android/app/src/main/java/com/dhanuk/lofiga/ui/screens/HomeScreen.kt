@@ -197,13 +197,9 @@ fun HomeScreen(
                             ) {
                                 Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
                                 Spacer(Modifier.width(8.dp))
-                                Text("Scan Music")
+                                Text("Scan Music"                    )
                 }
             }
-        }
-        }
-    }
-}
 
             // ── Recent Mixes ───────────────────────────────────────────────────
             if (exportedFiles.isNotEmpty()) {
@@ -435,10 +431,11 @@ private fun MixItem(
                         leadingIcon = { Icon(Icons.Outlined.Delete, contentDescription = null, tint = Color(0xFFBA1A1A), modifier = Modifier.size(18.dp)) }
                     )
                 }
+                }
             }
         }
+        }
     }
-}
 }
 
 // ── Recent edit row ────────────────────────────────────────────────────────────

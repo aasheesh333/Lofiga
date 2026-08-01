@@ -589,6 +589,7 @@ private fun TrackInfoCard(
 
 @Composable
 private fun WaveformVisualizer(viewModel: MainViewModel) {
+    val colors = LocalAppColors.current
     val rawFftData by viewModel.audioEngine.fftData.collectAsState()
     val isPlaying by viewModel.audioEngine.isPlaying.collectAsState()
 
