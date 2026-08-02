@@ -1195,7 +1195,7 @@ class AudioEngine(private val context: Context) {
 
     private fun startPositionPolling() {
         positionJob?.cancel()
-        positionJob = scope.launch {
+        positionJob = scope.launch(Dispatchers.Main) {
             while (isActive) {
                 exoPlayer?.let { player ->
                     try {

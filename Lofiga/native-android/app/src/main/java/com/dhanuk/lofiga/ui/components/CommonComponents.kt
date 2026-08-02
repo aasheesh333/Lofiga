@@ -4,8 +4,11 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.RowScope
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -51,42 +54,48 @@ fun LofigaTopBar(
     actions: @Composable RowScope.() -> Unit = {}
 ) {
     val colors = LocalAppColors.current
-    TopAppBar(
-        title = {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        color = colors.bg
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .padding(start = 16.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (onBack != null) {
+                IconButton(onClick = onBack, modifier = Modifier.size(40.dp)) {
+                    Icon(
+                        Icons.Outlined.ArrowBack,
+                        contentDescription = "Back",
+                        tint = colors.textPrimary,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+                Spacer(Modifier.width(8.dp))
+            }
             Text(
                 title,
                 fontWeight = FontWeight.Bold,
                 style = MaterialTheme.typography.titleLarge,
-                color = colors.textPrimary
+                color = colors.textPrimary,
+                modifier = Modifier.weight(1f)
             )
-        },
-        navigationIcon = {
-            if (onBack != null) {
-                IconButton(onClick = onBack) {
-                    Icon(
-                        Icons.Outlined.ArrowBack,
-                        contentDescription = "Back",
-                        tint = colors.textPrimary
-                    )
-                }
-            }
-        },
-        actions = {
             if (onSearch != null) {
-                IconButton(onClick = onSearch) {
+                IconButton(onClick = onSearch, modifier = Modifier.size(40.dp)) {
                     Icon(
                         Icons.Outlined.Search,
                         contentDescription = "Search",
-                        tint = colors.textPrimary
+                        tint = colors.textPrimary,
+                        modifier = Modifier.size(22.dp)
                     )
                 }
             }
             actions()
-        },
-        colors = TopAppBarDefaults.topAppBarColors(containerColor = colors.bg),
-        windowInsets = WindowInsets.statusBars,
-        modifier = modifier
-    )
+        }
+    }
 }
 
 /**
