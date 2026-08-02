@@ -407,6 +407,7 @@ object ExportService {
         private var inputChannels = 2
         private var inputDuration = 0L
         private var audioTrackIndex = -1
+        val duration: Long get() = inputDuration
 
         fun open(): Boolean {
             extractor.setDataSource(context, sourceUri, null)
@@ -532,6 +533,7 @@ object ExportService {
             onProgress?.invoke(1.0f)
             return
         }
+        val totalDurationUs = source.duration
 
         val effectState = StreamingEffectState(preset, 44100, 2)
         effectState.loadAtmospheres(context)
@@ -553,28 +555,51 @@ object ExportService {
         var trackIndex = -1
         var sawEncoderEOS = false
         var totalFramesEncoded = 0L
+        var chunksProcessed = 0
+        var pendingPcm = ShortArray(0)
+        var pendingOffset = 0
 
         try {
             while (!sawEncoderEOS && !cancelFlag.get()) {
                 val inputIdx = encoder.dequeueInputBuffer(10000)
                 if (inputIdx >= 0) {
-                    val chunk = source.nextChunk()
-                    if (chunk == null || chunk.isEmpty()) {
-                        encoder.queueInputBuffer(inputIdx, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
-                    } else {
-                        val processed = processChunk(chunk, effectState, 44100, 2)
-                        val bytes = ByteArray(processed.size * 2)
-                        ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer().put(processed)
-                        val inBuf = encoder.getInputBuffer(inputIdx)
-                        if (inBuf != null && inBuf.capacity() >= bytes.size) {
-                            inBuf.clear()
-                            inBuf.put(bytes)
-                            val pts = (totalFramesEncoded * 1000000L) / 44100
-                            encoder.queueInputBuffer(inputIdx, 0, bytes.size, pts, 0)
-                            totalFramesEncoded += processed.size / 2
+                    val inBuf = encoder.getInputBuffer(inputIdx)
+                    if (inBuf == null) {
+                        try { encoder.queueInputBuffer(inputIdx, 0, 0, 0, 0) } catch (_: Exception) {}
+                        continue
+                    }
+                    if (pendingOffset >= pendingPcm.size) {
+                        val chunk = source.nextChunk()
+                        if (chunk == null || chunk.isEmpty()) {
+                            encoder.queueInputBuffer(inputIdx, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
                         } else {
-                            encoder.queueInputBuffer(inputIdx, 0, 0, 0, 0)
+                            pendingPcm = processChunk(chunk, effectState, 44100, 2)
+                            pendingOffset = 0
+                            chunksProcessed++
                         }
+                    }
+                    if (pendingOffset < pendingPcm.size) {
+                        inBuf.clear()
+                        val maxShorts = inBuf.capacity() / 2
+                        val remaining = pendingPcm.size - pendingOffset
+                        val framesToWrite = minOf(remaining, maxShorts)
+                        val tempBytes = ByteArray(framesToWrite * 2)
+                        ByteBuffer.wrap(tempBytes).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer()
+                            .put(pendingPcm, pendingOffset, framesToWrite)
+                        inBuf.put(tempBytes)
+                        val pts = (totalFramesEncoded * 1000000L) / 44100
+                        encoder.queueInputBuffer(inputIdx, 0, tempBytes.size, pts, 0)
+                        pendingOffset += framesToWrite
+                        totalFramesEncoded += framesToWrite / 2
+                        if (totalDurationUs > 0) {
+                            val progress = 0.5f + (pts.toFloat() / totalDurationUs.toFloat())
+                                .coerceIn(0f, 1f) * 0.45f
+                            onProgress?.invoke(progress)
+                        } else {
+                            onProgress?.invoke(0.5f + (chunksProcessed * 0.01f).coerceAtMost(0.45f))
+                        }
+                    } else {
+                        try { encoder.queueInputBuffer(inputIdx, 0, 0, 0, 0) } catch (_: Exception) {}
                     }
                 }
 
@@ -664,6 +689,7 @@ object ExportService {
             onProgress?.invoke(1.0f)
             return
         }
+        val totalDurationUs = source.duration
 
         val effectState = StreamingEffectState(preset, 44100, 2)
         effectState.loadAtmospheres(context)
@@ -674,16 +700,25 @@ object ExportService {
             raf.write(headerPlaceholder)
 
             var totalDataSize = 0L
-            val chunkBuffer = ByteBuffer.allocate(CHUNK_SHORTS * 2).order(ByteOrder.LITTLE_ENDIAN)
+            var totalFramesWritten = 0L
 
             while (!cancelFlag.get()) {
                 val chunk = source.nextChunk() ?: break
                 val processed = processChunk(chunk, effectState, 44100, 2)
 
-                chunkBuffer.clear()
-                chunkBuffer.asShortBuffer().put(processed)
-                raf.write(chunkBuffer.array(), 0, processed.size * 2)
+                val tempBytes = ByteArray(processed.size * 2)
+                ByteBuffer.wrap(tempBytes).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer()
+                    .put(processed, 0, processed.size)
+                raf.write(tempBytes)
                 totalDataSize += processed.size * 2
+                totalFramesWritten += processed.size / 2
+
+                if (totalDurationUs > 0) {
+                    val pts = (totalFramesWritten * 1000000L) / 44100
+                    val progress = 0.5f + (pts.toFloat() / totalDurationUs.toFloat())
+                        .coerceIn(0f, 1f) * 0.45f
+                    onProgress?.invoke(progress)
+                }
             }
 
             raf.seek(0)

@@ -23,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -349,11 +350,14 @@ fun SongItem(
                     )
                 } else {
                     AsyncImage(
-                        model = albumArtUri ?: R.drawable.ic_default_album_art,
+                        model = coil3.request.ImageRequest.Builder(LocalContext.current)
+                            .data(albumArtUri)
+                            .fallback(R.drawable.ic_default_album_art)
+                            .error(R.drawable.ic_default_album_art)
+                            .placeholder(R.drawable.ic_default_album_art)
+                            .build(),
                         contentDescription = null,
-                        modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(10.dp)),
-                        error = coil3.compose.rememberAsyncImagePainter(R.drawable.ic_default_album_art),
-                        placeholder = coil3.compose.rememberAsyncImagePainter(R.drawable.ic_default_album_art)
+                        modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(10.dp))
                     )
                 }
             }

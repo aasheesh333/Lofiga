@@ -1,6 +1,7 @@
 package com.dhanuk.lofiga.ui
 
 import android.app.Activity
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -39,6 +40,33 @@ fun LofigaMainApp(
     var lastInterstitialTime by remember { mutableStateOf(0L) }
     val context = LocalContext.current
 
+    // Navigation history stack — back press pops the last screen.
+    // Home (0) is always the bottom of the stack.
+    val backStack = remember { androidx.compose.runtime.mutableStateListOf<Int>() }
+    val activity = context.findActivity()
+
+    fun navigateTo(index: Int) {
+        if (index == selectedIndex) return
+        if (backStack.lastOrNull() != selectedIndex) {
+            backStack.add(selectedIndex)
+        }
+        if (backStack.size > 4) backStack.removeAt(0)
+        selectedIndex = index
+    }
+
+    fun handleBackPress() {
+        if (backStack.isNotEmpty()) {
+            val prev = backStack.removeAt(backStack.lastIndex)
+            selectedIndex = prev
+        } else {
+            activity?.finish()
+        }
+    }
+
+    androidx.activity.compose.BackHandler(enabled = true) {
+        handleBackPress()
+    }
+
     // Show the now-playing dot when a track is loaded and the user isn't on Player.
     val currentTrack by viewModel.currentTrack.collectAsState()
     val showNowPlayingBadge = currentTrack != null && selectedIndex != 2
@@ -66,9 +94,7 @@ fun LofigaMainApp(
         bottomBar = {
             LofigaNavigationBar(
                 selectedIndex = selectedIndex,
-                onItemSelected = { index ->
-                    selectedIndex = index
-                },
+                onItemSelected = { index -> navigateTo(index) },
                 showNowPlayingBadge = showNowPlayingBadge
             )
         }
@@ -83,28 +109,28 @@ fun LofigaMainApp(
                     viewModel = viewModel,
                     onSongSelected = { track ->
                         viewModel.loadTrack(track)
-                        selectedIndex = 2
+                        navigateTo(2)
                     },
                     onEditConfig = { config ->
                         val success = viewModel.editConfig(config)
-                        if (success) selectedIndex = 2
+                        if (success) navigateTo(2)
                     },
-                    onBrowseAll = { selectedIndex = 1 },
+                    onBrowseAll = { navigateTo(1) },
                     onMixSelected = { path, name ->
                         viewModel.loadTrackFromFile(path, name)
-                        selectedIndex = 2
+                        navigateTo(2)
                     }
                 )
                 1 -> LibraryScreen(
                     viewModel = viewModel,
                     onSongSelected = { track ->
                         viewModel.loadTrack(track)
-                        selectedIndex = 2
+                        navigateTo(2)
                     }
                 )
                 2 -> PlayerScreen(
                     viewModel = viewModel,
-                    onBack = { selectedIndex = 0 }
+                    onBack = { handleBackPress() }
                 )
                 3 -> SettingsScreen(
                     viewModel = viewModel

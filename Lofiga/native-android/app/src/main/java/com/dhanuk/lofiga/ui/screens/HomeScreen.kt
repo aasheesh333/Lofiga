@@ -278,6 +278,7 @@ private fun CompactTrackCard(
     albumArtUri: android.net.Uri? = null
 ) {
     val colors = LocalAppColors.current
+    val context = LocalContext.current
     Column(
         modifier = Modifier
             .width(152.dp)
@@ -303,11 +304,14 @@ private fun CompactTrackCard(
                 )
             } else {
                 AsyncImage(
-                    model = albumArtUri ?: R.drawable.ic_default_album_art,
+                    model = coil3.request.ImageRequest.Builder(context)
+                        .data(albumArtUri)
+                        .fallback(R.drawable.ic_default_album_art)
+                        .error(R.drawable.ic_default_album_art)
+                        .placeholder(R.drawable.ic_default_album_art)
+                        .build(),
                     contentDescription = null,
-                    modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(12.dp)),
-                    error = coil3.compose.rememberAsyncImagePainter(R.drawable.ic_default_album_art),
-                    placeholder = coil3.compose.rememberAsyncImagePainter(R.drawable.ic_default_album_art)
+                    modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(12.dp))
                 )
             }
         }

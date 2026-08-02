@@ -524,6 +524,7 @@ private fun TrackInfoCard(
     albumArtUri: android.net.Uri? = null
 ) {
     val colors = LocalAppColors.current
+    val context = LocalContext.current
 
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -536,17 +537,16 @@ private fun TrackInfoCard(
             border = BorderStroke(1.dp, colors.outline)
         ) {
             Box(contentAlignment = Alignment.Center) {
-                if (albumArtUri != null) {
-                    coil3.compose.AsyncImage(
-                        model = albumArtUri,
-                        contentDescription = null,
-                        modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(16.dp)),
-                        error = coil3.compose.rememberAsyncImagePainter(R.drawable.ic_default_album_art),
-                        placeholder = coil3.compose.rememberAsyncImagePainter(R.drawable.ic_default_album_art)
-                    )
-                } else {
-                    Icon(Icons.Outlined.Album, contentDescription = null, tint = colors.accent.copy(alpha = 0.4f), modifier = Modifier.size(40.dp))
-                }
+                coil3.compose.AsyncImage(
+                    model = coil3.request.ImageRequest.Builder(context)
+                        .data(albumArtUri)
+                        .fallback(R.drawable.ic_default_album_art)
+                        .error(R.drawable.ic_default_album_art)
+                        .placeholder(R.drawable.ic_default_album_art)
+                        .build(),
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(16.dp))
+                )
             }
         }
         Spacer(Modifier.width(16.dp))

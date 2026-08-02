@@ -94,6 +94,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) { 
 
         val app = getApplication<LofigaApplication>()
         val sessionManager = app.mediaSessionManager
+        sessionManager.onNextTrack = { nextTrack() }
+        sessionManager.onPreviousTrack = { previousTrack() }
 
         audioEngine.onPlaybackStateChanged = { isPlaying ->
             // Connect (or re-connect) the Media3 session to the current ExoPlayer

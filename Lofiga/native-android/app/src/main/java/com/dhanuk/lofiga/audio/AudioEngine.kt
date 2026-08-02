@@ -461,6 +461,12 @@ class AudioEngine(private val context: Context) {
         try {
             exoPlayer?.seekTo(millis.coerceIn(0L, _duration.value.coerceAtLeast(0L)))
             _position.value = millis
+            synchronized(framesLock) {
+                val hasFramesBeyondSeek = precomputedFrames.any { it.timeMs >= millis - 500 }
+                if ((!hasFramesBeyondSeek || precomputedFrames.isEmpty()) && !animatingWaveform && _isPlaying.value) {
+                    startAnimatingWaveform()
+                }
+            }
         } catch (e: Exception) {
             Log.e("AudioEngine", "Seek failed: ${e.message}", e)
         }
@@ -1232,14 +1238,14 @@ class AudioEngine(private val context: Context) {
                                 }
 
                                 val bestFrame = precomputedFrames[bestIdx]
-                                val frame = if (pos - bestFrame.timeMs > 1000) {
-                                    List(16) { 0f }
+                                if (pos - bestFrame.timeMs > 1500) {
+                                    if (_isPlaying.value) startAnimatingWaveform()
                                 } else {
-                                    bestFrame.magnitudes
+                                    _fftData.value = bestFrame.magnitudes
+                                    _waveformData.value = WaveformSnapshot(bestFrame.magnitudes, ++waveformSeq)
                                 }
-
-                                _fftData.value = frame
-                                _waveformData.value = WaveformSnapshot(frame, ++waveformSeq)
+                            } else if (!animatingWaveform && frameCount == 0 && _isPlaying.value) {
+                                startAnimatingWaveform()
                             }
                         }
                     } catch (_: Exception) {}
