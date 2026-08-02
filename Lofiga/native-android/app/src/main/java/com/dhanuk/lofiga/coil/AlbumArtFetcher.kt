@@ -9,6 +9,7 @@ import coil3.fetch.Fetcher
 import coil3.fetch.SourceFetchResult
 import coil3.request.Options
 import okio.Buffer
+import okio.FileSystem
 import java.io.File
 
 class AlbumArtFetcherFactory : Fetcher.Factory<AlbumArtKey> {
@@ -29,11 +30,16 @@ private class AlbumArtFetcher(
         val retriever = MediaMetadataRetriever()
         return try {
             val path = key.dataPath
-            if (!path.isNullOrBlank() && File(path).exists()) {
-                retriever.setDataSource(path)
-            } else if (key.audioUri != null) {
-                retriever.setDataSource(options.context, key.audioUri)
-            } else {
+            val loaded = when {
+                !path.isNullOrBlank() && File(path).exists() -> {
+                    runCatching { retriever.setDataSource(path) }.isSuccess
+                }
+                key.audioUri != null -> {
+                    runCatching { retriever.setDataSource(options.context, key.audioUri) }.isSuccess
+                }
+                else -> false
+            }
+            if (!loaded) {
                 runCatching { retriever.release() }
                 return null
             }
@@ -44,9 +50,12 @@ private class AlbumArtFetcher(
             }
             val buffer = Buffer().apply { write(picture) }
             SourceFetchResult(
-                source = ImageSource(buffer, options.context),
+                source = ImageSource(
+                    source = buffer,
+                    fileSystem = FileSystem.SYSTEM
+                ),
                 mimeType = "image/jpeg",
-                dataSource = DataSource.DISK
+                dataSource = DataSource.MEMORY
             )
         } catch (e: Exception) {
             runCatching { retriever.release() }

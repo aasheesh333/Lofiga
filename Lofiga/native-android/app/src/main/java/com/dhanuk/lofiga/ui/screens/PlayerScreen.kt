@@ -546,7 +546,6 @@ private fun TrackInfoCard(
                 coil3.compose.AsyncImage(
                     model = coil3.request.ImageRequest.Builder(context)
                         .data(AlbumArtKey(dataPath = dataPath, audioUri = audioUri ?: albumArtUri))
-                        .crossfade(true)
                         .build(),
                     placeholder = painterResource(R.drawable.ic_default_album_art),
                     error = painterResource(R.drawable.ic_default_album_art),

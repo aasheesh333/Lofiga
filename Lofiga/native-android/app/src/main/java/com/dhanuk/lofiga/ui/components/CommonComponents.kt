@@ -355,7 +355,6 @@ fun SongItem(
                     AsyncImage(
                         model = coil3.request.ImageRequest.Builder(LocalContext.current)
                             .data(AlbumArtKey(dataPath = trackDataPath, audioUri = trackUri ?: albumArtUri))
-                            .crossfade(true)
                             .build(),
                         placeholder = androidx.compose.ui.res.painterResource(R.drawable.ic_default_album_art),
                         error = androidx.compose.ui.res.painterResource(R.drawable.ic_default_album_art),
