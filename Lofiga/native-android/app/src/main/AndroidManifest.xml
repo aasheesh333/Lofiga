@@ -20,10 +20,11 @@
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
         android:label="Lofiga"
+        android:largeHeap="true"
         android:supportsRtl="true"
         android:theme="@style/Theme.Lofiga"
         android:enableOnBackInvokedCallback="true"
-        android:extractNativeLibs="true"
+        android:extractNativeLibs="false"
         tools:targetApi="36">
 
         <meta-data
