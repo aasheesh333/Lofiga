@@ -307,11 +307,11 @@ private fun CompactTrackCard(
                     modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(12.dp))
                 )
             } else {
-                Text(
-                    text = titleWordMonogram(title),
-                    style = MaterialTheme.typography.titleLarge,
-                    color = Indigo.copy(alpha = 0.6f),
-                    fontWeight = FontWeight.Bold
+                Icon(
+                    Icons.Outlined.MusicNote,
+                    contentDescription = null,
+                    tint = colors.accent.copy(alpha = 0.5f),
+                    modifier = Modifier.size(40.dp)
                 )
             }
         }

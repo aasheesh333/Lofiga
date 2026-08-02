@@ -10,28 +10,11 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaSession
 import com.dhanuk.lofiga.MainActivity
 
-/**
- * Bridges the in-process [com.dhanuk.lofiga.audio.AudioEngine]'s ExoPlayer with a
- * Media3 [MediaSession] for background-playback controls.
- *
- * Replaces the legacy androidx MediaSessionCompat + hand-rolled MediaStyle
- * notification. The notification itself is produced by the Media3
- * [androidx.media3.session.PlayerNotificationManager] wired inside the hosting
- * [MediaSessionService]. Removing the legacy stack also removes the
- * static-mutable-state in [MediaPlaybackService.companion] that broke across
- * process death.
- */
 @OptIn(UnstableApi::class)
 class Media3MediaSessionManager(private val context: Context) {
 
     private var mediaSession: MediaSession? = null
 
-    /**
-     * Creates and connects a Media3 [MediaSession] for the given ExoPlayer-backed
-     * [Player]. The session lets system media controllers (lock screen, Bluetooth
-     * media buttons, assistant) drive the player. Safe to call again on a new
-     * player — the previous session is released first.
-     */
     fun connect(player: Player) {
         release()
         val sessionActivityIntent = Intent(context, MainActivity::class.java).apply {
@@ -47,7 +30,6 @@ class Media3MediaSessionManager(private val context: Context) {
             .build()
     }
 
-    /** The underlying Media3 session instance. */
     val session: MediaSession? get() = mediaSession
 
     fun isActive(): Boolean = mediaSession != null

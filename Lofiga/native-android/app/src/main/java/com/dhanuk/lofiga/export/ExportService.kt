@@ -454,6 +454,12 @@ object ExportService {
             var pcmShorts = accumulator.toShortArray()
             if (pcmShorts.isEmpty()) return pcmShorts
 
+            // Cap to 10 minutes to prevent OOM on very long tracks
+            val maxSamples = 10 * 60 * 44100 * 2
+            if (pcmShorts.size > maxSamples) {
+                pcmShorts = pcmShorts.copyOf(maxSamples)
+            }
+
             if (inputChannels == 1) {
                 pcmShorts = monoToStereo(pcmShorts)
             }
@@ -466,8 +472,11 @@ object ExportService {
             onProgress?.invoke(0.6f)
             if (isPresetActive(preset)) {
                 val processed = applyPresetEffects(pcmShorts, 44100, 2, preset)
+                pcmShorts = ShortArray(0) // free original
+                System.gc()
                 onProgress?.invoke(0.8f)
                 val withAtmo = mixAtmosphereLayers(context, processed, 44100, 2, preset)
+                processed // keep reference
                 onProgress?.invoke(0.95f)
                 withAtmo
             } else {
@@ -503,9 +512,18 @@ object ExportService {
             out.write(shortToByteArrayLE(bitsPerSample.toShort()))
             out.write("data".toByteArray())
             out.write(intToByteArrayLE(dataSize))
-            val buffer = ByteBuffer.allocate(pcmShorts.size * 2).order(ByteOrder.LITTLE_ENDIAN)
-            buffer.asShortBuffer().put(pcmShorts)
-            out.write(buffer.array())
+            // Stream in chunks to avoid OOM on large PCM arrays
+            val chunkSize = 8192
+            val buffer = ByteBuffer.allocate(chunkSize * 2).order(ByteOrder.LITTLE_ENDIAN)
+            var offset = 0
+            while (offset < pcmShorts.size) {
+                val len = minOf(chunkSize, pcmShorts.size - offset)
+                buffer.clear()
+                buffer.asShortBuffer().put(pcmShorts, offset, len)
+                buffer.position(len * 2)
+                out.write(buffer.array(), 0, len * 2)
+                offset += len
+            }
         }
     }
 

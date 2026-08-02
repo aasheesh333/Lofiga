@@ -353,11 +353,11 @@ fun SongItem(
                         modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(10.dp))
                     )
                 } else {
-                    Text(
-                        text = titleWordMonogram(title),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = Indigo.copy(alpha = 0.7f),
-                        fontWeight = FontWeight.SemiBold
+                    Icon(
+                        imageVector = Icons.Outlined.MusicNote,
+                        contentDescription = null,
+                        tint = colors.accent.copy(alpha = 0.5f),
+                        modifier = Modifier.size(22.dp)
                     )
                 }
             }

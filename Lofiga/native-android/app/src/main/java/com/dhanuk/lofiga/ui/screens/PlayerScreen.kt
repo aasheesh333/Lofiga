@@ -818,13 +818,8 @@ private fun PlaybackControls(viewModel: MainViewModel) {
                 IconButton(onClick = { viewModel.nextTrack() }, modifier = Modifier.size(36.dp)) {
                     Icon(Icons.Filled.SkipNext, contentDescription = "Next", tint = colors.textSecondary, modifier = Modifier.size(24.dp))
                 }
-                IconButton(onClick = { viewModel.audioEngine.toggleLoop() }, modifier = Modifier.size(36.dp)) {
-                    Icon(
-                        if (isLooping) Icons.Filled.RepeatOne else Icons.Outlined.Repeat,
-                        contentDescription = "Loop",
-                        tint = if (isLooping) colors.accent else colors.textSecondary,
-                        modifier = Modifier.size(20.dp)
-                    )
+                IconButton(onClick = { viewModel.audioEngine.seekTo((position + 10000).coerceAtMost(duration)) }, modifier = Modifier.size(36.dp)) {
+                    Icon(Icons.Filled.Forward10, contentDescription = "+10s", tint = colors.textSecondary, modifier = Modifier.size(20.dp))
                 }
             }
         }
