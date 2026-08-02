@@ -3,7 +3,11 @@ package com.dhanuk.lofiga
 import android.app.Activity
 import android.app.Application
 import android.os.Bundle
+import coil3.ImageLoader
+import coil3.SingletonImageLoader
 import com.dhanuk.lofiga.ads.AdManager
+import com.dhanuk.lofiga.coil.AlbumArtFetcherFactory
+import com.dhanuk.lofiga.coil.AlbumArtKey
 import com.dhanuk.lofiga.media.Media3MediaSessionManager
 import com.onesignal.OneSignal
 import kotlinx.coroutines.CoroutineScope
@@ -25,6 +29,15 @@ class LofigaApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+
+        // Coil: register the embedded-album-art fetcher so any AsyncImage
+        // built with an [AlbumArtKey] pulls artwork straight out of the
+        // audio file rather than relying on MediaStore's albumart thumb.
+        SingletonImageLoader.setUnsafe(
+            ImageLoader.Builder(this)
+                .components { add(AlbumArtFetcherFactory()) }
+                .build()
+        )
 
         // Main thread: media session manager (Media3) and notification channel (required early / by Android)
         mediaSessionManager = Media3MediaSessionManager(this)

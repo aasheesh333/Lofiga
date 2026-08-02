@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import com.dhanuk.lofiga.R
+import com.dhanuk.lofiga.coil.AlbumArtKey
 import com.dhanuk.lofiga.ui.theme.*
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -322,7 +323,9 @@ fun SongItem(
     modifier: Modifier = Modifier,
     gradientThumb: Boolean = false,
     thumbTitle: String = title,
-    albumArtUri: android.net.Uri? = null
+    albumArtUri: android.net.Uri? = null,
+    trackDataPath: String? = null,
+    trackUri: android.net.Uri? = null
 ) {
     val colors = LocalAppColors.current
     Column(
@@ -351,11 +354,11 @@ fun SongItem(
                 } else {
                     AsyncImage(
                         model = coil3.request.ImageRequest.Builder(LocalContext.current)
-                            .data(albumArtUri)
-                            .fallback(R.drawable.ic_default_album_art)
-                            .error(R.drawable.ic_default_album_art)
-                            .placeholder(R.drawable.ic_default_album_art)
+                            .data(AlbumArtKey(dataPath = trackDataPath, audioUri = trackUri ?: albumArtUri))
+                            .crossfade(true)
                             .build(),
+                        placeholder = androidx.compose.ui.res.painterResource(R.drawable.ic_default_album_art),
+                        error = androidx.compose.ui.res.painterResource(R.drawable.ic_default_album_art),
                         contentDescription = null,
                         modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(10.dp))
                     )

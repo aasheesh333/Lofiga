@@ -24,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -31,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import coil3.compose.AsyncImage
 import com.dhanuk.lofiga.R
+import com.dhanuk.lofiga.coil.AlbumArtKey
 import com.dhanuk.lofiga.model.AudioTrack
 import com.dhanuk.lofiga.model.SavedConfig
 import com.dhanuk.lofiga.ui.MainViewModel
@@ -168,7 +170,9 @@ fun HomeScreen(
                                 artist = song.artist,
                                 isPlaying = currentTrack?.dataPath == song.dataPath,
                                 onClick = { onSongSelected(song) },
-                                albumArtUri = song.albumArtUri
+                                albumArtUri = song.albumArtUri,
+                                dataPath = song.dataPath,
+                                audioUri = song.uri
                             )
                         }
                     }
@@ -275,7 +279,9 @@ private fun CompactTrackCard(
     artist: String,
     isPlaying: Boolean,
     onClick: () -> Unit,
-    albumArtUri: android.net.Uri? = null
+    albumArtUri: android.net.Uri? = null,
+    dataPath: String? = null,
+    audioUri: android.net.Uri? = null
 ) {
     val colors = LocalAppColors.current
     val context = LocalContext.current
@@ -305,11 +311,11 @@ private fun CompactTrackCard(
             } else {
                 AsyncImage(
                     model = coil3.request.ImageRequest.Builder(context)
-                        .data(albumArtUri)
-                        .fallback(R.drawable.ic_default_album_art)
-                        .error(R.drawable.ic_default_album_art)
-                        .placeholder(R.drawable.ic_default_album_art)
+                        .data(AlbumArtKey(dataPath = dataPath, audioUri = audioUri ?: albumArtUri))
+                        .crossfade(true)
                         .build(),
+                    placeholder = painterResource(R.drawable.ic_default_album_art),
+                    error = painterResource(R.drawable.ic_default_album_art),
                     contentDescription = null,
                     modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(12.dp))
                 )

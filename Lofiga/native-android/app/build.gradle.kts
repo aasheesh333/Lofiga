@@ -136,5 +136,10 @@ dependencies {
 
     implementation("io.coil-kt.coil3:coil-compose:3.2.0")
 
+    // Okio (Coil 3.x exposes it as an api dependency; make it an explicit
+    // compile-classpath member so AlbumArtFetcher.kt can create Buffer sources
+    // without depending on transitive visibility.)
+    implementation("com.squareup.okio:okio:3.9.1")
+
     debugImplementation("androidx.compose.ui:ui-tooling")
 }

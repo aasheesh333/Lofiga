@@ -274,7 +274,9 @@ fun LibraryScreen(
                                 (currentTrack?.uri != null && currentTrack?.uri == song.uri),
                             onClick = { onSongSelected(song) },
                             modifier = Modifier.padding(horizontal = 16.dp),
-                            albumArtUri = song.albumArtUri
+                            albumArtUri = song.albumArtUri,
+                            trackDataPath = song.dataPath,
+                            trackUri = song.uri
                         )
                     }
                 }
