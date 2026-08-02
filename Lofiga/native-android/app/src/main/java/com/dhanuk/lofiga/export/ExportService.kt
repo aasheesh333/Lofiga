@@ -396,8 +396,8 @@ object ExportService {
     // ═══════════════════════════════════════════════════════════════════════════
 
     private class ChunkedPcmSource(
-        context: Context,
-        sourceUri: Uri,
+        private val context: Context,
+        private val sourceUri: Uri,
         private val cancelFlag: AtomicBoolean,
         private val onProgress: ((Float) -> Unit)?
     ) {
@@ -407,10 +407,9 @@ object ExportService {
         private var inputChannels = 2
         private var inputDuration = 0L
         private var audioTrackIndex = -1
-        private val appContext = context
 
         fun open(): Boolean {
-            extractor.setDataSource(appContext, sourceUri, null)
+            extractor.setDataSource(context, sourceUri, null)
             for (i in 0 until extractor.trackCount) {
                 val fmt = extractor.getTrackFormat(i)
                 if (fmt.getString(MediaFormat.KEY_MIME)?.startsWith("audio/") == true) {
