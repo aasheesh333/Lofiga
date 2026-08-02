@@ -67,6 +67,7 @@ class AudioEngine(private val context: Context) {
 
     var currentTrackTitle: String = ""
     var currentTrackArtist: String = ""
+    var albumArtUri: Uri? = null
     /** MediaStore id (or 0 for file-picked tracks) of the currently-loaded
      *  track. Used as the key into [moodTags] so the FFT precompute can stash
      *  a mood classification once it has the spectrum in hand. */
@@ -334,7 +335,17 @@ class AudioEngine(private val context: Context) {
                 }
             })
 
-            player.setMediaItem(MediaItem.fromUri(sourceUri))
+            val mediaItem = MediaItem.Builder()
+                .setUri(sourceUri)
+                .setMediaMetadata(
+                    androidx.media3.common.MediaMetadata.Builder()
+                        .setTitle(currentTrackTitle.ifBlank { "Unknown Track" })
+                        .setArtist(currentTrackArtist.ifBlank { "Unknown Artist" })
+                        .setArtworkUri(albumArtUri)
+                        .build()
+                )
+                .build()
+            player.setMediaItem(mediaItem)
             player.prepare()
             exoPlayer = player
             storedTempo = pendingTempo

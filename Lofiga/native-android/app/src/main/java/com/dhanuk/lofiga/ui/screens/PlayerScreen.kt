@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import android.widget.Toast
+import com.dhanuk.lofiga.R
 import com.dhanuk.lofiga.ads.AdManager
 import com.dhanuk.lofiga.model.CustomPreset
 import com.dhanuk.lofiga.model.LofiPreset
@@ -539,7 +540,9 @@ private fun TrackInfoCard(
                     coil3.compose.AsyncImage(
                         model = albumArtUri,
                         contentDescription = null,
-                        modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(16.dp))
+                        modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(16.dp)),
+                        error = coil3.compose.rememberAsyncImagePainter(R.drawable.ic_default_album_art),
+                        placeholder = coil3.compose.rememberAsyncImagePainter(R.drawable.ic_default_album_art)
                     )
                 } else {
                     Icon(Icons.Outlined.Album, contentDescription = null, tint = colors.accent.copy(alpha = 0.4f), modifier = Modifier.size(40.dp))
@@ -794,6 +797,14 @@ private fun PlaybackControls(viewModel: MainViewModel) {
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                IconButton(onClick = { viewModel.audioEngine.toggleLoop() }, modifier = Modifier.size(36.dp)) {
+                    Icon(
+                        if (isLooping) Icons.Filled.RepeatOne else Icons.Filled.Repeat,
+                        contentDescription = if (isLooping) "Repeat one" else "Repeat off",
+                        tint = if (isLooping) colors.accent else colors.textSecondary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
                 IconButton(onClick = { viewModel.audioEngine.seekTo((position - 10000).coerceAtLeast(0)) }, modifier = Modifier.size(36.dp)) {
                     Icon(Icons.Filled.Replay10, contentDescription = "-10s", tint = colors.textSecondary, modifier = Modifier.size(20.dp))
                 }

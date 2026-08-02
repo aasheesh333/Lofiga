@@ -27,6 +27,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
+import com.dhanuk.lofiga.R
 import com.dhanuk.lofiga.ui.theme.*
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -346,18 +347,13 @@ fun SongItem(
                         tint = Indigo,
                         modifier = Modifier.size(22.dp)
                     )
-                } else if (albumArtUri != null) {
-                    AsyncImage(
-                        model = albumArtUri,
-                        contentDescription = null,
-                        modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(10.dp))
-                    )
                 } else {
-                    Icon(
-                        imageVector = Icons.Outlined.MusicNote,
+                    AsyncImage(
+                        model = albumArtUri ?: R.drawable.ic_default_album_art,
                         contentDescription = null,
-                        tint = colors.accent.copy(alpha = 0.5f),
-                        modifier = Modifier.size(22.dp)
+                        modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(10.dp)),
+                        error = coil3.compose.rememberAsyncImagePainter(R.drawable.ic_default_album_art),
+                        placeholder = coil3.compose.rememberAsyncImagePainter(R.drawable.ic_default_album_art)
                     )
                 }
             }

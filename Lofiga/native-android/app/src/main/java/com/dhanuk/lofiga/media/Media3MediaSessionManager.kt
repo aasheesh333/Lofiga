@@ -14,6 +14,8 @@ import com.dhanuk.lofiga.MainActivity
 class Media3MediaSessionManager(private val context: Context) {
 
     private var mediaSession: MediaSession? = null
+    var onNextTrack: (() -> Unit)? = null
+    var onPreviousTrack: (() -> Unit)? = null
 
     fun connect(player: Player) {
         release()
@@ -24,9 +26,21 @@ class Media3MediaSessionManager(private val context: Context) {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         else PendingIntent.FLAG_UPDATE_CURRENT
         val pendingIntent = PendingIntent.getActivity(context, 0, sessionActivityIntent, flags)
+
+        val callback = object : MediaSession.Callback {
+            override fun onMediaButtonEvent(
+                session: MediaSession,
+                controllerInfo: MediaSession.ControllerInfo,
+                intent: Intent
+            ): Boolean {
+                return super.onMediaButtonEvent(session, controllerInfo, intent)
+            }
+        }
+
         mediaSession = MediaSession.Builder(context, player)
             .setSessionActivity(pendingIntent)
             .setId("lofiga_media_session")
+            .setCallback(callback)
             .build()
     }
 

@@ -168,6 +168,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) { 
     fun loadTrack(track: AudioTrack) {
         audioEngine.currentTrackTitle = track.title
         audioEngine.currentTrackArtist = track.artist
+        audioEngine.albumArtUri = track.albumArtUri
         audioEngine.currentTrackId = track.id  // C.2: used to key the mood tag
         val success = track.uri?.let { audioEngine.loadTrack(it, autoPlay = true) } ?: false
         if (success) {
@@ -182,6 +183,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) { 
     fun loadTrackFromFile(filePath: String, fileName: String): Boolean {
         audioEngine.currentTrackTitle = fileName
         audioEngine.currentTrackArtist = ""
+        audioEngine.albumArtUri = null
         audioEngine.currentTrackId = 0  // file-picked tracks have no MediaStore id
         val success = audioEngine.loadTrackFromFile(filePath, autoPlay = true)
         if (success) {

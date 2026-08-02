@@ -30,6 +30,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import coil3.compose.AsyncImage
+import com.dhanuk.lofiga.R
 import com.dhanuk.lofiga.model.AudioTrack
 import com.dhanuk.lofiga.model.SavedConfig
 import com.dhanuk.lofiga.ui.MainViewModel
@@ -300,18 +301,13 @@ private fun CompactTrackCard(
                     tint = Indigo,
                     modifier = Modifier.size(40.dp)
                 )
-            } else if (albumArtUri != null) {
-                AsyncImage(
-                    model = albumArtUri,
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(12.dp))
-                )
             } else {
-                Icon(
-                    Icons.Outlined.MusicNote,
+                AsyncImage(
+                    model = albumArtUri ?: R.drawable.ic_default_album_art,
                     contentDescription = null,
-                    tint = colors.accent.copy(alpha = 0.5f),
-                    modifier = Modifier.size(40.dp)
+                    modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(12.dp)),
+                    error = coil3.compose.rememberAsyncImagePainter(R.drawable.ic_default_album_art),
+                    placeholder = coil3.compose.rememberAsyncImagePainter(R.drawable.ic_default_album_art)
                 )
             }
         }
