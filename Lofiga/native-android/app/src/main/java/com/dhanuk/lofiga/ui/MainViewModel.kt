@@ -28,6 +28,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) { 
     val audioEngine = AudioEngine(application)
     val repository = AppRepository(application)
     val settingsManager = SettingsManager(application)
+    private val sessionManager = getApplication<LofigaApplication>().mediaSessionManager
 
     // --- Song Library ---
     private val _allSongs = MutableStateFlow<List<AudioTrack>>(emptyList())
@@ -93,16 +94,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) { 
         }
 
         val app = getApplication<LofigaApplication>()
-        val sessionManager = app.mediaSessionManager
         sessionManager.onNextTrack = { nextTrack() }
         sessionManager.onPreviousTrack = { previousTrack() }
 
         audioEngine.onPlaybackStateChanged = { isPlaying ->
-            // Connect (or re-connect) the Media3 session to the current ExoPlayer
-            // the first time playback begins, and surface the session to the
-            // MediaSessionService via the process holder.
+            // Bind the Media3 session to the (single, reused) ExoPlayer exactly
+            // once — rebuilding the session on every state change releases the
+            // controller the MediaSessionService's notification manager holds,
+            // which makes the media notification's controls vanish.
             val player = audioEngine.playerForSession
-            if (player != null) {
+            if (player != null && (sessionManager.session == null || sessionManager.session?.player !== player)) {
                 sessionManager.connect(player)
                 MediaSessionManagerHolder.mediaSession = sessionManager.session
             }
@@ -122,11 +123,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) { 
                     app.startService(intent)
                 }
             } else if (audioEngine.currentTrackTitle.isEmpty()) {
-                // Nothing loaded — stop the foreground service entirely.
+                // Nothing loaded — stop the foreground service entirely. The
+                // session itself stays alive for the app's lifetime so the
+                // notification re-binds cleanly on the next startService.
                 val intent = Intent(app, MediaPlaybackService::class.java)
                 app.stopService(intent)
-                sessionManager.release()
-                MediaSessionManagerHolder.mediaSession = null
             }
             // When paused with a track still loaded, leave the service running so
             // the persistent media notification stays usable.
@@ -570,6 +571,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) { 
 
     override fun onCleared() {
         super.onCleared()
+        sessionManager.release()
+        MediaSessionManagerHolder.mediaSession = null
         audioEngine.release()
     }
 }

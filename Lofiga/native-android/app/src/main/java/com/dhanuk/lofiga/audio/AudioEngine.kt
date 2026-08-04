@@ -225,6 +225,102 @@ class AudioEngine(private val context: Context) {
         )
     }
 
+    private var pendingInitFft: () -> Unit = {}
+    private var pendingErrorPrefix: String = "Failed to load track"
+
+    /** Creates the single ExoPlayer instance reused across track loads. The
+     *  Media3 session stays bound to this player for the app's lifetime;
+     *  recreating the player per track releases the session's controller and
+     *  kills the media notification's controls on every track change. */
+    private fun createPlayer(): ExoPlayer {
+        val player = ExoPlayer.Builder(context)
+            .setAudioAttributes(
+                Media3AudioAttributes.Builder()
+                    .setUsage(C.USAGE_MEDIA)
+                    .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+                    .build(),
+                /* handleAudioFocus = */ false // we manage focus ourselves below
+            )
+            // Pause when headphones unplug or audio routes to a device the
+            // user doesn't expect (BT disconnect etc.) — Android UX/PPlay
+            // convention for media apps. handleAudioBecomingNoisy is
+            // independent of handleAudioFocus (which we manage manually).
+            .setHandleAudioBecomingNoisy(true)
+            .build()
+
+        player.addListener(object : Player.Listener {
+            override fun onPlaybackStateChanged(state: Int) {
+                val current = exoPlayer ?: return
+                if (state == Player.STATE_READY) {
+                    _duration.value = current.duration.coerceAtLeast(0L)
+                    if (autoPlayOnPrepared) {
+                        try {
+                            current.play()
+                            _isPlaying.value = true
+                            _position.value = current.currentPosition
+                            startPositionPolling()
+                            syncAtmospheres()
+                            applyStoredPlaybackParams()
+                            onPlaybackStateChanged?.invoke(true)
+                            Log.i("AudioEngine", "Auto-play started, position: ${_position.value}")
+                        } catch (e: Exception) {
+                            Log.e("AudioEngine", "Auto-play failed: ${e.message}")
+                        }
+                    }
+                    // Initialize the audiofx chain on ExoPlayer's audio session.
+                    // Run synchronously on the player callback thread (this
+                    // is the ExoPlayer application-thread) — the audiofx
+                    // constructors are not slow enough to justify a
+                    // background coroutine, and running them inline avoids
+                    // the race where a rapid track-switch would
+                    // releaseEffects() while a previous initEffects()
+                    // coroutine was still half-building. Removing the
+                    // launch also fixes the half-builtin audiofx leak
+                    // the audit flagged as F3.
+                    try {
+                        initEffects(current.audioSessionId)
+                    } catch (e: Exception) {
+                        Log.e("AudioEngine", "Effects init failed: ${e.message}")
+                    }
+                    val myGen = fftGeneration
+                    fftJob = scope.launch(Dispatchers.IO) {
+                        if (myGen == fftGeneration) pendingInitFft()
+                    }
+                    startAnimatingWaveform()
+                    Log.i("AudioEngine", "Track loaded, duration: ${current.duration}ms")
+                } else if (state == Player.STATE_ENDED) {
+                    _isPlaying.value = false
+                    positionJob?.cancel()
+                    pauseAtmospheres()
+                    onPlaybackStateChanged?.invoke(false)
+                    Log.i("AudioEngine", "Track playback completed")
+                }
+            }
+
+            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                _error.value = "${pendingErrorPrefix}: ${error.message}"
+                Log.e("AudioEngine", "Player error: ${error.message}", error)
+            }
+
+            override fun onAudioSessionIdChanged(audioSessionId: Int) {
+                // ExoPlayer fires this when its audio-sink session id changes —
+                // typically on a routing change (BT disconnect, new device).
+                // audiofx (PresetReverb / BassBoost / Equalizer) are bound to
+                // an audio session id; binding to the old session id quietly
+                // no-ops the effects. Re-init on the new session so the
+                // user's effects stay applied across the route change. This
+                // is the audit's F4 issue.
+                Log.i("AudioEngine", "Audio session id changed -> $audioSessionId; re-initializing effects")
+                try {
+                    initEffects(audioSessionId)
+                } catch (e: Exception) {
+                    Log.e("AudioEngine", "Effects re-init on session change failed: ${e.message}")
+                }
+            }
+        })
+        return player
+    }
+
     private fun loadTrackInternal(
         autoPlay: Boolean,
         sourceUri: Uri,
@@ -233,7 +329,13 @@ class AudioEngine(private val context: Context) {
         errorPrefix: String
     ): Boolean {
         _isPlaying.value = false
-        releaseExoPlayer()
+        val player = exoPlayer ?: createPlayer().also { exoPlayer = it }
+        pendingInitFft = initFft
+        pendingErrorPrefix = errorPrefix
+        // Deterministic start: playback begins only from the STATE_READY
+        // handler when autoPlayOnPrepared is set.
+        player.playWhenReady = false
+        player.stop()
         releaseEffects()
         _error.value = null
         _position.value = 0
@@ -250,91 +352,6 @@ class AudioEngine(private val context: Context) {
         }
 
         return try {
-            val player = ExoPlayer.Builder(context)
-                .setAudioAttributes(
-                    Media3AudioAttributes.Builder()
-                        .setUsage(C.USAGE_MEDIA)
-                        .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
-                        .build(),
-                    /* handleAudioFocus = */ false // we manage focus ourselves below
-                )
-                // Pause when headphones unplug or audio routes to a device the
-                // user doesn't expect (BT disconnect etc.) — Android UX/PPlay
-                // convention for media apps. handleAudioBecomingNoisy is
-                // independent of handleAudioFocus (which we manage manually).
-                .setHandleAudioBecomingNoisy(true)
-                .build()
-
-            player.addListener(object : Player.Listener {
-                override fun onPlaybackStateChanged(state: Int) {
-                    if (state == Player.STATE_READY) {
-                        _duration.value = player.duration.coerceAtLeast(0L)
-                        if (autoPlayOnPrepared) {
-                            try {
-                                player.play()
-                                _isPlaying.value = true
-                                _position.value = player.currentPosition
-                                startPositionPolling()
-                                syncAtmospheres()
-                                applyStoredPlaybackParams()
-                                onPlaybackStateChanged?.invoke(true)
-                                Log.i("AudioEngine", "Auto-play started, position: ${_position.value}")
-                            } catch (e: Exception) {
-                                Log.e("AudioEngine", "Auto-play failed: ${e.message}")
-                            }
-                        }
-                        // Initialize the audiofx chain on ExoPlayer's audio session.
-                        // Run synchronously on the player callback thread (this
-                        // is the ExoPlayer application-thread) — the audiofx
-                        // constructors are not slow enough to justify a
-                        // background coroutine, and running them inline avoids
-                        // the race where a rapid track-switch would
-                        // releaseEffects() while a previous initEffects()
-                        // coroutine was still half-building. Removing the
-                        // launch also fixes the half-builtin audiofx leak
-                        // the audit flagged as F3.
-                        try {
-                            initEffects(player.audioSessionId)
-                        } catch (e: Exception) {
-                            Log.e("AudioEngine", "Effects init failed: ${e.message}")
-                        }
-                        val myGen = fftGeneration
-                        fftJob = scope.launch(Dispatchers.IO) {
-                            if (myGen == fftGeneration) initFft()
-                        }
-                        startAnimatingWaveform()
-                        Log.i("AudioEngine", "Track loaded, duration: ${player.duration}ms")
-                    } else if (state == Player.STATE_ENDED) {
-                        _isPlaying.value = false
-                        positionJob?.cancel()
-                        pauseAtmospheres()
-                        onPlaybackStateChanged?.invoke(false)
-                        Log.i("AudioEngine", "Track playback completed")
-                    }
-                }
-
-                override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                    _error.value = "$errorPrefix: ${error.message}"
-                    Log.e("AudioEngine", "Player error: ${error.message}", error)
-                }
-
-                override fun onAudioSessionIdChanged(audioSessionId: Int) {
-                    // ExoPlayer fires this when its audio-sink session id changes —
-                    // typically on a routing change (BT disconnect, new device).
-                    // audiofx (PresetReverb / BassBoost / Equalizer) are bound to
-                    // an audio session id; binding to the old session id quietly
-                    // no-ops the effects. Re-init on the new session so the
-                    // user's effects stay applied across the route change. This
-                    // is the audit's F4 issue.
-                    Log.i("AudioEngine", "Audio session id changed -> $audioSessionId; re-initializing effects")
-                    try {
-                        initEffects(audioSessionId)
-                    } catch (e: Exception) {
-                        Log.e("AudioEngine", "Effects re-init on session change failed: ${e.message}")
-                    }
-                }
-            })
-
             val mediaItem = MediaItem.Builder()
                 .setUri(sourceUri)
                 .setMediaMetadata(
@@ -347,7 +364,6 @@ class AudioEngine(private val context: Context) {
                 .build()
             player.setMediaItem(mediaItem)
             player.prepare()
-            exoPlayer = player
             storedTempo = pendingTempo
             storedPitch = pendingPitch
             true
@@ -461,11 +477,12 @@ class AudioEngine(private val context: Context) {
         try {
             exoPlayer?.seekTo(millis.coerceIn(0L, _duration.value.coerceAtLeast(0L)))
             _position.value = millis
-            synchronized(framesLock) {
-                val hasFramesBeyondSeek = precomputedFrames.any { it.timeMs >= millis - 500 }
-                if ((!hasFramesBeyondSeek || precomputedFrames.isEmpty()) && !animatingWaveform && _isPlaying.value) {
-                    startAnimatingWaveform()
-                }
+            // Animate only while there is genuinely no FFT data at all. When
+            // frames exist, the polling loop (or the self-terminating check
+            // inside startAnimatingWaveform) keeps live data on screen.
+            val framesEmpty = synchronized(framesLock) { precomputedFrames.isEmpty() }
+            if (framesEmpty && !animatingWaveform && _isPlaying.value) {
+                startAnimatingWaveform()
             }
         } catch (e: Exception) {
             Log.e("AudioEngine", "Seek failed: ${e.message}", e)
@@ -697,21 +714,51 @@ class AudioEngine(private val context: Context) {
             // brief yield so any previous loop sees the flag and exits
             delay(20)
             animatingWaveform = true
-            var phase = 0f
-            while (animatingWaveform && isActive) {
-                // Produce a clearly-visible animated pattern while waiting for FFT.
-                phase += 0.18f
-                val animated = List(16) { i ->
-                    val base = 0.10f + 0.35f * (kotlin.math.sin(phase + i * 0.55f) * 0.5f + 0.5f)
-                    base.coerceIn(0f, 1f)
-                }
-                synchronized(framesLock) {
-                    if (animatingWaveform) {
-                        _fftData.value = animated
-                        _waveformData.value = WaveformSnapshot(animated, ++waveformSeq)
+            try {
+                var phase = 0f
+                while (animatingWaveform && isActive) {
+                    // Hand back to the position-polling loop the moment real FFT
+                    // data covers the current position, so the fake pattern can
+                    // never outlive the real one (previously it ran forever once
+                    // a seek started it, freezing the waveform on fake data).
+                    val liveNearby = synchronized(framesLock) {
+                        val frames = precomputedFrames
+                        if (frames.isEmpty()) return@synchronized false
+                        val pos = exoPlayer?.currentPosition ?: return@synchronized false
+                        var left = 0
+                        var right = frames.size - 1
+                        var best = frames[0]
+                        while (left <= right) {
+                            val mid = (left + right) / 2
+                            if (frames[mid].timeMs <= pos) {
+                                best = frames[mid]
+                                left = mid + 1
+                            } else {
+                                right = mid - 1
+                            }
+                        }
+                        pos - best.timeMs <= 1500
                     }
+                    if (liveNearby) {
+                        animatingWaveform = false
+                        return@launch
+                    }
+                    // Produce a clearly-visible animated pattern while waiting for FFT.
+                    phase += 0.18f
+                    val animated = List(16) { i ->
+                        val base = 0.10f + 0.35f * (kotlin.math.sin(phase + i * 0.55f) * 0.5f + 0.5f)
+                        base.coerceIn(0f, 1f)
+                    }
+                    synchronized(framesLock) {
+                        if (animatingWaveform) {
+                            _fftData.value = animated
+                            _waveformData.value = WaveformSnapshot(animated, ++waveformSeq)
+                        }
+                    }
+                    delay(80)
                 }
-                delay(80)
+            } finally {
+                animatingWaveform = false
             }
         }
     }
@@ -1238,12 +1285,11 @@ class AudioEngine(private val context: Context) {
                                 }
 
                                 val bestFrame = precomputedFrames[bestIdx]
-                                if (pos - bestFrame.timeMs > 1500) {
-                                    if (_isPlaying.value) startAnimatingWaveform()
-                                } else {
-                                    _fftData.value = bestFrame.magnitudes
-                                    _waveformData.value = WaveformSnapshot(bestFrame.magnitudes, ++waveformSeq)
-                                }
+                                // Seeked beyond the last precomputed frame: hold
+                                // the nearest frame rather than jumping to the
+                                // fake animation pattern.
+                                _fftData.value = bestFrame.magnitudes
+                                _waveformData.value = WaveformSnapshot(bestFrame.magnitudes, ++waveformSeq)
                             } else if (!animatingWaveform && frameCount == 0 && _isPlaying.value) {
                                 startAnimatingWaveform()
                             }

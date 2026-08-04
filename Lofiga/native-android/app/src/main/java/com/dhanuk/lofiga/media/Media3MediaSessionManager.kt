@@ -22,6 +22,7 @@ import com.google.common.util.concurrent.ListenableFuture
 class Media3MediaSessionManager(private val context: Context) {
 
     private var mediaSession: MediaSession? = null
+    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
     var onNextTrack: (() -> Unit)? = null
     var onPreviousTrack: (() -> Unit)? = null
 
@@ -66,8 +67,11 @@ class Media3MediaSessionManager(private val context: Context) {
                 args: Bundle
             ): ListenableFuture<SessionResult> {
                 when (customCommand.customAction) {
-                    ACTION_NEXT -> onNextTrack?.invoke()
-                    ACTION_PREV -> onPreviousTrack?.invoke()
+                    // Dispatch asynchronously: the callback chain (nextTrack ->
+                    // loadTrack -> session reconnect) may rebuild this session,
+                    // which is illegal from inside the session's own callback.
+                    ACTION_NEXT -> mainHandler.post { onNextTrack?.invoke() }
+                    ACTION_PREV -> mainHandler.post { onPreviousTrack?.invoke() }
                 }
                 return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
             }

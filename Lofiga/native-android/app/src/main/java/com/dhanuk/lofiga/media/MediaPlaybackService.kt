@@ -20,6 +20,10 @@ class MediaPlaybackService : MediaSessionService() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Post the media notification with the same id as the placeholder so
+        // the real (controls-bearing) notification replaces it instead of
+        // showing a second, action-less notification.
+        setMediaNotificationId(PLACEHOLDER_NOTIFICATION_ID)
         val notification = buildPlaceholderNotification()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(
