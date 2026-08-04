@@ -74,6 +74,23 @@ class AudioEngine(private val context: Context) {
     var currentTrackId: Long = 0
     var onPlaybackStateChanged: ((isPlaying: Boolean) -> Unit)? = null
 
+    /**
+     * Queue mode (loadQueue): the player holds the full song list so
+     * COMMAND_SEEK_TO_NEXT/PREVIOUS are available — the media notification and
+     * Android 13+ SystemUI next/prev buttons stay enabled (previously the
+     * single-item player disabled them, so next/back did nothing). Fires for
+     * every media-item transition (user navigation via player commands, track
+     * end auto-advance, repeat) so the ViewModel can refresh the current track
+     * and waveform. Not fired for single-track (loadTrack*) playback.
+     */
+    var onQueueMediaItemChanged: ((index: Int) -> Unit)? = null
+
+    /** Resolves the file path for FFT precompute of the queue item at [index].
+     *  Set by the ViewModel; runs on a background coroutine. */
+    var queueFftPathResolver: ((Int) -> String?)? = null
+
+    private var queueMode = false
+
     private var exoPlayer: ExoPlayer? = null
     private val atmospherePlayers = ConcurrentHashMap<String, MediaPlayer>()
     private val atmosphereVolumes = ConcurrentHashMap<String, Float>()
@@ -225,6 +242,48 @@ class AudioEngine(private val context: Context) {
         )
     }
 
+    /**
+     * Loads a real queue ([items]) starting at [startIndex]. Because the
+     * player now has previous/next media items, COMMAND_SEEK_TO_NEXT and
+     * COMMAND_SEEK_TO_PREVIOUS become part of availableCommands — the media
+     * notification and SystemUI next/back controls are enabled and work
+     * without the app's custom session commands. MediaItem metadata is taken
+     * from the items themselves (title/artist/artwork per song).
+     */
+    fun loadQueue(items: List<MediaItem>, startIndex: Int, autoPlay: Boolean = true): Boolean {
+        if (items.isEmpty()) return false
+        _isPlaying.value = false
+        val player = exoPlayer ?: createPlayer().also { exoPlayer = it }
+        queueMode = true
+        player.playWhenReady = false
+        player.stop()
+        releaseEffects()
+        _error.value = null
+        _position.value = 0
+        _duration.value = 0
+        resetWaveformData()
+        fftJob?.cancel()
+        fftGeneration++           // any in-flight FFT decode loop will see this and bail
+        animatingWaveform = false
+        autoPlayOnPrepared = autoPlay
+
+        if (!requestAudioFocus()) {
+            _error.value = "Cannot get audio focus"
+            return false
+        }
+
+        return try {
+            player.setMediaItems(items, startIndex.coerceIn(0, items.size - 1), 0L)
+            player.prepare()
+            true
+        } catch (e: Exception) {
+            _error.value = "Failed to load queue: ${e.message}"
+            abandonAudioFocus()
+            Log.e("AudioEngine", "Failed to load queue: ${e.message}", e)
+            false
+        }
+    }
+
     private var pendingInitFft: () -> Unit = {}
     private var pendingErrorPrefix: String = "Failed to load track"
 
@@ -283,8 +342,11 @@ class AudioEngine(private val context: Context) {
                         Log.e("AudioEngine", "Effects init failed: ${e.message}")
                     }
                     val myGen = fftGeneration
+                    // Single-track mode runs the pending FFT closure here;
+                    // queue mode's FFT is kicked off by onMediaItemTransition
+                    // (which already reset the waveform for the new item).
                     fftJob = scope.launch(Dispatchers.IO) {
-                        if (myGen == fftGeneration) pendingInitFft()
+                        if (myGen == fftGeneration && !queueMode) pendingInitFft()
                     }
                     startAnimatingWaveform()
                     Log.i("AudioEngine", "Track loaded, duration: ${current.duration}ms")
@@ -317,6 +379,34 @@ class AudioEngine(private val context: Context) {
                     Log.e("AudioEngine", "Effects re-init on session change failed: ${e.message}")
                 }
             }
+
+            override fun onMediaItemTransition(
+                mediaItem: MediaItem?,
+                reason: Int
+            ) {
+                // Queue mode only: the player navigated to another item (user
+                // next/prev in the notification or SystemUI, auto-advance at
+                // track end, repeat). Refresh waveform + FFT for the new track
+                // and tell the ViewModel which item is now current. Runs on
+                // the ExoPlayer application thread — capture everything before
+                // launching background work (accessing the player off-thread
+                // throws IllegalStateException).
+                if (!queueMode || mediaItem == null) return
+                val current = exoPlayer ?: return
+                val idx = current.currentMediaItemIndex
+                resetWaveformData()
+                fftJob?.cancel()
+                fftGeneration++
+                animatingWaveform = false
+                val myGen = fftGeneration
+                fftJob = scope.launch(Dispatchers.IO) {
+                    if (myGen == fftGeneration) queueFftPathResolver?.invoke(idx)?.let { precomputeFFT(it) }
+                }
+                onQueueMediaItemChanged?.invoke(idx)
+                if (_isPlaying.value) {
+                    startAnimatingWaveform()
+                }
+            }
         })
         return player
     }
@@ -330,6 +420,7 @@ class AudioEngine(private val context: Context) {
     ): Boolean {
         _isPlaying.value = false
         val player = exoPlayer ?: createPlayer().also { exoPlayer = it }
+        queueMode = false
         pendingInitFft = initFft
         pendingErrorPrefix = errorPrefix
         // Deterministic start: playback begins only from the STATE_READY

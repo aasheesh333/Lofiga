@@ -97,6 +97,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) { 
         sessionManager.onNextTrack = { nextTrack() }
         sessionManager.onPreviousTrack = { previousTrack() }
 
+        // Queue-mode navigation (notification/SystemUI next/prev, auto-advance):
+        // keep the ViewModel's current-track state in sync with the player.
+        audioEngine.queueFftPathResolver = { idx -> filteredSongs.value.getOrNull(idx)?.dataPath }
+        audioEngine.onQueueMediaItemChanged = { idx ->
+            val songs = filteredSongs.value
+            if (idx in songs.indices) {
+                val song = songs[idx]
+                // Keep AudioEngine's track metadata in sync so the mood tag
+                // (keyed on currentTrackId) lands on the right song and the
+                // media notification shows the current item.
+                audioEngine.currentTrackTitle = song.title
+                audioEngine.currentTrackArtist = song.artist
+                audioEngine.albumArtUri = song.albumArtUri
+                audioEngine.currentTrackId = song.id
+                _currentTrack.value = song
+                _currentTrackIndex.value = idx
+                applyCurrentValuesToEngine()
+            }
+        }
+
         audioEngine.onPlaybackStateChanged = { isPlaying ->
             // Bind the Media3 session to the (single, reused) ExoPlayer exactly
             // once — rebuilding the session on every state change releases the
@@ -109,25 +129,36 @@ class MainViewModel(application: Application) : AndroidViewModel(application) { 
             }
 
             if (isPlaying) {
-                val intent = Intent(app, MediaPlaybackService::class.java)
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    // The media notification can't be shown if POST_NOTIFICATIONS
-                    // was denied, and starting a foreground service from the
-                    // background can throw — neither should crash the app.
-                    try {
-                        app.startForegroundService(intent)
-                    } catch (e: Exception) {
-                        android.util.Log.w("MainViewModel", "startForegroundService failed: ${e.message}")
+                if (!MediaPlaybackService.isRunning) {
+                    // Start the foreground service only once per service
+                    // lifetime. Re-issuing it on every resume re-runs
+                    // MediaPlaybackService.onStartCommand, whose placeholder
+                    // (notification id 1001) clobbers the rich controls-bearing
+                    // notification the Media3 notification manager posts on the
+                    // same id — the controls disappear after the first
+                    // play/pause cycle.
+                    val intent = Intent(app, MediaPlaybackService::class.java)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        // The media notification can't be shown if POST_NOTIFICATIONS
+                        // was denied, and starting a foreground service from the
+                        // background can throw — neither should crash the app.
+                        try {
+                            app.startForegroundService(intent)
+                        } catch (e: Exception) {
+                            android.util.Log.w("MainViewModel", "startForegroundService failed: ${e.message}")
+                        }
+                    } else {
+                        app.startService(intent)
                     }
-                } else {
-                    app.startService(intent)
                 }
             } else if (audioEngine.currentTrackTitle.isEmpty()) {
                 // Nothing loaded — stop the foreground service entirely. The
                 // session itself stays alive for the app's lifetime so the
                 // notification re-binds cleanly on the next startService.
-                val intent = Intent(app, MediaPlaybackService::class.java)
-                app.stopService(intent)
+                if (MediaPlaybackService.isRunning) {
+                    val intent = Intent(app, MediaPlaybackService::class.java)
+                    app.stopService(intent)
+                }
             }
             // When paused with a track still loaded, leave the service running so
             // the persistent media notification stays usable.
@@ -173,7 +204,36 @@ class MainViewModel(application: Application) : AndroidViewModel(application) { 
         audioEngine.currentTrackArtist = track.artist
         audioEngine.albumArtUri = track.albumArtUri
         audioEngine.currentTrackId = track.id  // C.2: used to key the mood tag
-        val success = track.uri?.let { audioEngine.loadTrack(it, autoPlay = true) } ?: false
+
+        // When the track belongs to the library, load the whole filtered list
+        // as the player's queue. With real previous/next items the player
+        // exposes COMMAND_SEEK_TO_NEXT/PREVIOUS, so the media notification
+        // (and Android 13+ SystemUI) next/back controls are enabled and work
+        // directly on the player.
+        val songs = filteredSongs.value
+        val success = if (songs.isNotEmpty() && track.uri != null) {
+            val items = songs.mapNotNull { song ->
+                val uri = song.uri ?: return@mapNotNull null
+                androidx.media3.common.MediaItem.Builder()
+                    .setUri(uri)
+                    .setMediaMetadata(
+                        androidx.media3.common.MediaMetadata.Builder()
+                            .setTitle(song.title)
+                            .setArtist(song.artist)
+                            .setArtworkUri(song.albumArtUri)
+                            .build()
+                    )
+                    .build()
+            }
+            if (items.isEmpty()) {
+                track.uri?.let { audioEngine.loadTrack(it, autoPlay = true) } ?: false
+            } else {
+                val idx = songs.indexOfFirst { it.id == track.id && track.id != 0L }
+                audioEngine.loadQueue(items, if (idx >= 0) idx else 0, autoPlay = true)
+            }
+        } else {
+            track.uri?.let { audioEngine.loadTrack(it, autoPlay = true) } ?: false
+        }
         if (success) {
             _currentTrack.value = track
             _currentTrackIndex.value = filteredSongs.value.indexOf(track)

@@ -20,6 +20,7 @@ class MediaPlaybackService : MediaSessionService() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        isRunning = true
         // The placeholder shares DefaultMediaNotificationProvider's default
         // notification id (1001), so the real controls-bearing media
         // notification replaces it once the notification manager's controller
@@ -72,18 +73,28 @@ class MediaPlaybackService : MediaSessionService() {
         val session = MediaSessionManagerHolder.mediaSession
         val player = session?.player
         if (player == null || !player.playWhenReady || player.mediaItemCount == 0) {
+            isRunning = false
             stopSelf()
         }
         super.onTaskRemoved(rootIntent)
     }
 
     override fun onDestroy() {
+        isRunning = false
         super.onDestroy()
     }
 
     companion object {
         private const val PLACEHOLDER_NOTIFICATION_ID = 1001
         private const val CHANNEL_ID = "lofiga_playback"
+
+        /** True while the service is running. Lets the ViewModel avoid
+         *  re-issuing startForegroundService on every play()/resume — doing so
+         *  re-posts the bare placeholder (id 1001) over the rich Media3
+         *  notification, which makes the controls vanish on play/pause. Reset
+         *  whenever the service actually dies (onTaskRemoved/onDestroy), so a
+         *  later play() starts it again. */
+        @Volatile var isRunning = false
     }
 }
 

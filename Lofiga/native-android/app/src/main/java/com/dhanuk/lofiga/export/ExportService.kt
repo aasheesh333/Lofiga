@@ -184,6 +184,18 @@ object ExportService {
         // across chunks (resetting per chunk produced a click every ~1s).
         var atmospherePos: IntArray = IntArray(0)
 
+        // ── Streaming WSOLA state ──────────────────────────────────────────
+        // The time-stretch must be CONTINUOUS across chunks: grains are placed
+        // at GLOBAL positions (g*hopIn input → g*hopOut output), and each
+        // output slice is cut from that global stream. Chunks therefore
+        // overlap seamlessly — previously every chunk restarted grain
+        // alignment from frame 0, which produced a discontinuity (audible
+        // click/dip) at every ~1s boundary.
+        var wsolaCarry: ShortArray = ShortArray(0)   // unconsumed input frames
+        var wsolaGlobalStart: Long = 0L              // global input frame of wsolaCarry[0]
+        var wsolaSlice: Long = 0L                    // next output slice index (44100-frame slices)
+        var wsolaEffTempo: Float = 1f                // tempo actually used by the stretch (tempo/pitchFactor)
+
         fun loadAtmospheres(context: Context) {
             val layers = mutableListOf<Pair<ShortArray, Int>>()
             listOf("rain" to rainVolume, "vinyl" to vinylVolume, "wind" to windVolume, "tape" to tapeVolume)
@@ -199,29 +211,38 @@ object ExportService {
     }
 
     /**
-     * Process a single chunk of PCM through all active effects.
+     * Process a single chunk of PCM through all active effects. Returns null
+     * when the streaming time-stretch is still buffering input (the caller
+     * must keep feeding chunks; no output is produced yet).
      */
     private fun processChunk(
         chunk: ShortArray,
         state: StreamingEffectState,
         sampleRate: Int,
         channels: Int
-    ): ShortArray {
-        var result = chunk
-
+    ): ShortArray? {
         if (state.tempo != 1.0f || state.pitch != 0f) {
-            result = applySpeedPitchChunk(result, state.tempo, state.pitch, channels)
+            val stretched = applySpeedPitchChunk(chunk, state.tempo, state.pitch, channels, state)
+                ?: return null
+            return finishProcessChunk(stretched, state, channels)
         }
+        return finishProcessChunk(chunk, state, channels)
+    }
 
+    /** Applies delay/reverb/bass/treble + atmosphere mixing to stretched PCM. */
+    private fun finishProcessChunk(
+        pcm: ShortArray,
+        state: StreamingEffectState,
+        channels: Int
+    ): ShortArray {
+        var result = pcm
         if (state.delayWet > 0.01f || state.reverbWet > 0.01f ||
             state.bassStrength > 0.01f || state.trebleCut > 0.01f) {
             result = applyCombinedEffectsChunk(result, state, channels)
         }
-
         if (state.atmosphereLayers.isNotEmpty()) {
             result = mixAtmosphereChunk(result, state.atmosphereLayers, channels, state)
         }
-
         return result
     }
 
@@ -255,76 +276,189 @@ object ExportService {
         return out to newTail
     }
 
-    private fun applySpeedPitchChunk(pcm: ShortArray, tempo: Float, semitones: Float, channels: Int): ShortArray {
+    private fun applySpeedPitchChunk(
+        pcm: ShortArray,
+        tempo: Float,
+        semitones: Float,
+        channels: Int,
+        state: StreamingEffectState
+    ): ShortArray? {
         if (tempo == 1.0f && semitones == 0f) return pcm
-        var result = pcm
 
         val safeTempo = tempo.coerceIn(0.25f, 2.5f)
-        if (safeTempo != 1.0f) {
-            result = timeStretchChunk(result, safeTempo, channels)
-        }
+        val pitchFactor = Math.pow(2.0, (semitones / 12.0)).toFloat().coerceIn(0.25f, 4.0f)
 
-        if (semitones != 0f) {
-            val pitchFactor = Math.pow(2.0, (semitones / 12.0)).toFloat().coerceIn(0.25f, 4.0f)
-            result = pitchShiftChunk(result, pitchFactor, channels)
+        // Fold pitch into the stretch: stretch by tempo/pitchFactor, then
+        // resample back by pitchFactor — net duration = tempo-only stretch,
+        // pitch shifted. Keeps the stretch fully inside the streaming WSOLA
+        // (per-chunk pitch resampling would reintroduce seams).
+        val effTempo = if (pitchFactor != 1f) (safeTempo / pitchFactor).coerceIn(0.25f, 2.5f) else safeTempo
+        state.wsolaEffTempo = effTempo
+        var result = timeStretchStreamingFeed(pcm, effTempo, channels, state) ?: return null
+
+        if (pitchFactor != 1f) {
+            val stretchedFrames = result.size / channels
+            result = resampleFramesChunk(
+                result,
+                (stretchedFrames / pitchFactor).toInt().coerceAtLeast(1),
+                channels
+            )
         }
         return result
     }
 
-    private fun timeStretchChunk(pcm: ShortArray, tempo: Float, channels: Int): ShortArray {
-        if (tempo == 1.0f) return pcm
-        val inFrames = pcm.size / channels
-        if (inFrames < 2048) {
-            return resampleFramesChunk(pcm, (inFrames / tempo).toInt().coerceAtLeast(1), channels)
-        }
-        val outFrames = (inFrames / tempo).toInt().coerceAtLeast(1)
+    /**
+     * Feeds one raw PCM chunk into the streaming WSOLA pipeline. Returns the
+     * next output slice (44100 frames) when enough input has accumulated, or
+     * null when the input is still being buffered (caller must keep feeding).
+     */
+    private fun timeStretchStreamingFeed(
+        pcm: ShortArray,
+        tempo: Float,
+        channels: Int,
+        state: StreamingEffectState
+    ): ShortArray? {
         val grain = 2048
-        val hopOut = grain / 2
-        val hopIn = hopOut * tempo
-        val out = FloatArray(outFrames * channels)
-        val norm = FloatArray(outFrames)
+        val hopOut = 1024
+        val outSliceFrames = CHUNK_FRAMES
+        val hopIn = hopOut * tempo.toDouble()
 
-        var outPos = 0
-        var inPos = 0f
+        // Append to the carry buffer (input since wsolaGlobalStart).
+        val prev = state.wsolaCarry
+        val combined = ShortArray(prev.size + pcm.size)
+        System.arraycopy(prev, 0, combined, 0, prev.size)
+        System.arraycopy(pcm, 0, combined, prev.size, pcm.size)
+        state.wsolaCarry = combined
+
+        val slice = state.wsolaSlice
+        val outStart = slice * outSliceFrames
+        // Grains g with q_g = g*hopOut whose window [q_g, q_g+grain) intersects
+        // the output slice [outStart, outStart+outSliceFrames). Clamped so
+        // slice 0 starts the stream at grain 0 (no negative grains).
+        val gStart = maxOf(0L, ((outStart - grain) / hopOut) + 1)
+        val gEnd = (outStart + outSliceFrames - 1) / hopOut
+        val inStart = (gStart * hopIn).toLong()
+        val inEnd = (gEnd * hopIn).toLong() + grain
+        val inNeeded = (inEnd - inStart).toInt()
+
+        val carryFrames = state.wsolaCarry.size / channels
+        if (carryFrames < inNeeded) return null // keep buffering
+
+        return produceWsolaSlice(state, channels, slice, gStart, gEnd,
+            inStart, outStart, outSliceFrames, grain, hopOut, hopIn, carryFrames)
+    }
+
+    /**
+     * Called when the input source is exhausted: emits the final partial
+     * output slice from whatever input remains (the file's tail). Returns an
+     * empty array when nothing is left.
+     */
+    private fun timeStretchStreamingFlush(
+        tempo: Float,
+        channels: Int,
+        state: StreamingEffectState
+    ): ShortArray {
+        if (state.wsolaCarry.isEmpty()) return ShortArray(0)
+        val grain = 2048
+        val hopOut = 1024
+        val outSliceFrames = CHUNK_FRAMES
+        val hopIn = hopOut * tempo.toDouble()
+
+        val slice = state.wsolaSlice
+        val outStart = slice * outSliceFrames
+        val gStart = maxOf(0L, ((outStart - grain) / hopOut) + 1)
+        val inStart = (gStart * hopIn).toLong()
+        val carryFrames = state.wsolaCarry.size / channels
+        val relInStart = (inStart - state.wsolaGlobalStart).toInt()
+
+        // Too little input left even for one grain — resample the remainder.
+        if (carryFrames - relInStart < grain) {
+            val availFrames = (carryFrames - relInStart).coerceAtLeast(0)
+            if (availFrames <= 0) return ShortArray(0)
+            val avail = ShortArray(availFrames * channels)
+            System.arraycopy(state.wsolaCarry, relInStart * channels, avail, 0, avail.size)
+            return resampleFramesChunk(avail, (availFrames / tempo).toInt().coerceAtLeast(1), channels)
+        }
+
+        // Largest grain that fits in the remaining input.
+        val gEndNominal = (outStart + outSliceFrames - 1) / hopOut
+        var gEnd = gStart
+        while (gEnd <= gEndNominal &&
+            (gEnd * hopIn).toLong() - inStart + grain <= carryFrames) {
+            gEnd++
+        }
+        gEnd--
+        if (gEnd < gStart) return ShortArray(0)
+
+        val outLen = ((gEnd * hopOut) - outStart + grain).toInt().coerceAtLeast(1)
+        val sliceLen = outLen.coerceAtMost(outSliceFrames)
+        return produceWsolaSlice(state, channels, slice, gStart, gEnd,
+            inStart, outStart, sliceLen, grain, hopOut, hopIn, carryFrames)
+    }
+
+    private fun produceWsolaSlice(
+        state: StreamingEffectState,
+        channels: Int,
+        slice: Long,
+        gStart: Long,
+        gEnd: Long,
+        inStart: Long,
+        outStart: Long,
+        outLen: Int,
+        grain: Int,
+        hopOut: Int,
+        hopIn: Double,
+        carryFrames: Int
+    ): ShortArray {
+        val carry = state.wsolaCarry
+        val out = FloatArray(outLen * channels)
+        val norm = FloatArray(outLen)
         val window = FloatArray(grain) { i ->
             (0.5 - 0.5 * Math.cos(2.0 * Math.PI * i / (grain - 1))).toFloat()
         }
 
-        while (outPos + grain <= outFrames && inPos + grain <= inFrames) {
-            val baseIn = inPos.toInt()
-            for (g in 0 until grain) {
-                val srcIdx = (baseIn + g) * channels
-                val dstFrame = outPos + g
-                val w = window[g]
-                for (ch in 0 until channels) {
-                    out[dstFrame * channels + ch] += pcm[srcIdx + ch].toFloat() * w
+        // Slice 0 has no history: the stream starts at grain 0, so the first
+        // slice's window ramps up naturally instead of reading negative input.
+        val firstG = if (slice == 0L) maxOf(0L, gStart) else gStart
+        for (g in firstG..gEnd) {
+            val baseIn = ((g * hopIn).toLong() - inStart).toInt() // within carry
+            if (baseIn + grain > carryFrames) continue // should not happen when input is sufficient
+            val q = ((g * hopOut) - outStart).toInt() // within out; may be negative
+            val kStart = if (q < 0) -q else 0
+            val kEnd = minOf(grain, outLen - q)
+            if (kEnd <= kStart) continue
+            for (k in kStart until kEnd) {
+                val w = window[k]
+                val src = (baseIn + k) * channels
+                val dst = (q + k) * channels
+                for (c in 0 until channels) {
+                    out[dst + c] += carry[src + c].toFloat() * w
                 }
-                norm[dstFrame] += w
+                norm[q + k] += w
             }
-            outPos += hopOut
-            inPos += hopIn
         }
 
-        val result = ShortArray(outFrames * channels)
-        for (f in 0 until outFrames) {
+        val result = ShortArray(outLen * channels)
+        for (f in 0 until outLen) {
             val n = if (norm[f] > 1e-4f) norm[f] else 1f
-            for (ch in 0 until channels) {
-                val v = (out[f * channels + ch] / n).toInt()
-                result[f * channels + ch] = v.coerceIn(-32768, 32767).toShort()
+            for (c in 0 until channels) {
+                val v = (out[f * channels + c] / n).toInt()
+                result[f * channels + c] = v.coerceIn(-32768, 32767).toShort()
             }
         }
-        return result
-    }
 
-    private fun pitchShiftChunk(pcm: ShortArray, pitchFactor: Float, channels: Int): ShortArray {
-        if (pitchFactor == 1.0f) return pcm
-        val inFrames = pcm.size / channels
-        val resampledFrames = (inFrames / pitchFactor).toInt().coerceAtLeast(1)
-        var result = resampleFramesChunk(pcm, resampledFrames, channels)
-        val durationRatio = resampledFrames.toFloat() / inFrames.toFloat()
-        if (durationRatio != 1.0f) {
-            result = timeStretchChunk(result, durationRatio, channels)
+        // Drop consumed input: everything before the next slice's inStart.
+        val nextGStart = maxOf(0L, ((slice * CHUNK_FRAMES + CHUNK_FRAMES - grain) / hopOut) + 1)
+        val nextInStart = (nextGStart * hopIn).toLong()
+        val dropFrames = (nextInStart - state.wsolaGlobalStart).toInt().coerceIn(0, carryFrames)
+        val keptShorts = carry.size - dropFrames * channels
+        if (keptShorts > 0) {
+            state.wsolaCarry = carry.copyOfRange(dropFrames * channels, carry.size)
+        } else {
+            state.wsolaCarry = ShortArray(0)
         }
+        state.wsolaGlobalStart = nextInStart
+        state.wsolaSlice++
         return result
     }
 
@@ -523,8 +657,10 @@ object ExportService {
                             decoder.queueInputBuffer(inIdx, 0, sampleSize, sampleTimeUs, 0)
                             extractor.advance()
                             if (inputDuration > 0) {
+                                // Decode phase covers 0..0.45 of total progress;
+                                // the encode phase continues 0.45..0.95.
                                 val progress = (sampleTimeUs.toFloat() / inputDuration.toFloat())
-                                    .coerceIn(0f, 1f) * 0.5f
+                                    .coerceIn(0f, 1f) * 0.45f
                                 onProgress?.invoke(progress)
                             }
                         }
@@ -616,25 +752,46 @@ object ExportService {
 
         try {
             while (!sawEncoderEOS && !cancelFlag.get()) {
+                // 1) Ensure pendingPcm holds data to encode. Feed raw chunks to
+                //    the streaming pipeline until it emits an output slice (it
+                //    buffers input until a full WSOLA slice can be produced) or
+                //    the input is exhausted (final flush).
+                if (pendingOffset >= pendingPcm.size) {
+                    var produced = false
+                    while (!produced) {
+                        if (cancelFlag.get()) break
+                        val chunk = source.nextChunk()
+                        if (chunk == null || chunk.isEmpty()) {
+                            // Input exhausted: flush the final partial slice.
+                            val flushed = timeStretchStreamingFlush(effectState.wsolaEffTempo, 2, effectState)
+                            if (flushed.isNotEmpty()) {
+                                pendingPcm = finishProcessChunk(flushed, effectState, 2)
+                                pendingOffset = 0
+                                chunksProcessed++
+                                produced = true
+                            } else {
+                                break
+                            }
+                        } else {
+                            val processed = processChunk(chunk, effectState, 44100, 2)
+                            if (processed != null) {
+                                val fused = crossfadeBoundary(prevTail, processed, 2)
+                                prevTail = fused.second
+                                pendingPcm = fused.first
+                                pendingOffset = 0
+                                chunksProcessed++
+                                produced = true
+                            }
+                        }
+                    }
+                }
+
                 val inputIdx = encoder.dequeueInputBuffer(10000)
                 if (inputIdx >= 0) {
                     val inBuf = encoder.getInputBuffer(inputIdx)
                     if (inBuf == null) {
                         try { encoder.queueInputBuffer(inputIdx, 0, 0, 0, 0) } catch (_: Exception) {}
                         continue
-                    }
-                    if (pendingOffset >= pendingPcm.size) {
-                        val chunk = source.nextChunk()
-                        if (chunk == null || chunk.isEmpty()) {
-                            encoder.queueInputBuffer(inputIdx, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
-                        } else {
-                            val processed = processChunk(chunk, effectState, 44100, 2)
-                            val fused = crossfadeBoundary(prevTail, processed, 2)
-                            prevTail = fused.second
-                            pendingPcm = fused.first
-                            pendingOffset = 0
-                            chunksProcessed++
-                        }
                     }
                     if (pendingOffset < pendingPcm.size) {
                         inBuf.clear()
@@ -650,16 +807,19 @@ object ExportService {
                         pendingOffset += framesToWrite
                         totalFramesEncoded += framesToWrite / 2
                         if (totalDurationUs > 0) {
-                            val progress = 0.5f + (pts.toFloat() / totalDurationUs.toFloat())
-                                .coerceIn(0f, 1f) * 0.45f
-                            onProgress?.invoke(progress)
+                            // Decode phase covers 0..0.45; encode 0.45..0.95
+                            // (monotonic, no jump back to 0.5).
+                            val progress = 0.45f + (pts.toFloat() / totalDurationUs.toFloat())
+                                .coerceIn(0f, 1f) * 0.5f
+                            onProgress?.invoke(progress.coerceAtMost(0.95f))
                         } else {
                             // No duration metadata at all: chunk-count fallback
                             // that still starts at 0 instead of jumping to 50%.
                             onProgress?.invoke((chunksProcessed * 0.02f).coerceAtMost(0.9f))
                         }
                     } else {
-                        try { encoder.queueInputBuffer(inputIdx, 0, 0, 0, 0) } catch (_: Exception) {}
+                        // Nothing left to encode — input exhausted and flushed.
+                        encoder.queueInputBuffer(inputIdx, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
                     }
                 }
 
@@ -765,25 +925,43 @@ object ExportService {
             var prevTail = ShortArray(0)
 
             while (!cancelFlag.get()) {
-                val chunk = source.nextChunk() ?: break
-                val processed0 = processChunk(chunk, effectState, 44100, 2)
-                val fused = crossfadeBoundary(prevTail, processed0, 2)
+                val chunk = source.nextChunk()
+                var processed: ShortArray? = null
+                if (chunk != null && chunk.isNotEmpty()) {
+                    processed = processChunk(chunk, effectState, 44100, 2)
+                }
+                if (processed == null) {
+                    if (chunk == null) {
+                        // Input exhausted: flush the final partial slice.
+                        val flushed = timeStretchStreamingFlush(effectState.wsolaEffTempo, 2, effectState)
+                        if (flushed.isNotEmpty()) {
+                            processed = finishProcessChunk(flushed, effectState, 2)
+                        } else {
+                            break
+                        }
+                    } else {
+                        // Streaming stretch still buffering — keep feeding.
+                        continue
+                    }
+                }
+                val fused = crossfadeBoundary(prevTail, processed!!, 2)
                 prevTail = fused.second
-                val processed = fused.first
+                val outChunk = fused.first
 
-                val tempBytes = ByteArray(processed.size * 2)
+                val tempBytes = ByteArray(outChunk.size * 2)
                 ByteBuffer.wrap(tempBytes).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer()
-                    .put(processed, 0, processed.size)
+                    .put(outChunk, 0, outChunk.size)
                 raf.write(tempBytes)
-                totalDataSize += processed.size * 2
-                totalFramesWritten += processed.size / 2
+                totalDataSize += outChunk.size * 2
+                totalFramesWritten += outChunk.size / 2
                 wavChunksProcessed++
 
                 if (totalDurationUs > 0) {
                     val pts = (totalFramesWritten * 1000000L) / 44100
-                    val progress = 0.5f + (pts.toFloat() / totalDurationUs.toFloat())
-                        .coerceIn(0f, 1f) * 0.45f
-                    onProgress?.invoke(progress)
+                    // Decode phase covers 0..0.45; encode 0.45..0.95.
+                    val progress = 0.45f + (pts.toFloat() / totalDurationUs.toFloat())
+                        .coerceIn(0f, 1f) * 0.5f
+                    onProgress?.invoke(progress.coerceAtMost(0.95f))
                 } else {
                     onProgress?.invoke((wavChunksProcessed * 0.02f).coerceAtMost(0.9f))
                 }
