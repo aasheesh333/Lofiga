@@ -10,8 +10,10 @@ import android.util.Log
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.CommandButton
+import androidx.media3.session.ConnectionResult
 import androidx.media3.session.MediaSession
 import androidx.media3.session.SessionCommand
+import androidx.media3.session.SessionCommands
 import androidx.media3.session.SessionResult
 import com.dhanuk.lofiga.MainActivity
 import com.google.common.collect.ImmutableList
@@ -44,22 +46,43 @@ class Media3MediaSessionManager(private val context: Context) {
         val nextCommand = SessionCommand(ACTION_NEXT, Bundle.EMPTY)
         val prevCommand = SessionCommand(ACTION_PREV, Bundle.EMPTY)
 
-        val customLayout = try {
-            val nextButton = CommandButton.Builder(CommandButton.ICON_NEXT)
-                .setDisplayName("Next")
-                .setSessionCommand(nextCommand)
-                .build()
-            val prevButton = CommandButton.Builder(CommandButton.ICON_PREVIOUS)
-                .setDisplayName("Previous")
-                .setSessionCommand(prevCommand)
-                .build()
-            ImmutableList.of(prevButton, nextButton)
+        // The default media notification provider (1.5.x) shows custom buttons
+        // from MediaSession#setMediaButtonPreferences and only when the custom
+        // commands are granted to the connecting controller via onConnect.
+        val sessionCommands = SessionCommands.Builder()
+            .add(nextCommand)
+            .add(prevCommand)
+            .build()
+
+        val mediaButtonPreferences = try {
+            ImmutableList.of(
+                CommandButton.Builder(CommandButton.ICON_PREVIOUS)
+                    .setDisplayName("Previous")
+                    .setSessionCommand(prevCommand)
+                    .setEnabled(true)
+                    .build(),
+                CommandButton.Builder(CommandButton.ICON_NEXT)
+                    .setDisplayName("Next")
+                    .setSessionCommand(nextCommand)
+                    .setEnabled(true)
+                    .build()
+            )
         } catch (e: Exception) {
             Log.w("Media3MediaSessionManager", "CommandButton build failed: ${e.message}")
             ImmutableList.of()
         }
 
         val sessionCallback = object : MediaSession.Callback {
+            override fun onConnect(
+                session: MediaSession,
+                controller: MediaSession.ControllerInfo
+            ): ConnectionResult {
+                // Grant the custom next/prev commands alongside the player's own
+                // commands so the media notification and Android 13+ System UI
+                // can send them.
+                return ConnectionResult.accept(sessionCommands, session.player.availableCommands)
+            }
+
             override fun onCustomCommand(
                 session: MediaSession,
                 controller: MediaSession.ControllerInfo,
@@ -84,9 +107,9 @@ class Media3MediaSessionManager(private val context: Context) {
             .build()
             .also { session ->
                 try {
-                    session.setCustomLayout(customLayout)
+                    session.setMediaButtonPreferences(mediaButtonPreferences)
                 } catch (e: Exception) {
-                    Log.w("Media3MediaSessionManager", "setCustomLayout failed: ${e.message}")
+                    Log.w("Media3MediaSessionManager", "setMediaButtonPreferences failed: ${e.message}")
                 }
             }
     }
