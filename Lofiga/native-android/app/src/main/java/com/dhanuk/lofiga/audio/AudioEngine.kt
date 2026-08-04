@@ -724,7 +724,13 @@ class AudioEngine(private val context: Context) {
                     val liveNearby = synchronized(framesLock) {
                         val frames = precomputedFrames
                         if (frames.isEmpty()) return@synchronized false
-                        val pos = exoPlayer?.currentPosition ?: return@synchronized false
+                        // Read from the position StateFlow (written by the
+                        // main-thread polling loop) — accessing the ExoPlayer
+                        // from this Dispatchers.Default coroutine throws
+                        // IllegalStateException (player accessed on wrong
+                        // thread).
+                        val pos = _position.value
+                        if (pos < 0) return@synchronized false
                         var left = 0
                         var right = frames.size - 1
                         var best = frames[0]

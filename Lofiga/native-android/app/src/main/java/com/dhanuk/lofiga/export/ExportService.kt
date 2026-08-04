@@ -180,6 +180,9 @@ object ExportService {
 
         // Atmosphere layers (loaded once, looped)
         var atmosphereLayers: List<Pair<ShortArray, Int>> = emptyList()
+        // Per-layer global loop position so the mix phase stays continuous
+        // across chunks (resetting per chunk produced a click every ~1s).
+        var atmospherePos: IntArray = IntArray(0)
 
         fun loadAtmospheres(context: Context) {
             val layers = mutableListOf<Pair<ShortArray, Int>>()
@@ -191,6 +194,7 @@ object ExportService {
                     }
                 }
             atmosphereLayers = layers
+            atmospherePos = IntArray(layers.size)
         }
     }
 
@@ -215,10 +219,40 @@ object ExportService {
         }
 
         if (state.atmosphereLayers.isNotEmpty()) {
-            result = mixAtmosphereChunk(result, state.atmosphereLayers, channels)
+            result = mixAtmosphereChunk(result, state.atmosphereLayers, channels, state)
         }
 
         return result
+    }
+
+    // Crossfade window at chunk boundaries: ~10 ms at 44.1 kHz. Masks the
+    // discontinuity where per-chunk processing restarts (WSOLA time-stretch
+    // grain alignment, atmosphere loop phase) — previously an audible click
+    // every ~1 second.
+    private const val FADE_FRAMES = 441
+
+    /**
+     * Blends the start of [chunk] against the tail of the previous processed
+     * chunk so consecutive chunks form one continuous stream. Returns the
+     * fused chunk and the new tail for the next call.
+     */
+    private fun crossfadeBoundary(
+        prevTail: ShortArray,
+        chunk: ShortArray,
+        channels: Int
+    ): Pair<ShortArray, ShortArray> {
+        val fadeShorts = minOf(FADE_FRAMES, chunk.size / channels) * channels
+        val newTail = chunk.copyOfRange(chunk.size - fadeShorts, chunk.size)
+        if (prevTail.isEmpty() || fadeShorts <= 0) return chunk to newTail
+        val out = chunk.copyOf()
+        val prevStart = prevTail.size - fadeShorts
+        for (i in 0 until fadeShorts) {
+            val t = (i / channels + 1).toFloat() / (fadeShorts / channels + 1)
+            val prevSample = if (prevStart + i >= 0) prevTail[prevStart + i].toFloat() else 0f
+            out[i] = (out[i] * t + prevSample * (1 - t))
+                .toInt().coerceIn(-32768, 32767).toShort()
+        }
+        return out to newTail
     }
 
     private fun applySpeedPitchChunk(pcm: ShortArray, tempo: Float, semitones: Float, channels: Int): ShortArray {
@@ -375,15 +409,19 @@ object ExportService {
     private fun mixAtmosphereChunk(
         pcm: ShortArray,
         layers: List<Pair<ShortArray, Int>>,
-        channels: Int
+        channels: Int,
+        state: StreamingEffectState
     ): ShortArray {
         val result = ShortArray(pcm.size)
         for (i in result.indices) {
             var sample = pcm[i].toInt()
-            for ((layerPcm, scaledVol) in layers) {
+            for (li in layers.indices) {
+                val (layerPcm, scaledVol) = layers[li]
                 val loopSize = layerPcm.size
                 if (loopSize > 0) {
-                    sample += (layerPcm[i % loopSize].toInt() * scaledVol) shr 15
+                    val pos = state.atmospherePos[li]
+                    sample += (layerPcm[pos % loopSize].toInt() * scaledVol) shr 15
+                    state.atmospherePos[li] = pos + 1
                 }
             }
             result[i] = sample.coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
@@ -424,8 +462,24 @@ object ExportService {
             val inputFormat = extractor.getTrackFormat(audioTrackIndex)
             inputSampleRate = inputFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE)
             inputChannels = inputFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
-            inputDuration = if (inputFormat.containsKey(MediaFormat.KEY_DURATION))
-                inputFormat.getLong(MediaFormat.KEY_DURATION) else 0L
+            inputDuration = if (inputFormat.containsKey(MediaFormat.KEY_DURATION)) {
+                inputFormat.getLong(MediaFormat.KEY_DURATION)
+            } else {
+                // KEY_DURATION lives in the container, not the track format, and
+                // is missing for many files. Without it the decode phase reports
+                // no progress and the encode phase starts at 50%.
+                runCatching {
+                    val retriever = MediaMetadataRetriever()
+                    try {
+                        retriever.setDataSource(context, sourceUri)
+                        retriever.extractMetadata(
+                            MediaMetadataRetriever.METADATA_KEY_DURATION
+                        )?.toLongOrNull()?.times(1000L) ?: 0L
+                    } finally {
+                        runCatching { retriever.release() }
+                    }
+                }.getOrDefault(0L)
+            }
 
             val mime = inputFormat.getString(MediaFormat.KEY_MIME) ?: return false
             decoder = MediaCodec.createDecoderByType(mime).apply {
@@ -558,6 +612,7 @@ object ExportService {
         var chunksProcessed = 0
         var pendingPcm = ShortArray(0)
         var pendingOffset = 0
+        var prevTail = ShortArray(0)
 
         try {
             while (!sawEncoderEOS && !cancelFlag.get()) {
@@ -573,7 +628,10 @@ object ExportService {
                         if (chunk == null || chunk.isEmpty()) {
                             encoder.queueInputBuffer(inputIdx, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
                         } else {
-                            pendingPcm = processChunk(chunk, effectState, 44100, 2)
+                            val processed = processChunk(chunk, effectState, 44100, 2)
+                            val fused = crossfadeBoundary(prevTail, processed, 2)
+                            prevTail = fused.second
+                            pendingPcm = fused.first
                             pendingOffset = 0
                             chunksProcessed++
                         }
@@ -596,7 +654,9 @@ object ExportService {
                                 .coerceIn(0f, 1f) * 0.45f
                             onProgress?.invoke(progress)
                         } else {
-                            onProgress?.invoke(0.5f + (chunksProcessed * 0.01f).coerceAtMost(0.45f))
+                            // No duration metadata at all: chunk-count fallback
+                            // that still starts at 0 instead of jumping to 50%.
+                            onProgress?.invoke((chunksProcessed * 0.02f).coerceAtMost(0.9f))
                         }
                     } else {
                         try { encoder.queueInputBuffer(inputIdx, 0, 0, 0, 0) } catch (_: Exception) {}
@@ -701,10 +761,15 @@ object ExportService {
 
             var totalDataSize = 0L
             var totalFramesWritten = 0L
+            var wavChunksProcessed = 0
+            var prevTail = ShortArray(0)
 
             while (!cancelFlag.get()) {
                 val chunk = source.nextChunk() ?: break
-                val processed = processChunk(chunk, effectState, 44100, 2)
+                val processed0 = processChunk(chunk, effectState, 44100, 2)
+                val fused = crossfadeBoundary(prevTail, processed0, 2)
+                prevTail = fused.second
+                val processed = fused.first
 
                 val tempBytes = ByteArray(processed.size * 2)
                 ByteBuffer.wrap(tempBytes).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer()
@@ -712,12 +777,15 @@ object ExportService {
                 raf.write(tempBytes)
                 totalDataSize += processed.size * 2
                 totalFramesWritten += processed.size / 2
+                wavChunksProcessed++
 
                 if (totalDurationUs > 0) {
                     val pts = (totalFramesWritten * 1000000L) / 44100
                     val progress = 0.5f + (pts.toFloat() / totalDurationUs.toFloat())
                         .coerceIn(0f, 1f) * 0.45f
                     onProgress?.invoke(progress)
+                } else {
+                    onProgress?.invoke((wavChunksProcessed * 0.02f).coerceAtMost(0.9f))
                 }
             }
 

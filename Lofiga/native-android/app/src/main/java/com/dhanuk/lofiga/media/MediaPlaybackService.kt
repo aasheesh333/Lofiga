@@ -34,6 +34,17 @@ class MediaPlaybackService : MediaSessionService() {
         } else {
             startForeground(PLACEHOLDER_NOTIFICATION_ID, notification)
         }
+        // A plain startService intent has no media action, so MediaSessionService
+        // never routes it to onGetSession — the session would never reach the
+        // MediaNotificationManager and no controls notification would appear.
+        // Register the live session explicitly so the notification manager
+        // connects its controller, then onConnect grants the next/prev commands
+        // and the real notification (id 1001) replaces the placeholder.
+        try {
+            MediaSessionManagerHolder.mediaSession?.let { addSession(it) }
+        } catch (e: Exception) {
+            android.util.Log.w("MediaPlaybackService", "addSession failed: ${e.message}")
+        }
         return super.onStartCommand(intent, flags, startId)
     }
 
