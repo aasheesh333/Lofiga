@@ -47,7 +47,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) { 
             it.title.contains(query, ignoreCase = true) ||
             it.artist.contains(query, ignoreCase = true)
         }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     // --- Current Session ---
     private val _currentTrack = MutableStateFlow<AudioTrack?>(null)
@@ -562,6 +562,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) { 
     val exportedFilePath: StateFlow<String?> = _exportedFilePath.asStateFlow()
 
     fun exportTrack(context: android.content.Context) {
+        // Re-entry guard: a second export (PlayerScreen has three export
+        // entry points) would race the first one writing the SAME output file,
+        // corrupting the audio and flickering the progress bar between the two
+        // jobs' values.
+        if (_isExporting.value) {
+            _snackbarMessage.tryEmit("Export already in progress")
+            return
+        }
+
         val track = _currentTrack.value ?: run {
             _snackbarMessage.tryEmit("No track selected - select a song first")
             return

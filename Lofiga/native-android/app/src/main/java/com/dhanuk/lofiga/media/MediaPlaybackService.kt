@@ -20,20 +20,32 @@ class MediaPlaybackService : MediaSessionService() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        val firstStart = !isRunning
         isRunning = true
-        // The placeholder shares DefaultMediaNotificationProvider's default
-        // notification id (1001), so the real controls-bearing media
-        // notification replaces it once the notification manager's controller
-        // connects — no second notification.
-        val notification = buildPlaceholderNotification()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(
-                PLACEHOLDER_NOTIFICATION_ID,
-                notification,
-                android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
-            )
-        } else {
-            startForeground(PLACEHOLDER_NOTIFICATION_ID, notification)
+        // Post the placeholder ONLY on the first start of the service lifetime.
+        // While playing, the Media3 notification manager shows its rich
+        // notification by calling startForeground() itself, which triggers
+        // ContextCompat.startForegroundService(startSelfIntent) — a second
+        // onStartCommand whose startForeground would otherwise re-post this
+        // bare placeholder (id 1001) over the controls-bearing notification.
+        // While paused, media3 updates via NotificationManagerCompat.notify()
+        // (no service restart), so the controls survive regardless.
+        if (firstStart) {
+            // The placeholder shares DefaultMediaNotificationProvider's default
+            // notification id (1001), so the real controls-bearing media
+            // notification replaces it once the notification manager's
+            // controller connects — no second notification. It also satisfies
+            // the 5s foreground-start window while that controller connects.
+            val notification = buildPlaceholderNotification()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(
+                    PLACEHOLDER_NOTIFICATION_ID,
+                    notification,
+                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
+                )
+            } else {
+                startForeground(PLACEHOLDER_NOTIFICATION_ID, notification)
+            }
         }
         // A plain startService intent has no media action, so MediaSessionService
         // never routes it to onGetSession — the session would never reach the
@@ -89,11 +101,14 @@ class MediaPlaybackService : MediaSessionService() {
         private const val CHANNEL_ID = "lofiga_playback"
 
         /** True while the service is running. Lets the ViewModel avoid
-         *  re-issuing startForegroundService on every play()/resume — doing so
-         *  re-posts the bare placeholder (id 1001) over the rich Media3
-         *  notification, which makes the controls vanish on play/pause. Reset
-         *  whenever the service actually dies (onTaskRemoved/onDestroy), so a
-         *  later play() starts it again. */
+         *  re-issuing startForegroundService on every play()/resume and lets
+         *  [onStartCommand] post the placeholder notification only on the
+         *  service's first start — otherwise every onStartCommand (including
+         *  the Media3 notification manager's own startSelfIntent starts while
+         *  playing) re-posts the bare placeholder (id 1001) over the rich
+         *  Media3 notification, making the controls vanish while playing.
+         *  Reset whenever the service actually dies (onTaskRemoved/
+         *  onDestroy), so a later play() starts it again. */
         @Volatile var isRunning = false
     }
 }

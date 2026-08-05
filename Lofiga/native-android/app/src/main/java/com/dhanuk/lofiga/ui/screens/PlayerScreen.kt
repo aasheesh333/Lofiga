@@ -147,6 +147,7 @@ fun PlayerScreen(
                             ) {
                                 DropdownMenuItem(
                                     text = { Text("Export") },
+                                    enabled = !isExporting,
                                     onClick = { viewModel.exportTrack(context); showActionsMenu = false },
                                     leadingIcon = { Icon(Icons.Outlined.FileDownload, contentDescription = null, tint = colors.accent, modifier = Modifier.size(18.dp)) }
                                 )
@@ -176,6 +177,7 @@ fun PlayerScreen(
                     TrackInfoCard(
                         title = currentTrack?.title.orEmpty(),
                         artist = currentTrack?.artist.orEmpty(),
+                        isExporting = isExporting,
                         onAction = { action ->
                             when (action) {
                                 TrackAction.Export -> viewModel.exportTrack(context)
@@ -524,6 +526,7 @@ private fun EmptyPlayerState() {
 private fun TrackInfoCard(
     title: String,
     artist: String,
+    isExporting: Boolean,
     onAction: (TrackAction) -> Unit,
     albumArtUri: android.net.Uri? = null,
     dataPath: String? = null,
@@ -584,6 +587,7 @@ private fun TrackInfoCard(
                 }
                 OutlinedIconButton(
                     onClick = { onAction(TrackAction.Export) },
+                    enabled = !isExporting,
                     modifier = Modifier.size(36.dp),
                     shape = CircleShape,
                     border = BorderStroke(1.dp, colors.outline)
