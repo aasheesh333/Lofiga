@@ -18,9 +18,11 @@ import com.dhanuk.lofiga.model.*
 import com.dhanuk.lofiga.util.AudioQueryHelper
 import com.dhanuk.lofiga.util.SettingsManager
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import java.util.UUID
 
 class MainViewModel(application: Application) : AndroidViewModel(application) { // Updated for playback and UI fixes
@@ -555,6 +557,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) { 
 
     // --- Export ---
 
+    // Hard ceiling for a single export. Streaming export is memory-flat and
+    // normally finishes in seconds-to-a-couple-minutes; anything beyond this
+    // means the encoder/muxer pipeline stalled, so the overlay is released
+    // instead of hanging at ~95% forever.
+    private val EXPORT_TIMEOUT_MS = 10 * 60 * 1000L
+
     private val _exportedFilePath = MutableStateFlow<String?>(null)
     // Flow to notify when an export completes (used to refresh export list)
     private val _exportCompleted = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
@@ -595,22 +603,33 @@ class MainViewModel(application: Application) : AndroidViewModel(application) { 
             try {
                 val settings = settingsManager.settingsFlow.first()
                 val inputPath = if (track.dataPath.isNotBlank()) track.dataPath else null
-                val result = com.dhanuk.lofiga.export.ExportService.exportTrack(
-                    context = context,
-                    inputUri = track.uri ?: Uri.EMPTY,
-                    inputPath = inputPath,
-                    fileName = track.title,
-                    preset = _currentValues.value,
-                    format = settings.audioFormat,
-                    bitrate = settings.audioBitrate,
-                    onProgress = { _exportProgress.value = it }
-                )
+                // Hard ceiling so the export overlay can never hang forever: a
+                // stalled encoder/muxer previously left the progress dialog
+                // stuck at ~95% "Rendering Lofi Mix..." indefinitely.
+                val result = withTimeout(EXPORT_TIMEOUT_MS) {
+                    com.dhanuk.lofiga.export.ExportService.exportTrack(
+                        context = context,
+                        inputUri = track.uri ?: Uri.EMPTY,
+                        inputPath = inputPath,
+                        fileName = track.title,
+                        preset = _currentValues.value,
+                        format = settings.audioFormat,
+                        bitrate = settings.audioBitrate,
+                        onProgress = { _exportProgress.value = it }
+                    )
+                }
                 if (result != null) {
                     _exportedFilePath.value = result
                     _exportCompleted.tryEmit(Unit)
                 } else {
                     _snackbarMessage.tryEmit("Export cancelled")
                 }
+            } catch (e: TimeoutCancellationException) {
+                // Cancel the still-running pipeline so it deletes the partial
+                // file instead of leaving a corrupt export behind.
+                com.dhanuk.lofiga.export.ExportService.cancelExport()
+                _lastExportError.value = "Export timed out after ${EXPORT_TIMEOUT_MS / 60000} minutes\nat withTimeout (MainViewModel.exportTrack)"
+                _snackbarMessage.tryEmit("Export timed out - the file may be incomplete")
             } catch (e: Exception) {
                 val msg = "${e.javaClass.simpleName}: ${e.message ?: "(no message)"}"
                 val stack = e.stackTraceToString().lineSequence()
@@ -621,6 +640,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) { 
                 _snackbarMessage.tryEmit("Export failed: $msg")
             } finally {
                 _isExporting.value = false
+                // Reset so a failed/stalled export can't leave a stale
+                // percentage behind for the next attempt.
+                _exportProgress.value = 0f
             }
         }
     }

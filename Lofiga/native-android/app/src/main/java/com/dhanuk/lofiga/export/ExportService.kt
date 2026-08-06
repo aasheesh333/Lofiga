@@ -55,6 +55,17 @@ object ExportService {
         val cancelFlag = AtomicBoolean(false)
         activeExports[exportId] = cancelFlag
 
+        // Decode-phase progress (ChunkedPcmSource, 0..0.45) and encode-phase
+        // progress (0.45..0.95) interleave on the same pipeline: nextChunk()
+        // runs inside the encode feed loop, so both writers alternate values
+        // (58% encode, then 12% decode) — the UI flickered between "1%" and
+        // "60%" simultaneously. A max-keeping reporter makes the bar strictly
+        // monotonic; the final 1.0f still passes through.
+        var lastReported = 0f
+        val monotonicProgress: ((Float) -> Unit)? = onProgress?.let { orig ->
+            { p -> if (p > lastReported) { lastReported = p; orig(p) } }
+        }
+
         val cleanName = fileName.substringBeforeLast(".").replace(Regex("[\\\\/:*?\"<>|]"), "_")
         val musicDir = context.getExternalFilesDir(Environment.DIRECTORY_MUSIC)
         val outputDirPath = outputDir ?: if (musicDir != null) {
@@ -74,9 +85,9 @@ object ExportService {
             }
 
             if (format == "wav") {
-                exportAsWavStreaming(context, sourceUri, preset, outputFile, cancelFlag, onProgress)
+                exportAsWavStreaming(context, sourceUri, preset, outputFile, cancelFlag, monotonicProgress)
             } else {
-                exportWithMediaCodecStreaming(context, sourceUri, preset, outputFile, format, bitrate, cancelFlag, onProgress)
+                exportWithMediaCodecStreaming(context, sourceUri, preset, outputFile, format, bitrate, cancelFlag, monotonicProgress)
             }
 
             if (cancelFlag.get()) {
@@ -749,6 +760,10 @@ object ExportService {
         var pendingPcm = ShortArray(0)
         var pendingOffset = 0
         var prevTail = ShortArray(0)
+        // True once the source is exhausted AND the final WSOLA flush came back
+        // empty: the feed has nothing left to produce.
+        var inputExhausted = false
+        var eosSignaled = false
 
         try {
             while (!sawEncoderEOS && !cancelFlag.get()) {
@@ -770,6 +785,7 @@ object ExportService {
                                 chunksProcessed++
                                 produced = true
                             } else {
+                                inputExhausted = true
                                 break
                             }
                         } else {
@@ -821,6 +837,16 @@ object ExportService {
                         // Nothing left to encode — input exhausted and flushed.
                         encoder.queueInputBuffer(inputIdx, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
                     }
+                } else if (inputExhausted && pendingOffset >= pendingPcm.size && !eosSignaled) {
+                    // Encoder input buffers are all full but there is nothing
+                    // left to feed and no EOS was queued: force the end-of-stream
+                    // so the pipeline always completes instead of spinning on a
+                    // full input queue (previously the export stalled forever at
+                    // ~95% progress).
+                    try {
+                        encoder.signalEndOfInputStream()
+                        eosSignaled = true
+                    } catch (_: Exception) {}
                 }
 
                 val bufInfo = MediaCodec.BufferInfo()
@@ -859,8 +885,12 @@ object ExportService {
                 }
             }
 
-            // Drain remaining output
-            while (!cancelFlag.get()) {
+            // Drain remaining output. Bounded: a codec that never flags EOS
+            // (some devices) must not hang the export at ~95% forever — give
+            // it ~3k polls then finalize the muxer with what we have.
+            var drainTries = 0
+            while (!cancelFlag.get() && drainTries < 3000) {
+                drainTries++
                 val bufInfo = MediaCodec.BufferInfo()
                 val outIdx = encoder.dequeueOutputBuffer(bufInfo, 5000)
                 if (outIdx < 0) break
