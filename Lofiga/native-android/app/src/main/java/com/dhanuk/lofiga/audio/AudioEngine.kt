@@ -311,6 +311,12 @@ class AudioEngine(private val context: Context) {
             override fun onPlaybackStateChanged(state: Int) {
                 val current = exoPlayer ?: return
                 if (state == Player.STATE_READY) {
+                    // A successful prepare clears the load-specific error prefix:
+                    // anything the player reports later is a playback problem, not
+                    // a load failure. Previously the prefix ("Failed to load
+                    // track") was never cleared, so every subsequent playback
+                    // error was mislabeled as a failed load.
+                    pendingErrorPrefix = "Playback error"
                     _duration.value = current.duration.coerceAtLeast(0L)
                     if (autoPlayOnPrepared) {
                         try {
@@ -350,18 +356,55 @@ class AudioEngine(private val context: Context) {
                     }
                     startAnimatingWaveform()
                     Log.i("AudioEngine", "Track loaded, duration: ${current.duration}ms")
-                } else if (state == Player.STATE_ENDED) {
-                    _isPlaying.value = false
-                    positionJob?.cancel()
-                    pauseAtmospheres()
-                    onPlaybackStateChanged?.invoke(false)
-                    Log.i("AudioEngine", "Track playback completed")
-                }
+            } else if (state == Player.STATE_ENDED) {
+                _isPlaying.value = false
+                positionJob?.cancel()
+                pauseAtmospheres()
+                onPlaybackStateChanged?.invoke(false)
+                Log.i("AudioEngine", "Track playback completed")
             }
+        }
+
+        override fun onIsPlayingChanged(isPlaying: Boolean) {
+            // Single source of truth for play/pause from ANY command source.
+            // The in-app controls go through play()/pause() which set _isPlaying
+            // manually, but the media notification and Android 13+ SystemUI
+            // issue play/pause directly on the session's player (granted via
+            // ConnectionResult.accept(player.availableCommands)), bypassing
+            // those helpers. Without this callback, a notification-side pause
+            // left the app UI showing "playing", kept the atmosphere layers
+            // running and position polling alive. All operations below are
+            // idempotent, so double invocation alongside the manual sets in
+            // play()/pause() is harmless.
+            _isPlaying.value = isPlaying
+            if (isPlaying) {
+                startPositionPolling()
+                syncAtmospheres()
+                applyStoredPlaybackParams()
+                onPlaybackStateChanged?.invoke(true)
+            } else {
+                positionJob?.cancel()
+                pauseAtmospheres()
+                onPlaybackStateChanged?.invoke(false)
+            }
+        }
 
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                _error.value = "${pendingErrorPrefix}: ${error.message}"
-                Log.e("AudioEngine", "Player error: ${error.message}", error)
+                // media3 wraps exceptions thrown inside the player (or from a
+                // listener callback) as ExoPlaybackException with errorCodeName
+                // ERROR_CODE_UNSPECIFIED and message "Unexpected runtime error".
+                // Surface the error code AND the wrapped exception's class so
+                // the user-visible message pins down the real defect instead of
+                // a generic label, and stop the UI/atmospheres from pretending
+                // playback is still active after the player died.
+                val causeClass = error.cause?.javaClass?.simpleName
+                _error.value = "${pendingErrorPrefix}: ${error.errorCodeName}" +
+                    (if (causeClass != null) " ($causeClass)" else "")
+                Log.e("AudioEngine", "Player error: code=${error.errorCodeName} msg=${error.message}", error)
+                _isPlaying.value = false
+                positionJob?.cancel()
+                pauseAtmospheres()
+                onPlaybackStateChanged?.invoke(false)
             }
 
             override fun onAudioSessionIdChanged(audioSessionId: Int) {
@@ -391,20 +434,27 @@ class AudioEngine(private val context: Context) {
                 // the ExoPlayer application thread — capture everything before
                 // launching background work (accessing the player off-thread
                 // throws IllegalStateException).
-                if (!queueMode || mediaItem == null) return
-                val current = exoPlayer ?: return
-                val idx = current.currentMediaItemIndex
-                resetWaveformData()
-                fftJob?.cancel()
-                fftGeneration++
-                animatingWaveform = false
-                val myGen = fftGeneration
-                fftJob = scope.launch(Dispatchers.IO) {
-                    if (myGen == fftGeneration) queueFftPathResolver?.invoke(idx)?.let { precomputeFFT(it) }
-                }
-                onQueueMediaItemChanged?.invoke(idx)
-                if (_isPlaying.value) {
-                    startAnimatingWaveform()
+                try {
+                    if (!queueMode || mediaItem == null) return
+                    val current = exoPlayer ?: return
+                    val idx = current.currentMediaItemIndex
+                    resetWaveformData()
+                    fftJob?.cancel()
+                    fftGeneration++
+                    animatingWaveform = false
+                    val myGen = fftGeneration
+                    fftJob = scope.launch(Dispatchers.IO) {
+                        if (myGen == fftGeneration) queueFftPathResolver?.invoke(idx)?.let { precomputeFFT(it) }
+                    }
+                    onQueueMediaItemChanged?.invoke(idx)
+                    if (_isPlaying.value) {
+                        startAnimatingWaveform()
+                    }
+                } catch (e: Exception) {
+                    // A listener callback exception is wrapped by media3 into a
+                    // player "Unexpected runtime error" that kills playback —
+                    // never let one escape from here.
+                    Log.e("AudioEngine", "onMediaItemTransition failed: ${e.message}", e)
                 }
             }
         })
