@@ -1284,6 +1284,11 @@ class AudioEngine(private val context: Context) {
 
     private fun createAtmospherePlayer(key: String) {
         releaseAtmospherePlayer(key)
+        // The old player (and any fade running against it) is gone — start the
+        // new one from a clean 0-volume baseline so its first ramp fades in.
+        atmosphereFadeJobs[key]?.cancel()
+        atmosphereFadeJobs.remove(key)
+        appliedAtmosphereVolumes.remove(key)
         try {
             val assetPath = ATMOSPHERE_FILES[key] ?: return
             val fd = context.assets.openFd(assetPath)
@@ -1326,6 +1331,40 @@ class AudioEngine(private val context: Context) {
         }
     }
 
+    // Per-layer volume fades. MediaPlayer.setVolume is instant, so raising a
+    // layer or enabling it mid-track pops straight to the new level. Each
+    // change ramps over ~250ms instead (cancelling the previous ramp), making
+    // effect apply/change smooth and masking any residual loop-seam energy.
+    private val atmosphereFadeJobs = ConcurrentHashMap<String, Job>()
+    private val appliedAtmosphereVolumes = ConcurrentHashMap<String, Float>()
+
+    private fun fadeAtmosphereVolume(key: String, player: MediaPlayer, target: Float, ms: Long = 250L) {
+        atmosphereFadeJobs[key]?.cancel()
+        val from = appliedAtmosphereVolumes[key] ?: 0f
+        if (kotlin.math.abs(target - from) < 0.005f) {
+            appliedAtmosphereVolumes[key] = target
+            return
+        }
+        val steps = (ms / 16).toInt().coerceAtLeast(1)
+        atmosphereFadeJobs[key] = scope.launch(Dispatchers.Main) {
+            val myJob = coroutineContext[Job]
+            try {
+                for (i in 1..steps) {
+                    val v = from + (target - from) * (i.toFloat() / steps)
+                    player.setVolume(v, v)
+                    delay(16)
+                }
+            } catch (e: Exception) {
+                android.util.Log.w("AudioEngine", "Atmosphere fade ('$key') failed: ${e.message}")
+            } finally {
+                if (atmosphereFadeJobs[key] === myJob) {
+                    atmosphereFadeJobs.remove(key)
+                    appliedAtmosphereVolumes[key] = target
+                }
+            }
+        }
+    }
+
     fun setAtmosphereVolume(key: String, volume: Float) {
         atmosphereVolumes[key] = volume
         var player = atmospherePlayers[key]
@@ -1336,13 +1375,17 @@ class AudioEngine(private val context: Context) {
         if (player == null) return
         val vol = volume.coerceIn(0f, 1f)
         val effective = if (isDucked) vol * 0.3f else vol
-        player.setVolume(effective, effective)
+        fadeAtmosphereVolume(key, player, effective)
         // Only start atmosphere when the main track is actively playing.
         // When stopped, the stored volume is kept so syncAtmospheres() will
         // start this layer alongside the main track on play().
         if (vol > 0.01f && !player.isPlaying && _isPlaying.value) {
             try {
-                player.seekTo(0)
+                // No seekTo(0): a paused layer resumes exactly where it was
+                // paused, and a freshly-created one is already at position 0
+                // after prepare(). Seeking back to 0 replayed the loop from
+                // its start on every play/resume/slider change — the audible
+                // "atmosphere restarts" glitch.
                 player.start()
             } catch (e: Exception) {
                 android.util.Log.w("AudioEngine", "Atmosphere start ('$key') failed: ${e.message}")
@@ -1364,7 +1407,9 @@ class AudioEngine(private val context: Context) {
             val vol = atmosphereVolumes[key] ?: 0f
             if (vol > 0.01f && !player.isPlaying) {
                 try {
-                    player.seekTo(0)
+                    // Resume from the paused position — seeking to 0 here
+                    // restarted every layer from the loop start each time the
+                    // track resumed (the "effect replays" glitch).
                     player.start()
                 } catch (e: Exception) {
                     android.util.Log.w("AudioEngine", "syncAtmospheres start ('$key') failed: ${e.message}")
@@ -1391,11 +1436,16 @@ class AudioEngine(private val context: Context) {
      * applied output level changes.
      */
     private fun duckAtmospheres(duck: Boolean) {
+        // Focus-loss ducking must land instantly, so drop any in-flight fades
+        // first (otherwise a ramp would overwrite the ducked level).
+        atmosphereFadeJobs.forEach { (_, job) -> job.cancel() }
+        atmosphereFadeJobs.clear()
         atmospherePlayers.forEach { (key, player) ->
             try {
                 val vol = (atmosphereVolumes[key] ?: 0f).coerceIn(0f, 1f)
                 val effective = if (duck) vol * 0.3f else vol
                 player.setVolume(effective, effective)
+                appliedAtmosphereVolumes[key] = effective
             } catch (e: Exception) {
                 android.util.Log.w("AudioEngine", "duckAtmospheres('$key') failed: ${e.message}")
             }
