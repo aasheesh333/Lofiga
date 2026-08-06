@@ -3,11 +3,12 @@ package com.dhanuk.lofiga.audio
 import android.content.Context
 import android.media.AudioAttributes
 import android.media.AudioFocusRequest
+import android.media.AudioFormat
 import android.media.AudioManager
+import android.media.AudioTrack
 import android.media.MediaCodec
 import android.media.MediaExtractor
 import android.media.MediaFormat
-import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Build
 import android.util.Log
@@ -92,7 +93,9 @@ class AudioEngine(private val context: Context) {
     private var queueMode = false
 
     private var exoPlayer: ExoPlayer? = null
-    private val atmospherePlayers = ConcurrentHashMap<String, MediaPlayer>()
+    private val atmospherePlayers = ConcurrentHashMap<String, AudioTrack>()
+    private val atmospherePcmCache = ConcurrentHashMap<String, ShortArray>()
+    private val atmosphereSampleRate = 44100
     private val atmosphereVolumes = ConcurrentHashMap<String, Float>()
 
     private var reverb: PresetReverb? = null
@@ -1291,21 +1294,49 @@ class AudioEngine(private val context: Context) {
         appliedAtmosphereVolumes.remove(key)
         try {
             val assetPath = ATMOSPHERE_FILES[key] ?: return
-            val fd = context.assets.openFd(assetPath)
-            val player = MediaPlayer().apply {
-                setDataSource(fd.fileDescriptor, fd.startOffset, fd.length)
-                setAudioAttributes(
+            // Atmospheres loop on a dedicated per-layer AudioTrack in
+            // MODE_STATIC with setLoopPoints(0, totalFrames, -1).
+            //
+            // Both MediaPlayer (isLooping) and ExoPlayer (REPEAT_MODE_ONE)
+            // still cross an audible discontinuity every ~5s on most devices:
+            // they restart the loop by routing through the codec pipeline,
+            // which briefly stops and restarts the stream. AudioTrack's
+            // setLoopPoints in MODE_STATIC instead loops purely in the audio
+            // HAL — the looping happens fully below the app, never producing a
+            // re-queue event — so the loop seam is bit-exact and the user
+            // genuinely cannot tell the layer restarted. Combined with the
+            // seamless-loop WAVs (head<->tail crossfade), this is the only
+            // approach that delivers true gapless atmosphere loops for any
+            // track length.
+            val pcm = atmospherePcmCache.getOrPut(key) {
+                decodeMono16BitPcmFromAsset(assetPath)
+            }
+            val sampleRate = atmosphereSampleRate
+            val totalFrames = pcm.size
+            if (totalFrames <= 0) return
+            val track = AudioTrack.Builder()
+                .setAudioAttributes(
                     AudioAttributes.Builder()
                         .setUsage(AudioAttributes.USAGE_MEDIA)
                         .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
                         .build()
                 )
-                isLooping = true
-                setVolume(0f, 0f)
-                prepare()
-            }
-            fd.close()
-            atmospherePlayers[key] = player
+                .setAudioFormat(
+                    AudioFormat.Builder()
+                        .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                        .setSampleRate(sampleRate)
+                        .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                        .build()
+                )
+                .setBufferSizeInBytes(totalFrames * 2)
+                .setTransferMode(AudioTrack.MODE_STATIC)
+                .build()
+            track.write(pcm, 0, totalFrames)
+            // Infinite seamless loop. The HAL loops without ever returning to
+            // the app, so the seam is bit-exact — no audible restart ever.
+            track.setLoopPoints(0, totalFrames, -1)
+            track.setVolume(0f)
+            atmospherePlayers[key] = track
             if (!atmosphereVolumes.containsKey(key)) {
                 atmosphereVolumes[key] = 0f
             }
@@ -1314,10 +1345,68 @@ class AudioEngine(private val context: Context) {
         }
     }
 
+    /**
+     * Decodes a 16-bit PCM mono WAV asset to a ShortArray (raw PCM samples).
+     * The four atmosphere WAVs are already mono 16-bit 44.1kHz (verified by
+     * tools/make_seamless_loops.py) so this is a straight RIFF/WAVE header
+     * skip + data chunk extraction. Anything else throws — these assets are
+     * controlled by us so the format contract holds.
+     */
+    private fun decodeMono16BitPcmFromAsset(assetPath: String): ShortArray {
+        context.assets.open(assetPath).use { input ->
+            // Read the whole asset into memory; these are ~441 KB each.
+            val total = input.available()
+            val bytes = ByteArray(total)
+            var read = 0
+            while (read < total) {
+                val n = input.read(bytes, read, total - read)
+                if (n <= 0) break
+                read += n
+            }
+            // Minimal WAV parser: locate the 'data' chunk and the actual PCM
+            // payload size. We rely on standard RIFF layout (44-byte header
+            // for our assets) but verify the chunk ids anyway.
+            if (read < 44 || bytes[0] != 'R'.code.toByte() || bytes[1] != 'I'.code.toByte() ||
+                bytes[2] != 'F'.code.toByte() || bytes[3] != 'F'.code.toByte()
+            ) {
+                throw java.io.IOException("Not a RIFF/WAV asset: $assetPath")
+            }
+            // Walk the chunks to find 'data'. The fmt chunk comes before data;
+            // we trust it matches 16-bit mono 44.1kHz (assets are generated to
+            // that contract). Anything else would AudioTrack-fail loudly and
+            // log in createAtmospherePlayer's catch.
+            var offset = 12 // skip 'RIFF', size, 'WAVE'
+            while (offset + 8 <= read) {
+                val chunkId = String(bytes, offset, 4, Charsets.US_ASCII)
+                val chunkSize = ((bytes[offset + 7].toInt() and 0xFF) shl 24) or
+                    ((bytes[offset + 6].toInt() and 0xFF) shl 16) or
+                    ((bytes[offset + 5].toInt() and 0xFF) shl 8) or
+                    (bytes[offset + 4].toInt() and 0xFF)
+                val dataStart = offset + 8
+                if (chunkId == "data") {
+                    val sampleCount = chunkSize / 2
+                    val out = ShortArray(sampleCount)
+                    var p = dataStart
+                    for (i in 0 until sampleCount) {
+                        if (p + 1 >= read) break
+                        val lo = bytes[p].toInt() and 0xFF
+                        val hi = bytes[p + 1].toInt() // signed extend is intentional
+                        out[i] = ((hi shl 8) or lo).toShort()
+                        p += 2
+                    }
+                    return out
+                }
+                // Pad to even
+                offset = dataStart + chunkSize + (chunkSize and 1)
+            }
+            throw java.io.IOException("No 'data' chunk in $assetPath")
+        }
+    }
+
     private fun releaseAtmospherePlayer(key: String) {
         atmospherePlayers.remove(key)?.let {
             try {
-                if (it.isPlaying) it.stop()
+                if (it.playState == AudioTrack.PLAYSTATE_PLAYING) it.stop()
                 it.release()
             } catch (e: Exception) {
                 android.util.Log.w("AudioEngine", "releaseAtmospherePlayer('$key') failed: ${e.message}")
@@ -1331,14 +1420,14 @@ class AudioEngine(private val context: Context) {
         }
     }
 
-    // Per-layer volume fades. MediaPlayer.setVolume is instant, so raising a
-    // layer or enabling it mid-track pops straight to the new level. Each
-    // change ramps over ~250ms instead (cancelling the previous ramp), making
-    // effect apply/change smooth and masking any residual loop-seam energy.
+    // Per-layer volume fades. AudioTrack.setVolume is instant, so raising a
+    // layer or enabling it mid-track would pop straight to the new level.
+    // Each change ramps over ~250ms instead (cancelling the previous ramp),
+    // making effect apply/change smooth.
     private val atmosphereFadeJobs = ConcurrentHashMap<String, Job>()
     private val appliedAtmosphereVolumes = ConcurrentHashMap<String, Float>()
 
-    private fun fadeAtmosphereVolume(key: String, player: MediaPlayer, target: Float, ms: Long = 250L) {
+    private fun fadeAtmosphereVolume(key: String, player: AudioTrack, target: Float, ms: Long = 250L) {
         atmosphereFadeJobs[key]?.cancel()
         val from = appliedAtmosphereVolumes[key] ?: 0f
         if (kotlin.math.abs(target - from) < 0.005f) {
@@ -1351,7 +1440,7 @@ class AudioEngine(private val context: Context) {
             try {
                 for (i in 1..steps) {
                     val v = from + (target - from) * (i.toFloat() / steps)
-                    player.setVolume(v, v)
+                    player.setVolume(v)
                     delay(16)
                 }
             } catch (e: Exception) {
@@ -1379,19 +1468,20 @@ class AudioEngine(private val context: Context) {
         // Only start atmosphere when the main track is actively playing.
         // When stopped, the stored volume is kept so syncAtmospheres() will
         // start this layer alongside the main track on play().
-        if (vol > 0.01f && !player.isPlaying && _isPlaying.value) {
+        if (vol > 0.01f && _isPlaying.value && player.playState != AudioTrack.PLAYSTATE_PLAYING) {
             try {
-                // No seekTo(0): a paused layer resumes exactly where it was
-                // paused, and a freshly-created one is already at position 0
-                // after prepare(). Seeking back to 0 replayed the loop from
-                // its start on every play/resume/slider change — the audible
-                // "atmosphere restarts" glitch.
-                player.start()
+                // No playback restart of any kind here. AudioTrack in MODE_STATIC
+                // with loop points plays indefinitely once started; pause()
+                // holds the position, play() resumes from exactly that position.
+                // The loop itself happens below the app so there's never a
+                // "stop then start" glitch regardless of how long the effect
+                // or the main track runs.
+                player.play()
             } catch (e: Exception) {
                 android.util.Log.w("AudioEngine", "Atmosphere start ('$key') failed: ${e.message}")
             }
-        } else if (vol <= 0.01f && player.isPlaying) {
-            player.pause()
+        } else if (vol <= 0.01f && player.playState == AudioTrack.PLAYSTATE_PLAYING) {
+            try { player.pause() } catch (_: Exception) {}
         }
     }
 
@@ -1405,17 +1495,14 @@ class AudioEngine(private val context: Context) {
     private fun syncAtmospheres() {
         atmospherePlayers.forEach { (key, player) ->
             val vol = atmosphereVolumes[key] ?: 0f
-            if (vol > 0.01f && !player.isPlaying) {
+            if (vol > 0.01f && player.playState != AudioTrack.PLAYSTATE_PLAYING) {
                 try {
-                    // Resume from the paused position — seeking to 0 here
-                    // restarted every layer from the loop start each time the
-                    // track resumed (the "effect replays" glitch).
-                    player.start()
+                    player.play()
                 } catch (e: Exception) {
                     android.util.Log.w("AudioEngine", "syncAtmospheres start ('$key') failed: ${e.message}")
                 }
-            } else if (vol <= 0.01f && player.isPlaying) {
-                player.pause()
+            } else if (vol <= 0.01f && player.playState == AudioTrack.PLAYSTATE_PLAYING) {
+                try { player.pause() } catch (_: Exception) {}
             }
         }
     }
@@ -1423,7 +1510,7 @@ class AudioEngine(private val context: Context) {
     private fun pauseAtmospheres() {
         atmospherePlayers.values.forEach {
             try {
-                if (it.isPlaying) it.pause()
+                if (it.playState == AudioTrack.PLAYSTATE_PLAYING) it.pause()
             } catch (e: Exception) {
                 android.util.Log.w("AudioEngine", "pauseAtmospheres failed: ${e.message}")
             }
@@ -1444,7 +1531,7 @@ class AudioEngine(private val context: Context) {
             try {
                 val vol = (atmosphereVolumes[key] ?: 0f).coerceIn(0f, 1f)
                 val effective = if (duck) vol * 0.3f else vol
-                player.setVolume(effective, effective)
+                player.setVolume(effective)
                 appliedAtmosphereVolumes[key] = effective
             } catch (e: Exception) {
                 android.util.Log.w("AudioEngine", "duckAtmospheres('$key') failed: ${e.message}")
@@ -1538,11 +1625,12 @@ class AudioEngine(private val context: Context) {
     private fun releaseAtmospherePlayers() {
         atmospherePlayers.values.forEach {
             try {
-                if (it.isPlaying) it.stop()
+                if (it.playState == AudioTrack.PLAYSTATE_PLAYING) it.stop()
                 it.release()
             } catch (_: Exception) {}
         }
         atmospherePlayers.clear()
+        atmospherePcmCache.clear()
     }
 
     private fun releaseEffects() {

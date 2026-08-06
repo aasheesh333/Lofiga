@@ -668,10 +668,11 @@ object ExportService {
                             decoder.queueInputBuffer(inIdx, 0, sampleSize, sampleTimeUs, 0)
                             extractor.advance()
                             if (inputDuration > 0) {
-                                // Decode phase covers 0..0.45 of total progress;
-                                // the encode phase continues 0.45..0.95.
+                                // Decode covers the bulk of the bar (0..0.9)
+                                // because decoding the input is the long pole.
+                                // The encode phase only finishes the last ~5-9%.
                                 val progress = (sampleTimeUs.toFloat() / inputDuration.toFloat())
-                                    .coerceIn(0f, 1f) * 0.45f
+                                    .coerceIn(0f, 1f) * 0.90f
                                 onProgress?.invoke(progress)
                             }
                         }
@@ -823,11 +824,16 @@ object ExportService {
                         pendingOffset += framesToWrite
                         totalFramesEncoded += framesToWrite / 2
                         if (totalDurationUs > 0) {
-                            // Decode phase covers 0..0.45; encode 0.45..0.95
-                            // (monotonic, no jump back to 0.5).
-                            val progress = 0.45f + (pts.toFloat() / totalDurationUs.toFloat())
-                                .coerceIn(0f, 1f) * 0.5f
-                            onProgress?.invoke(progress.coerceAtMost(0.95f))
+                            // Encode covers 0.9..0.96 — a small tail on top of
+                            // the decode-driven 0..0.9. We don't floor this at
+                            // 0.9 (it would jump the bar); instead let decode's
+                            // last sampleTimeUs carry the bar up until the encoder
+                            // catches up. Cap at 0.96: the final 4% is padded by
+                            // the post-loop drain below so the bar visibly crawls
+                            // to 100% instead of sitting at 95% forever.
+                            val progress = 0.90f + (pts.toFloat() / totalDurationUs.toFloat())
+                                .coerceIn(0f, 1f) * 0.06f
+                            onProgress?.invoke(progress.coerceAtMost(0.96f))
                         } else {
                             // No duration metadata at all: chunk-count fallback
                             // that still starts at 0 instead of jumping to 50%.
@@ -887,10 +893,18 @@ object ExportService {
 
             // Drain remaining output. Bounded: a codec that never flags EOS
             // (some devices) must not hang the export at ~95% forever — give
-            // it ~3k polls then finalize the muxer with what we have.
+            // it ~3k polls then finalize the muxer with what we have. Pad the
+            // bar across the drain so it visibly crawls 96% -> ~99% instead of
+            // sitting at a hard cap and then snapping to 100%.
             var drainTries = 0
+            val drainProgressBase = 0.96f
+            val drainProgressSpan = 0.03f
             while (!cancelFlag.get() && drainTries < 3000) {
                 drainTries++
+                if ((drainTries % 50) == 0) {
+                    val frac = drainTries.toFloat() / 3000f
+                    onProgress?.invoke(drainProgressBase + drainProgressSpan * frac)
+                }
                 val bufInfo = MediaCodec.BufferInfo()
                 val outIdx = encoder.dequeueOutputBuffer(bufInfo, 5000)
                 if (outIdx < 0) break
@@ -917,6 +931,9 @@ object ExportService {
                 encoder.releaseOutputBuffer(outIdx, false)
                 if (bufInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) break
             }
+            // Bridge to 99% so the user sees the bar essentially done before
+            // the muxer is finalized; the final 1.0f is emitted below in finally.
+            onProgress?.invoke(0.99f)
         } finally {
             source.close()
             if (muxerStarted) try { muxer.stop() } catch (_: Exception) {}
@@ -988,15 +1005,18 @@ object ExportService {
 
                 if (totalDurationUs > 0) {
                     val pts = (totalFramesWritten * 1000000L) / 44100
-                    // Decode phase covers 0..0.45; encode 0.45..0.95.
-                    val progress = 0.45f + (pts.toFloat() / totalDurationUs.toFloat())
-                        .coerceIn(0f, 1f) * 0.5f
-                    onProgress?.invoke(progress.coerceAtMost(0.95f))
+                    // WAV path is a single linear write loop: just map pts to
+                    // 0..0.97. The final 3% is bridged to 100% after the WAV
+                    // header is patched in below.
+                    val progress = (pts.toFloat() / totalDurationUs.toFloat())
+                        .coerceIn(0f, 1f) * 0.97f
+                    onProgress?.invoke(progress)
                 } else {
                     onProgress?.invoke((wavChunksProcessed * 0.02f).coerceAtMost(0.9f))
                 }
             }
 
+            onProgress?.invoke(0.97f)
             raf.seek(0)
             writeWavHeader(raf, 44100, 2, totalDataSize)
             raf.close()

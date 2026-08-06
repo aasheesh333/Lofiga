@@ -77,10 +77,19 @@ class Media3MediaSessionManager(private val context: Context) {
                 session: MediaSession,
                 controller: MediaSession.ControllerInfo
             ): ConnectionResult {
-                // Grant the custom next/prev commands alongside the player's own
-                // commands so the media notification and Android 13+ System UI
-                // can send them.
-                return ConnectionResult.accept(sessionCommands, session.player.availableCommands)
+                // Pre/next are handled by the two custom SessionCommandButtons
+                // we setMediaButtonPreferences()'d. If the player's own
+                // COMMAND_SEEK_TO_NEXT/PREVIOUS stay in availableCommands, the
+                // default media notification provider also renders its own
+                // transport prev/next next to the custom chips — duplicating
+                // the buttons. Trim those four so only our chips appear.
+                val playerCommands = session.player.availableCommands.buildUpon()
+                    .remove(androidx.media3.common.Player.COMMAND_SEEK_TO_NEXT)
+                    .remove(androidx.media3.common.Player.COMMAND_SEEK_TO_PREVIOUS)
+                    .remove(androidx.media3.common.Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM)
+                    .remove(androidx.media3.common.Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)
+                    .build()
+                return ConnectionResult.accept(sessionCommands, playerCommands)
             }
 
             override fun onCustomCommand(
