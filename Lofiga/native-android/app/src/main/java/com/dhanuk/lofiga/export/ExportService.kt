@@ -388,6 +388,15 @@ object ExportService {
             if (availFrames <= 0) return ShortArray(0)
             val avail = ShortArray(availFrames * channels)
             System.arraycopy(state.wsolaCarry, relInStart * channels, avail, 0, avail.size)
+            // CONSUME the remainder: a repeated flush must return empty so the
+            // feed loop marks inputExhausted and the pipeline finalizes.
+            // Previously this branch left wsolaCarry untouched (and never
+            // advanced wsolaSlice), so flush returned the SAME resampled tail
+            // forever — the export encoded that tail endlessly and hung at 96%
+            // until MainViewModel's 10-minute withTimeout fired.
+            state.wsolaCarry = ShortArray(0)
+            state.wsolaGlobalStart = inStart
+            state.wsolaSlice++
             return resampleFramesChunk(avail, (availFrames / tempo).toInt().coerceAtLeast(1), channels)
         }
 
@@ -775,6 +784,16 @@ object ExportService {
 
         try {
             while (!sawEncoderEOS && !cancelFlag.get()) {
+                // Safety net: at the minimum tempo (0.25) the stretched output
+                // is at most 4x the source duration. If we ever exceed 5x, a
+                // feed bug is looping (e.g. flush returning the same tail) —
+                // force end-of-input so the bounded EOS wait finalizes the
+                // file instead of hanging at 96% until the withTimeout.
+                if (totalDurationUs > 0 && !inputExhausted &&
+                    totalFramesEncoded > (totalDurationUs * 44100L / 1000000L) * 5L) {
+                    Log.w("ExportService", "Output exceeds 5x source duration; forcing end-of-input")
+                    inputExhausted = true
+                }
                 // 1) Ensure pendingPcm holds data to encode. Feed raw chunks to
                 //    the streaming pipeline until it emits an output slice (it
                 //    buffers input until a full WSOLA slice can be produced) or
