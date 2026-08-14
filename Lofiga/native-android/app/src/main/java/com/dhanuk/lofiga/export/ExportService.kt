@@ -824,16 +824,16 @@ object ExportService {
                         pendingOffset += framesToWrite
                         totalFramesEncoded += framesToWrite / 2
                         if (totalDurationUs > 0) {
-                            // Encode covers 0.9..0.96 — a small tail on top of
-                            // the decode-driven 0..0.9. We don't floor this at
-                            // 0.9 (it would jump the bar); instead let decode's
-                            // last sampleTimeUs carry the bar up until the encoder
-                            // catches up. Cap at 0.96: the final 4% is padded by
-                            // the post-loop drain below so the bar visibly crawls
-                            // to 100% instead of sitting at 95% forever.
-                            val progress = 0.90f + (pts.toFloat() / totalDurationUs.toFloat())
-                                .coerceIn(0f, 1f) * 0.06f
-                            onProgress?.invoke(progress.coerceAtMost(0.96f))
+                            // Encode is the bottleneck: pts/totalDurationUs tracks
+                            // wall-clock completion (the encode runs at roughly
+                            // realtime). Map it 0..0.96 so the bar starts at 0
+                            // instead of jumping to 90% on the first chunk, then
+                            // let the drain + finalize pad 0.96..1.0. Decode's
+                            // own 0..0.9 mapping never dominates because the
+                            // encode fraction rises in lockstep and stays ahead.
+                            val progress = (pts.toFloat() / totalDurationUs.toFloat())
+                                .coerceIn(0f, 1f) * 0.96f
+                            onProgress?.invoke(progress)
                         } else {
                             // No duration metadata at all: chunk-count fallback
                             // that still starts at 0 instead of jumping to 50%.
@@ -932,15 +932,17 @@ object ExportService {
                 if (bufInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) break
             }
             // Bridge to 99% so the user sees the bar essentially done before
-            // the muxer is finalized; the final 1.0f is emitted below in finally.
+            // the muxer is finalized; the final 1.0f is emitted in finally so
+            // the bar always completes even if finalization throws (previously
+            // the export sat frozen at 96/99% when muxer.stop/release hiccuped).
             onProgress?.invoke(0.99f)
         } finally {
             source.close()
             if (muxerStarted) try { muxer.stop() } catch (_: Exception) {}
             try { muxer.release() } catch (_: Exception) {}
             try { encoder.stop(); encoder.release() } catch (_: Exception) {}
+            onProgress?.invoke(1.0f)
         }
-        onProgress?.invoke(1.0f)
     }
 
     private fun exportAsWavStreaming(
@@ -1021,9 +1023,12 @@ object ExportService {
             writeWavHeader(raf, 44100, 2, totalDataSize)
             raf.close()
 
-            onProgress?.invoke(1.0f)
         } finally {
             source.close()
+            // Guaranteed completion marker: the write loop above already maps
+            // 0..0.97, so 1.0f here is reached even if header patching throws
+            // (previously the bar froze below 100% on that failure path).
+            onProgress?.invoke(1.0f)
         }
     }
 

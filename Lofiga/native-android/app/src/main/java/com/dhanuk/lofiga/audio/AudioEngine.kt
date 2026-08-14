@@ -379,16 +379,26 @@ class AudioEngine(private val context: Context) {
             // running and position polling alive. All operations below are
             // idempotent, so double invocation alongside the manual sets in
             // play()/pause() is harmless.
-            _isPlaying.value = isPlaying
-            if (isPlaying) {
-                startPositionPolling()
-                syncAtmospheres()
-                applyStoredPlaybackParams()
-                onPlaybackStateChanged?.invoke(true)
-            } else {
-                positionJob?.cancel()
-                pauseAtmospheres()
-                onPlaybackStateChanged?.invoke(false)
+            // Wrapped in try/catch: this callback runs on the ExoPlayer
+            // application thread and an uncaught exception here is wrapped by
+            // media3 as an "unexpected runtime error" that KILLS the player —
+            // which is the recurring "error after some time / only atmosphere
+            // keeps playing" symptom when atmosphere AudioTrack handling
+            // hiccups (e.g. "AudioTrack start failed").
+            try {
+                _isPlaying.value = isPlaying
+                if (isPlaying) {
+                    startPositionPolling()
+                    syncAtmospheres()
+                    applyStoredPlaybackParams()
+                    onPlaybackStateChanged?.invoke(true)
+                } else {
+                    positionJob?.cancel()
+                    pauseAtmospheres()
+                    onPlaybackStateChanged?.invoke(false)
+                }
+            } catch (e: Exception) {
+                Log.e("AudioEngine", "onIsPlayingChanged failed: ${e.message}", e)
             }
         }
 
@@ -401,6 +411,29 @@ class AudioEngine(private val context: Context) {
                 // a generic label, and stop the UI/atmospheres from pretending
                 // playback is still active after the player died.
                 val causeClass = error.cause?.javaClass?.simpleName
+                // "Sometimes only the atmosphere layers play, music stops":
+                // Sonic's internal buffer overflows at extreme tempo/pitch
+                // combos (setPlaybackParameters), killing the player while the
+                // realtime atmosphere AudioTracks keep going. Not a crash —
+                // reset tempo/pitch to neutral and resume instead of dying.
+                if (causeClass == "SonicOutputBufferFullException") {
+                    try {
+                        storedTempo = 1f
+                        storedPitch = 0f
+                        pendingTempo = 1f
+                        pendingPitch = 0f
+                        exoPlayer?.let { p ->
+                            p.setPlaybackParameters(PlaybackParameters(1f, 1f))
+                            if (p.playbackState == androidx.media3.common.Player.STATE_READY && !p.isPlaying) {
+                                p.play()
+                            }
+                        }
+                        Log.w("AudioEngine", "Self-healed from Sonic overflow (tempo/pitch reset to neutral)")
+                        return
+                    } catch (e2: Exception) {
+                        Log.e("AudioEngine", "Sonic self-heal failed: ${e2.message}", e2)
+                    }
+                }
                 _error.value = "${pendingErrorPrefix}: ${error.errorCodeName}" +
                     (if (causeClass != null) " ($causeClass)" else "")
                 Log.e("AudioEngine", "Player error: code=${error.errorCodeName} msg=${error.message}", error)
@@ -711,6 +744,9 @@ class AudioEngine(private val context: Context) {
     // --- Audio Effects ---
 
     private fun initEffects(audioSessionId: Int) {
+        // Any setReverbAndDelay() coroutine from the PREVIOUS effect chain
+        // must die before we build the new one (see effectsGeneration).
+        effectsGeneration++
         // Release any previous audiofx first — when called via the
         // onAudioSessionIdChanged routing callback, we're re-binding to a new
         // session; when called fresh after a track switch, caller has already
@@ -773,6 +809,14 @@ class AudioEngine(private val context: Context) {
     private var pendingBass: Float = 0f
     private var pendingTreble: Float = 0f
 
+    // Monotonic generation counter bumped by initEffects()/releaseEffects().
+    // setReverbAndDelay() runs on an IO dispatcher; without the guard, a fast
+    // track-switch can release() an effect object while that coroutine is
+    // still calling setPreset()/setEnabled() on it (IllegalStateException on
+    // the audiofx binder), which media3 then surfaces as the unexpected
+    // runtime player error. The coroutine bails when it sees a stale gen.
+    private var effectsGeneration = 0
+
     fun setBassBoost(strength: Float) {
         pendingBass = strength
         bassBoost?.let {
@@ -780,7 +824,7 @@ class AudioEngine(private val context: Context) {
                 val s = (strength * 1000).toInt().coerceIn(0, 1000).toShort()
                 it.setStrength(s)
                 it.enabled = strength > 0.01f
-            } catch (e: Exception) { Log.e("AudioEngine", "Reverb error: ${e.message}", e) }
+            } catch (e: Exception) { Log.e("AudioEngine", "BassBoost error: ${e.message}", e) }
         }
     }
 
@@ -807,7 +851,7 @@ class AudioEngine(private val context: Context) {
                     }
                     eq.enabled = false
                 }
-            } catch (e: Exception) { Log.e("AudioEngine", "Reverb error: ${e.message}", e) }
+            } catch (e: Exception) { Log.e("AudioEngine", "TrebleCut error: ${e.message}", e) }
         }
     }
 
@@ -825,8 +869,10 @@ class AudioEngine(private val context: Context) {
         pendingDelay = delayWet
         reverb?.let { r ->
             // Reverb changes are IPC calls. Running them on UI thread causes instant ANR when dragging sliders!
+            val myGen = effectsGeneration
             scope.launch(Dispatchers.IO) {
                 try {
+                    if (myGen != effectsGeneration) return@launch  // effects released/rebuilt meanwhile
                     val combined = (reverbWet + delayWet * 1.0f).coerceIn(0f, 1f)
                     val wasEnabled = r.enabled
                     val shouldEnable = combined > 0.01f
@@ -1634,6 +1680,7 @@ class AudioEngine(private val context: Context) {
     }
 
     private fun releaseEffects() {
+        effectsGeneration++  // any in-flight setReverbAndDelay() coroutine bails
         reverb?.release()
         bassBoost?.release()
         equalizer?.release()

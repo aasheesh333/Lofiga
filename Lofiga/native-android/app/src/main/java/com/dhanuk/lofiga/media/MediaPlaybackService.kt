@@ -15,6 +15,14 @@ import com.dhanuk.lofiga.R
 @OptIn(UnstableApi::class)
 class MediaPlaybackService : MediaSessionService() {
 
+    override fun onCreate() {
+        super.onCreate()
+        // Custom provider renders exactly [Prev] [Play/Pause] [Next] — the
+        // default 1.5.x provider duplicated prev/next (its built-in transport
+        // row plus the custom command buttons).
+        setMediaNotificationProvider(LofigaNotificationProvider(this))
+    }
+
     override fun onGetSession(controllerInfo: ControllerInfo): MediaSession? {
         return MediaSessionManagerHolder.mediaSession
     }

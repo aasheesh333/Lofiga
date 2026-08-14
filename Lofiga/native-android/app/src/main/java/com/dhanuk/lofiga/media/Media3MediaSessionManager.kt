@@ -9,14 +9,12 @@ import android.os.Bundle
 import android.util.Log
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.session.CommandButton
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSession.ConnectionResult
 import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionCommands
 import androidx.media3.session.SessionResult
 import com.dhanuk.lofiga.MainActivity
-import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 
@@ -29,8 +27,10 @@ class Media3MediaSessionManager(private val context: Context) {
     var onPreviousTrack: (() -> Unit)? = null
 
     companion object {
-        private const val ACTION_NEXT = "ACTION_NEXT"
-        private const val ACTION_PREV = "ACTION_PREV"
+        // Shared with LofigaNotificationProvider so the buttons it renders and
+        // the session commands granted in onConnect always match by name.
+        const val ACTION_NEXT = LofigaNotificationProvider.ACTION_NEXT
+        const val ACTION_PREV = LofigaNotificationProvider.ACTION_PREV
     }
 
     fun connect(player: Player) {
@@ -46,31 +46,15 @@ class Media3MediaSessionManager(private val context: Context) {
         val nextCommand = SessionCommand(ACTION_NEXT, Bundle.EMPTY)
         val prevCommand = SessionCommand(ACTION_PREV, Bundle.EMPTY)
 
-        // The default media notification provider (1.5.x) shows custom buttons
-        // from MediaSession#setMediaButtonPreferences and only when the custom
-        // commands are granted to the connecting controller via onConnect.
+        // The custom LofigaNotificationProvider renders its own
+        // [Previous] [Play/Pause] [Next] row via getMediaButtons(), so no
+        // setMediaButtonPreferences() is needed. The session commands below
+        // are still granted to connecting controllers (SystemUI, notification
+        // manager) so the custom next/prev actions can be dispatched.
         val sessionCommands = SessionCommands.Builder()
             .add(nextCommand)
             .add(prevCommand)
             .build()
-
-        val mediaButtonPreferences = try {
-            ImmutableList.of(
-                CommandButton.Builder(CommandButton.ICON_PREVIOUS)
-                    .setDisplayName("Previous")
-                    .setSessionCommand(prevCommand)
-                    .setEnabled(true)
-                    .build(),
-                CommandButton.Builder(CommandButton.ICON_NEXT)
-                    .setDisplayName("Next")
-                    .setSessionCommand(nextCommand)
-                    .setEnabled(true)
-                    .build()
-            )
-        } catch (e: Exception) {
-            Log.w("Media3MediaSessionManager", "CommandButton build failed: ${e.message}")
-            ImmutableList.of()
-        }
 
         val sessionCallback = object : MediaSession.Callback {
             override fun onConnect(
@@ -78,11 +62,10 @@ class Media3MediaSessionManager(private val context: Context) {
                 controller: MediaSession.ControllerInfo
             ): ConnectionResult {
                 // Pre/next are handled by the two custom SessionCommandButtons
-                // we setMediaButtonPreferences()'d. If the player's own
-                // COMMAND_SEEK_TO_NEXT/PREVIOUS stay in availableCommands, the
-                // default media notification provider also renders its own
-                // transport prev/next next to the custom chips — duplicating
-                // the buttons. Trim those four so only our chips appear.
+                // that LofigaNotificationProvider renders. If the player's own
+                // COMMAND_SEEK_TO_NEXT/PREVIOUS stayed in availableCommands,
+                // SystemUI's transport row would double the buttons. Trim those
+                // four so only the provider's row appears.
                 val playerCommands = session.player.availableCommands.buildUpon()
                     .remove(androidx.media3.common.Player.COMMAND_SEEK_TO_NEXT)
                     .remove(androidx.media3.common.Player.COMMAND_SEEK_TO_PREVIOUS)
@@ -114,13 +97,6 @@ class Media3MediaSessionManager(private val context: Context) {
             .setId("lofiga_media_session")
             .setCallback(sessionCallback)
             .build()
-            .also { session ->
-                try {
-                    session.setMediaButtonPreferences(mediaButtonPreferences)
-                } catch (e: Exception) {
-                    Log.w("Media3MediaSessionManager", "setMediaButtonPreferences failed: ${e.message}")
-                }
-            }
     }
 
     val session: MediaSession? get() = mediaSession
