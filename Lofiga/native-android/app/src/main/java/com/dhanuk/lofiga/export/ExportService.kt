@@ -765,6 +765,13 @@ object ExportService {
         // empty: the feed has nothing left to produce.
         var inputExhausted = false
         var eosSignaled = false
+        // Consecutive empty output polls after EOS was queued. Encoders on some
+        // firmware (e.g. MIUI) never deliver the final EOS output frame; without
+        // this bound the export spins at 96% until MainViewModel's withTimeout
+        // kills it 10 minutes later. After the cap we finalize with what we have
+        // (the tail is at most a few AAC frames short — inaudible).
+        var eosStallTries = 0
+        val MAX_EOS_STALL_TRIES = 30
 
         try {
             while (!sawEncoderEOS && !cancelFlag.get()) {
@@ -839,9 +846,15 @@ object ExportService {
                             // that still starts at 0 instead of jumping to 50%.
                             onProgress?.invoke((chunksProcessed * 0.02f).coerceAtMost(0.9f))
                         }
-                    } else {
+                    } else if (!eosSignaled) {
                         // Nothing left to encode — input exhausted and flushed.
-                        encoder.queueInputBuffer(inputIdx, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
+                        // Queue EOS exactly ONCE: the previous code re-queued it
+                        // on every free input buffer, which can confuse device
+                        // encoders into never emitting the final output frame.
+                        try {
+                            encoder.queueInputBuffer(inputIdx, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
+                            eosSignaled = true
+                        } catch (_: Exception) {}
                     }
                 } else if (inputExhausted && pendingOffset >= pendingPcm.size && !eosSignaled) {
                     // Encoder input buffers are all full but there is nothing
@@ -855,13 +868,19 @@ object ExportService {
                     } catch (_: Exception) {}
                 }
 
+                val waitingForEos = inputExhausted && pendingOffset >= pendingPcm.size && eosSignaled
                 val bufInfo = MediaCodec.BufferInfo()
-                var outIdx = encoder.dequeueOutputBuffer(bufInfo, 10000)
+                var wroteAnyOutput = false
+                // Once everything is queued, poll with a short timeout: if the
+                // encoder never delivers its EOS frame we must notice the stall
+                // quickly (2s per poll) instead of blocking 10s per iteration.
+                var outIdx = encoder.dequeueOutputBuffer(bufInfo, if (waitingForEos) 2000 else 10000)
                 while (outIdx >= 0) {
                     if (bufInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG != 0) {
                         bufInfo.size = 0
                     }
                     if (bufInfo.size > 0) {
+                        wroteAnyOutput = true
                         if (!muxerStarted) {
                             trackIndex = muxer.addTrack(encoder.outputFormat)
                             muxer.start()
@@ -889,24 +908,42 @@ object ExportService {
                     encoder.releaseOutputBuffer(outIdx, false)
                     outIdx = encoder.dequeueOutputBuffer(bufInfo, 0)
                 }
+
+                // Bounded EOS wait: some device encoders swallow the EOS frame
+                // entirely. Only count iterations where nothing was written —
+                // a slow but productive flush must never be cut short.
+                if (!sawEncoderEOS && waitingForEos) {
+                    if (wroteAnyOutput) {
+                        eosStallTries = 0
+                    } else {
+                        eosStallTries++
+                        if (eosStallTries >= MAX_EOS_STALL_TRIES) {
+                            Log.w("ExportService", "Encoder never emitted EOS after $eosStallTries polls; finalizing anyway")
+                            break
+                        }
+                    }
+                } else {
+                    eosStallTries = 0
+                }
             }
 
             // Drain remaining output. Bounded: a codec that never flags EOS
-            // (some devices) must not hang the export at ~95% forever — give
-            // it ~3k polls then finalize the muxer with what we have. Pad the
-            // bar across the drain so it visibly crawls 96% -> ~99% instead of
-            // sitting at a hard cap and then snapping to 100%.
+            // (some devices) must not hang the export forever — give it 60
+            // polls of at most 1s each (~1 minute worst case) then finalize
+            // the muxer with what we have. Pad the bar across the drain so it
+            // visibly crawls 96% -> ~99% instead of snapping to 100%.
             var drainTries = 0
+            val MAX_DRAIN_TRIES = 60
             val drainProgressBase = 0.96f
             val drainProgressSpan = 0.03f
-            while (!cancelFlag.get() && drainTries < 3000) {
+            while (!cancelFlag.get() && drainTries < MAX_DRAIN_TRIES) {
                 drainTries++
-                if ((drainTries % 50) == 0) {
-                    val frac = drainTries.toFloat() / 3000f
+                if ((drainTries % 10) == 0) {
+                    val frac = drainTries.toFloat() / MAX_DRAIN_TRIES.toFloat()
                     onProgress?.invoke(drainProgressBase + drainProgressSpan * frac)
                 }
                 val bufInfo = MediaCodec.BufferInfo()
-                val outIdx = encoder.dequeueOutputBuffer(bufInfo, 5000)
+                val outIdx = encoder.dequeueOutputBuffer(bufInfo, 1000)
                 if (outIdx < 0) break
                 if (bufInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG != 0) {
                     bufInfo.size = 0

@@ -114,6 +114,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) { 
                 audioEngine.albumArtUri = song.albumArtUri
                 audioEngine.currentTrackId = song.id
                 _currentTrack.value = song
+                pushSessionArtwork(song)
                 _currentTrackIndex.value = idx
                 applyCurrentValuesToEngine()
             }
@@ -238,6 +239,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) { 
         }
         if (success) {
             _currentTrack.value = track
+            pushSessionArtwork(track)
             _currentTrackIndex.value = filteredSongs.value.indexOf(track)
             applyPresetOnLoad()
         } else {
@@ -252,10 +254,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) { 
         audioEngine.currentTrackId = 0  // file-picked tracks have no MediaStore id
         val success = audioEngine.loadTrackFromFile(filePath, autoPlay = true)
         if (success) {
-            _currentTrack.value = AudioTrack(
+            val track = AudioTrack(
                 title = fileName,
                 dataPath = filePath
             )
+            _currentTrack.value = track
+            pushSessionArtwork(track)
             // Not part of the MediaStore library list, so reset the index so
             // next/previous don't jump to an unrelated library position.
             _currentTrackIndex.value = -1
@@ -264,6 +268,63 @@ class MainViewModel(application: Application) : AndroidViewModel(application) { 
         } else {
             _snackbarMessage.tryEmit(audioEngine.error.value ?: "Failed to load track")
             return false
+        }
+    }
+
+    // Push the current track's embedded album art to the Media3 session so
+    // the media notification / Android 13+ SystemUI cover updates with the
+    // song. The library scan never populates albumArtUri (AudioQueryHelper),
+    // so MediaItems carry no artwork for the notification; the in-app UI
+    // shows covers via Coil's AlbumArtFetcher, but the notification only
+    // reads the session's player metadata. MediaMetadataRetriever here is the
+    // same source the Coil fetcher uses. media3 1.5.1 has no
+    // session.setMediaMetadata, so we rewrite the CURRENT MediaItem's
+    // metadata in the player queue via setMediaItems — ExoPlayer keeps
+    // playing seamlessly when the current item is unchanged (same mediaId).
+    // Generation-guarded: a slow extraction from an earlier track must not
+    // overwrite the current one's art.
+    private var sessionArtworkGeneration = 0L
+
+    private fun pushSessionArtwork(track: AudioTrack) {
+        val myGen = ++sessionArtworkGeneration
+        val path = track.dataPath
+        if (path.isBlank()) return
+        viewModelScope.launch {
+            val artwork = withContext(Dispatchers.IO) {
+                runCatching {
+                    val retriever = android.media.MediaMetadataRetriever()
+                    try {
+                        retriever.setDataSource(path)
+                        retriever.embeddedPicture
+                    } finally {
+                        runCatching { retriever.release() }
+                    }
+                }.getOrNull()
+            }
+            withContext(Dispatchers.Main) {
+                if (myGen != sessionArtworkGeneration) return@withContext  // superseded by a newer track
+                val player = audioEngine.playerForSession ?: return@withContext
+                val idx = player.currentMediaItemIndex
+                val current = player.currentMediaItem ?: return@withContext
+                val metadata = androidx.media3.common.MediaMetadata.Builder()
+                    .setTitle(track.title)
+                    .setArtist(track.artist)
+                    .apply {
+                        if (artwork != null) {
+                            setArtworkData(
+                                artwork,
+                                androidx.media3.common.MediaMetadata.PICTURE_TYPE_FRONT_COVER
+                            )
+                        }
+                    }
+                    .build()
+                runCatching {
+                    // replaceMediaItems swaps only this entry; the copy keeps the
+                    // same mediaId/uri, so ExoPlayer continues playback seamlessly.
+                    val updated = current.buildUpon().setMediaMetadata(metadata).build()
+                    player.replaceMediaItems(idx, idx + 1, listOf(updated))
+                }
+            }
         }
     }
 
@@ -482,10 +543,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) { 
             return false
         }
 
-        _currentTrack.value = AudioTrack(
+        val track = AudioTrack(
             title = config.fileName,
             dataPath = config.filePath
         )
+        _currentTrack.value = track
+        pushSessionArtwork(track)
         // Loaded from a saved config (arbitrary file), not the library list —
         // reset the index so next/previous start from a sensible position.
         _currentTrackIndex.value = -1
