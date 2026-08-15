@@ -309,7 +309,17 @@ object ExportService {
                     val pitchFactor = Math.pow(2.0, (pitch / 12.0)).toFloat().coerceIn(0.25f, 4f)
                     setPitch(pitchFactor)
                     configure(AudioProcessor.AudioFormat(sampleRate, channels, C.ENCODING_PCM_16BIT))
-                }
+                    // configure() only stores the pending format — the actual
+                    // Sonic engine is instantiated in flush(). Inside ExoPlayer,
+                    // DefaultAudioSink calls flush() right after configure();
+                    // driving the processor by hand skips it, leaving the
+                    // engine null, and queueInput() throws an NPE (R8 lowers
+                    // media3's Assertions.checkNotNull into a getClass() null
+                    // probe: "Attempt to invoke virtual method ... getClass()
+                    // on a null object reference"). takeIf(isActive) catches a
+                    // sub-1e-4 tempo delta where flush() creates no engine.
+                    flush()
+                }.takeIf { it.isActive() }
             } catch (t: Throwable) {
                 Log.w("ExportService", "Sonic init failed: ${t.javaClass.simpleName}: ${t.message}")
                 null
