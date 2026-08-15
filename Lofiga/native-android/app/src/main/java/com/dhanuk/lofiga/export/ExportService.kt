@@ -302,30 +302,22 @@ object ExportService {
         // replayed with a small phase mismatch inside each overlap region,
         // which comb-filtered the signal (audible as "doubled"/"vibrating"
         // audio). Sonic's correlation-based grain placement avoids that.
-        val sonic: SonicAudioProcessor? = if (tempo != 1f || pitch != 0f) {
+        // var (not val): processChunk/self-heal can replace or drop the
+        // processor if it throws mid-stream (see processChunk's recovery).
+        var sonic: SonicAudioProcessor? = if (tempo != 1f || pitch != 0f) {
             try {
-                SonicAudioProcessor().apply {
-                    setSpeed(tempo.coerceIn(0.1f, 8f))
-                    val pitchFactor = Math.pow(2.0, (pitch / 12.0)).toFloat().coerceIn(0.25f, 4f)
-                    setPitch(pitchFactor)
-                    configure(AudioProcessor.AudioFormat(sampleRate, channels, C.ENCODING_PCM_16BIT))
-                    // configure() only stores the pending format — the actual
-                    // Sonic engine is instantiated in flush(). Inside ExoPlayer,
-                    // DefaultAudioSink calls flush() right after configure();
-                    // driving the processor by hand skips it, leaving the
-                    // engine null, and queueInput() throws an NPE (R8 lowers
-                    // media3's Assertions.checkNotNull into a getClass() null
-                    // probe: "Attempt to invoke virtual method ... getClass()
-                    // on a null object reference"). takeIf(isActive) catches a
-                    // sub-1e-4 tempo delta where flush() creates no engine.
-                    flush()
-                }.takeIf { it.isActive() }
+                createSonicProcessor(tempo, pitch, sampleRate, channels)
             } catch (t: Throwable) {
                 Log.w("ExportService", "Sonic init failed: ${t.javaClass.simpleName}: ${t.message}")
                 null
             }
         } else null
         var sonicEosQueued = false
+        // True once the Sonic processor blew up mid-stream and was rebuilt (or
+        // dropped) by processChunk's self-heal — a second failure means the
+        // stream is fundamentally broken; fall back to no time-stretch instead
+        // of retrying forever.
+        var sonicRecovered = false
 
         fun loadAtmospheres(context: Context) {
             val layers = mutableListOf<Pair<ShortArray, Int>>()
@@ -346,6 +338,34 @@ object ExportService {
     }
 
     /**
+     * Builds a ready-to-feed SonicAudioProcessor. configure() only stores the
+     * pending format — the actual Sonic engine is instantiated in flush().
+     * Inside ExoPlayer, DefaultAudioSink calls flush() right after
+     * configure(); driving the processor by hand skips it, leaving the engine
+     * null, and queueInput() throws an NPE (R8 lowers media3's
+     * Assertions.checkNotNull into a getClass() null probe: "Attempt to invoke
+     * virtual method ... getClass() on a null object reference").
+     * takeIf(isActive) catches a sub-1e-4 tempo delta where flush() creates
+     * no engine.
+     */
+    private fun createSonicProcessor(
+        tempo: Float,
+        semitones: Float,
+        sampleRate: Int,
+        channels: Int
+    ): SonicAudioProcessor? = SonicAudioProcessor().apply {
+        setSpeed(tempo.coerceIn(0.1f, 8f))
+        val pitchFactor = Math.pow(2.0, (semitones / 12.0)).toFloat().coerceIn(0.25f, 4f)
+        setPitch(pitchFactor)
+        configure(AudioProcessor.AudioFormat(sampleRate, channels, C.ENCODING_PCM_16BIT))
+        // media3 1.9+: the no-arg flush() is deprecated and the AudioProcessor
+        // default THROWS IllegalStateException — SonicAudioProcessor overrides
+        // only flush(StreamMetadata), so the deprecated overload must never be
+        // called; pass a zero-offset StreamMetadata instead.
+        flush(AudioProcessor.StreamMetadata(0L))
+    }.takeIf { it.isActive() }
+
+    /**
      * Process a single chunk of PCM through all active effects. Returns null
      * when Sonic is still buffering input (the caller must keep feeding
      * chunks; no output is produced yet).
@@ -356,18 +376,38 @@ object ExportService {
         sampleRate: Int,
         channels: Int
     ): ShortArray? {
-        val sonic = state.sonic
-        if (sonic != null) {
-            val bytes = ByteBuffer.allocateDirect(chunk.size * 2).order(ByteOrder.LITTLE_ENDIAN)
-            bytes.asShortBuffer().put(chunk)
-            bytes.rewind()
-            sonic.queueInput(bytes)
-            val out = sonic.getOutput()
-            val n = out.remaining()
-            if (n <= 0) return null
-            val shorts = ShortArray(n / 2)
-            out.asShortBuffer().get(shorts)
-            return finishProcessChunk(shorts, state, channels)
+        var sonic = state.sonic
+        while (sonic != null) {
+            try {
+                val bytes = ByteBuffer.allocateDirect(chunk.size * 2).order(ByteOrder.LITTLE_ENDIAN)
+                bytes.asShortBuffer().put(chunk)
+                bytes.rewind()
+                sonic.queueInput(bytes)
+                val out = sonic.getOutput()
+                val n = out.remaining()
+                if (n <= 0) return null
+                val shorts = ShortArray(n / 2)
+                out.asShortBuffer().get(shorts)
+                return finishProcessChunk(shorts, state, channels)
+            } catch (t: Throwable) {
+                // media3's Sonic (the SonicOutputBufferFullException path in
+                // ExoPlayer, plus the native-array races observed on some
+                // firmware) can throw mid-stream at extreme tempo/pitch
+                // combos. A single corrupted chunk must not kill the whole
+                // export: rebuild the processor and drop THIS chunk (at most
+                // ~1s of audio; the Sonic grain overlap masks the gap) —
+                // mirroring AudioEngine's live self-heal.
+                if (state.sonicRecovered) {
+                    Log.e("ExportService", "Sonic failed twice for the same stream; falling back to passthrough", t)
+                    state.sonic = null
+                    return finishProcessChunk(chunk, state, channels)
+                }
+                Log.w("ExportService", "Sonic threw ${t.javaClass.simpleName}: ${t.message}; recovering with neutral parameters")
+                state.sonicRecovered = true
+                state.sonic = try { createSonicProcessor(1f, 0f, sampleRate, channels) } catch (_: Throwable) { null }
+                sonic = state.sonic
+                if (sonic == null) return finishProcessChunk(chunk, state, channels)
+            }
         }
         return finishProcessChunk(chunk, state, channels)
     }
@@ -383,23 +423,33 @@ object ExportService {
         channels: Int
     ): ShortArray? {
         val sonic = state.sonic ?: return null
-        if (!state.sonicEosQueued) {
-            sonic.queueEndOfStream()
-            state.sonicEosQueued = true
-        }
-        if (sonic.isEnded()) return null
-        var guard = 0
-        while (guard++ < 5000) {
-            val out = sonic.getOutput()
-            val n = out.remaining()
-            if (n > 0) {
-                val shorts = ShortArray(n / 2)
-                out.asShortBuffer().get(shorts)
-                return shorts
+        try {
+            if (!state.sonicEosQueued) {
+                sonic.queueEndOfStream()
+                state.sonicEosQueued = true
             }
             if (sonic.isEnded()) return null
+            var guard = 0
+            while (guard++ < 5000) {
+                val out = sonic.getOutput()
+                val n = out.remaining()
+                if (n > 0) {
+                    val shorts = ShortArray(n / 2)
+                    out.asShortBuffer().get(shorts)
+                    return shorts
+                }
+                if (sonic.isEnded()) return null
+            }
+            return null
+        } catch (t: Throwable) {
+            // Same self-heal rationale as processChunk: a Sonic that throws
+            // during the tail drain must not abort the export. Treat the
+            // drained tail as empty so the caller finalizes with what we have
+            // (the lost tail is sub-second and inaudible).
+            Log.w("ExportService", "Sonic drain threw ${t.javaClass.simpleName}: ${t.message}; stopping drain")
+            state.sonic = null
+            return null
         }
-        return null
     }
 
     /** Applies delay/reverb/bass/treble + atmosphere mixing to stretched PCM. */
@@ -765,6 +815,20 @@ object ExportService {
         var eosStallTries = 0
         val MAX_EOS_STALL_TRIES = 30
 
+        // Wall-clock start of the finalize phase (EOS queued). Some encoders
+        // never deliver the EOS frame — the bounded wait (2s polls) and the
+        // bounded drain afterwards can take a couple of minutes while the
+        // encode-derived progress is already at its 0.96 cap. During that
+        // time the bar previously sat frozen at ~95%; instead crawl it
+        // TIME-BASED across 0.96..0.995 over the worst-case window so it never
+        // looks stuck again.
+        var finalizeStartMs = 0L
+        fun reportFinalizeProgress() {
+            if (finalizeStartMs == 0L) finalizeStartMs = System.currentTimeMillis()
+            val frac = ((System.currentTimeMillis() - finalizeStartMs) / 120_000f).coerceIn(0f, 1f)
+            onProgress?.invoke(0.96f + 0.035f * frac)
+        }
+
         val wallClockDeadline = System.currentTimeMillis() + 8 * 60 * 1000L
         try {
             while (!sawEncoderEOS && !cancelFlag.get() &&
@@ -928,6 +992,7 @@ object ExportService {
                 // entirely. Only count iterations where nothing was written —
                 // a slow but productive flush must never be cut short.
                 if (!sawEncoderEOS && waitingForEos) {
+                    reportFinalizeProgress()
                     if (wroteAnyOutput) {
                         eosStallTries = 0
                     } else {
@@ -945,19 +1010,15 @@ object ExportService {
             // Drain remaining output. Bounded: a codec that never flags EOS
             // (some devices) must not hang the export forever — give it 60
             // polls of at most 1s each (~1 minute worst case) then finalize
-            // the muxer with what we have. Pad the bar across the drain so it
-            // visibly crawls 96% -> ~99% instead of snapping to 100%.
+            // the muxer with what we have. The bar crawls TIME-BASED
+            // 0.96 -> ~0.995 (shared with the EOS wait) instead of sitting
+            // frozen at ~95% during this phase.
             var drainTries = 0
             val MAX_DRAIN_TRIES = 60
-            val drainProgressBase = 0.96f
-            val drainProgressSpan = 0.03f
             diag("drain")
             while (!cancelFlag.get() && drainTries < MAX_DRAIN_TRIES) {
                 drainTries++
-                if ((drainTries % 10) == 0) {
-                    val frac = drainTries.toFloat() / MAX_DRAIN_TRIES.toFloat()
-                    onProgress?.invoke(drainProgressBase + drainProgressSpan * frac)
-                }
+                reportFinalizeProgress()
                 val bufInfo = MediaCodec.BufferInfo()
                 val outIdx = encoder.dequeueOutputBuffer(bufInfo, 1000)
                 if (outIdx < 0) break

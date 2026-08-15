@@ -84,7 +84,6 @@ fun PlayerScreen(
     var showSavePresetSheet by remember { mutableStateOf(false) }
     var showEffects by remember { mutableStateOf(true) }
     var showAtmosphere by remember { mutableStateOf(true) }
-    var showPostExportSupportPrompt by remember { mutableStateOf(false) }
     val scrollState = rememberScrollState()
 
     // ── Effects used by the effect cards ─────────────────────────────────────
@@ -119,7 +118,35 @@ fun PlayerScreen(
                 }
             }
             viewModel.clearExportedFilePath()
-            showPostExportSupportPrompt = true
+            // Post-export ad (replaces the old "remove ads" popup): an auto
+            // rewarded ad pays the user 15 minutes of ad-free listening — no
+            // prompt, it just runs. Gated so that >= 2 minutes pass between
+            // any two ad impressions; skipped entirely while an ad-free
+            // window is active. If the rewarded ad is unavailable (fill or
+            // load failure), fall back to an interstitial for this slot.
+            fun showPostExportAds() {
+                if (AdManager.isAdFree.value) return
+                if (System.currentTimeMillis() - AdManager.lastAdShownMs() < AdManager.MIN_INTERSTITIAL_INTERVAL) return
+                context.findActivity()?.let { act ->
+                    AdManager.showRewarded(
+                        activity = act,
+                        bypassCooldown = true,
+                        onRewarded = { AdManager.grantAdFree(15 * 60 * 1000L) },
+                        onDismissed = {
+                            // No reward earned: fall back to the interstitial for
+                            // this single slot ONLY when the rewarded ad itself
+                            // never showed (fill/load failure = lastAdShownMs
+                            // unchanged). If the user closed it early, no extra ad.
+                            if (!AdManager.isAdFree.value &&
+                                System.currentTimeMillis() - AdManager.lastAdShownMs() >= AdManager.MIN_INTERSTITIAL_INTERVAL
+                            ) {
+                                context.findActivity()?.let { a -> AdManager.showInterstitial(a) {} }
+                            }
+                        }
+                    )
+                }
+            }
+            showPostExportAds()
         }
     }
 
@@ -389,33 +416,6 @@ fun PlayerScreen(
                 },
                 dismissButton = {
                     TextButton(onClick = { viewModel.clearExportError() }) { Text("Close", color = colors.textSecondary) }
-                }
-            )
-        }
-
-        // ── Post-export support prompt (rewarded ad, user-initiated) ─────────
-        if (showPostExportSupportPrompt) {
-            AlertDialog(
-                onDismissRequest = { showPostExportSupportPrompt = false },
-                containerColor = colors.surface,
-                title = { Text("Mix exported!", fontWeight = FontWeight.Bold, color = colors.textPrimary) },
-                text = { Text("Enjoying Lofiga? Watch a short ad to get 15 minutes of ad-free listening.", color = colors.textSecondary) },
-                confirmButton = {
-                    TextButton(onClick = {
-                        showPostExportSupportPrompt = false
-                        context.findActivity()?.let { act ->
-                            AdManager.showRewarded(
-                                activity = act,
-                                onRewarded = {
-                                    AdManager.grantAdFree(15 * 60 * 1000L)
-                                },
-                                onDismissed = {}
-                            )
-                        }
-                    }) { Text("Watch Ad", color = colors.accent, fontWeight = FontWeight.Bold) }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showPostExportSupportPrompt = false }) { Text("No Thanks", color = colors.textSecondary) }
                 }
             )
         }

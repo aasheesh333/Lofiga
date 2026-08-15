@@ -304,16 +304,22 @@ object AdManager {
     fun showRewarded(
         activity: Activity,
         onRewarded: () -> Unit,
-        onDismissed: () -> Unit
+        onDismissed: () -> Unit,
+        bypassCooldown: Boolean = false
     ) {
         showRewardedInternal(
             activity = activity,
-            bypassCooldown = false,
+            bypassCooldown = bypassCooldown,
             onRewarded = onRewarded,
             onEarnedAndDismissed = { },
             onDismissed = onDismissed
         )
     }
+
+    /** Wall-clock ms of the most recent ad impression (interstitial or rewarded).
+     *  Used by post-export gating: a rewarded ad is only auto-shown once the
+     *  user had at least [MIN_INTERSTITIAL_INTERVAL] (2 min) without any ad. */
+    fun lastAdShownMs(): Long = maxOf(lastInterstitialTime, lastRewardedTime)
 
     private fun showRewardedInternal(
         activity: Activity,

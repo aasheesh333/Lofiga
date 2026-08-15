@@ -285,6 +285,9 @@ class AudioEngine(private val context: Context) {
         return try {
             player.setMediaItems(items, startIndex.coerceIn(0, items.size - 1), 0L)
             player.prepare()
+            lastQueueItems = items
+            lastQueueIndex = startIndex.coerceIn(0, items.size - 1)
+            lastMediaItem = items.getOrNull(lastQueueIndex)
             true
         } catch (e: Exception) {
             _error.value = "Failed to load queue: ${e.message}"
@@ -299,6 +302,82 @@ class AudioEngine(private val context: Context) {
     // guarantees the callback thread sees the latest values without tearing.
     @Volatile private var pendingInitFft: () -> Unit = {}
     @Volatile private var pendingErrorPrefix: String = "Failed to load track"
+
+    // Last queue/single-track items loaded into the player — kept so an
+    // unexpected runtime error (Sonic overflow / ArrayIndexOutOfBounds from
+    // firmware audiofx races) can re-prepare the SAME track at the same
+    // position instead of leaving the user with ambience but no music.
+    @Volatile private var lastQueueItems: List<MediaItem> = emptyList()
+    @Volatile private var lastQueueIndex = 0
+    @Volatile private var lastMediaItem: MediaItem? = null
+    @Volatile private var lastSelfHealMs = 0L
+    @Volatile private var selfHealCount = 0
+
+    /**
+     * Recovers playback after an unexpected runtime error (ERROR_CODE_UNSPECIFIED):
+     * Sonic buffer overflow at extreme tempo/pitch combos, ArrayIndexOutOfBounds
+     * from firmware audiofx races during live effect adjustments, etc. The
+     * player is dead but the realtime atmosphere AudioTracks keep going, so the
+     * user hears ambience without music until they switch tracks. This does
+     * exactly what the user's workaround did — re-prepare the same item at the
+     * same position and resume — without forcing a track change.
+     *
+     * Two-step: the FIRST heal within 60s keeps the user's tempo/pitch (the
+     * crash may be a transient firmware glitch); a SECOND crash in the window
+     * neutralizes them (a repeated crash means the current Sonic parameters
+     * themselves are what break this device). Returns true if recovery was
+     * started and the error should NOT be surfaced to the user.
+     */
+    private fun selfHealFromRuntimeError(
+        error: androidx.media3.common.PlaybackException,
+        causeClass: String?
+    ): Boolean {
+        val now = System.currentTimeMillis()
+        if (now - lastSelfHealMs >= 60_000L) selfHealCount = 0
+        selfHealCount++
+        lastSelfHealMs = now
+        val player = exoPlayer ?: return false
+        val resumePos = runCatching { player.currentPosition.coerceAtLeast(0L) }.getOrDefault(_position.value.coerceAtLeast(0L))
+        val mediaIndex = runCatching { player.currentMediaItemIndex }.getOrDefault(lastQueueIndex)
+        val item = if (queueMode && lastQueueItems.isNotEmpty()) lastQueueItems.getOrNull(mediaIndex) else lastMediaItem
+        if (item == null) return false
+        // First heal keeps the user's tempo/pitch (the crash may be a transient
+        // firmware glitch); a second crash inside the window means the current
+        // Sonic parameters themselves are what break this device — neutralize
+        // them so the re-prepare uses the pass-through path. A third crash is
+        // not something we can fix: surface it instead of re-prepare looping.
+        if (selfHealCount > 2) return false
+        val neutralize = selfHealCount == 2
+        if (neutralize) {
+            storedTempo = 1f
+            storedPitch = 0f
+            pendingTempo = 1f
+            pendingPitch = 0f
+        }
+        try {
+            positionJob?.cancel()
+            player.stop()
+            releaseEffects()
+            if (queueMode && lastQueueItems.isNotEmpty()) {
+                player.setMediaItems(lastQueueItems, mediaIndex, resumePos)
+            } else {
+                player.setMediaItem(item, resumePos)
+            }
+            player.playWhenReady = false
+            autoPlayOnPrepared = true
+            player.prepare()
+            _isPlaying.value = true
+            Log.w(
+                "AudioEngine",
+                "Self-healed after ${error.errorCodeName}${if (causeClass != null) " ($causeClass)" else ""}" +
+                    " — re-prepared at ${resumePos}ms (tempo/pitch ${if (neutralize) "neutralized" else "kept"})"
+            )
+            return true
+        } catch (e: Exception) {
+            Log.e("AudioEngine", "Self-heal re-prepare failed: ${e.message}", e)
+            return false
+        }
+    }
 
     /** Creates the single ExoPlayer instance reused across track loads. The
      *  Media3 session stays bound to this player for the app's lifetime;
@@ -422,26 +501,21 @@ class AudioEngine(private val context: Context) {
                 // playback is still active after the player died.
                 val causeClass = error.cause?.javaClass?.simpleName
                 // "Sometimes only the atmosphere layers play, music stops":
-                // Sonic's internal buffer overflows at extreme tempo/pitch
-                // combos (setPlaybackParameters), killing the player while the
-                // realtime atmosphere AudioTracks keep going. Not a crash —
-                // reset tempo/pitch to neutral and resume instead of dying.
-                if (causeClass == "SonicOutputBufferFullException") {
+                // Sonic's internals blow up at extreme tempo/pitch combos or
+                // during live effect adjustments (SonicOutputBufferFullException,
+                // and an ArrayIndexOutOfBoundsException seen on some firmware
+                // when PlaybackParameters change mid-playback). The realtime
+                // atmosphere AudioTracks keep going, so the user hears ambience
+                // but no music until they switch tracks. Self-heal instead of
+                // surfacing the error: reset tempo/pitch to neutral, re-prepare
+                // the same queue item at the last known position and resume —
+                // which is exactly what changing the track did for the user.
+                if (error.errorCode == androidx.media3.common.PlaybackException.ERROR_CODE_UNSPECIFIED ||
+                    causeClass == "SonicOutputBufferFullException") {
                     try {
-                        storedTempo = 1f
-                        storedPitch = 0f
-                        pendingTempo = 1f
-                        pendingPitch = 0f
-                        exoPlayer?.let { p ->
-                            p.setPlaybackParameters(PlaybackParameters(1f, 1f))
-                            if (p.playbackState == androidx.media3.common.Player.STATE_READY && !p.isPlaying) {
-                                p.play()
-                            }
-                        }
-                        Log.w("AudioEngine", "Self-healed from Sonic overflow (tempo/pitch reset to neutral)")
-                        return
-                    } catch (e2: Exception) {
-                        Log.e("AudioEngine", "Sonic self-heal failed: ${e2.message}", e2)
+                        if (selfHealFromRuntimeError(error, causeClass)) return
+                    } catch (e: Exception) {
+                        Log.e("AudioEngine", "Self-heal failed: ${e.message}", e)
                     }
                 }
                 _error.value = "${pendingErrorPrefix}: ${error.errorCodeName}" +
@@ -553,6 +627,8 @@ class AudioEngine(private val context: Context) {
             player.prepare()
             storedTempo = pendingTempo
             storedPitch = pendingPitch
+            lastQueueItems = emptyList()
+            lastMediaItem = mediaItem
             true
         } catch (e: Exception) {
             _error.value = "$errorPrefix: ${e.message}"

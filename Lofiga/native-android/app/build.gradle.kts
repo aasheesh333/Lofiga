@@ -126,7 +126,10 @@ dependencies {
     implementation("com.onesignal:OneSignal:5.1.31")
 
     // Media3: modern playback, session, and offline export (Transformer).
-    val media3Version = "1.5.1"
+    // 1.11.0 stable: newer Sonic time-stretch fixes the mid-playback
+    // ArrayIndexOutOfBounds / buffer overflow crashes that killed the player
+    // during live effect adjustments (only atmosphere kept playing).
+    val media3Version = "1.11.0"
     implementation("androidx.media3:media3-exoplayer:$media3Version")
     implementation("androidx.media3:media3-session:$media3Version")
     implementation("androidx.media3:media3-ui:$media3Version")
