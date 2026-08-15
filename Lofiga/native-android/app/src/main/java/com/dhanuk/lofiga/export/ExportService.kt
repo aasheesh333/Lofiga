@@ -36,6 +36,26 @@ object ExportService {
         @Synchronized fun clear() { cache.clear() }
     }
 
+    /**
+     * Runs [block] on a separate thread with a timeout. If the call blocks
+     * longer than [timeoutMs] (e.g., encoder.stop() or muxer.stop() hanging
+     * on MIUI/Xiaomi firmware), the thread is abandoned and the export
+     * continues instead of stalling forever.
+     */
+    private fun runTimed(timeoutMs: Long, name: String, block: () -> Unit) {
+        val executor = java.util.concurrent.Executors.newSingleThreadExecutor()
+        try {
+            executor.submit<Unit> { runCatching { block() } }
+                .get(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS)
+        } catch (_: java.util.concurrent.TimeoutException) {
+            Log.w("ExportService", "$name timed out after ${timeoutMs}ms; abandoning")
+        } catch (_: Exception) {
+            // execution error — log only
+        } finally {
+            executor.shutdownNow()
+        }
+    }
+
     // Chunk size for streaming processing — ~1 second of stereo 44.1kHz 16-bit audio
     private const val CHUNK_FRAMES = 44100
     private const val CHUNK_SHORTS = CHUNK_FRAMES * 2
@@ -644,8 +664,15 @@ object ExportService {
         }
 
         fun close() {
-            try { decoder?.stop(); decoder?.release() } catch (_: Exception) {}
-            try { extractor.release() } catch (_: Exception) {}
+            // decoder.stop()/release() can hang on broken firmware — bound each
+            // to 10s so a stalled decoder never blocks the export thread.
+            runTimed(10_000, "decoder.stop+release") {
+                try { decoder?.stop() } catch (_: Exception) {}
+                try { decoder?.release() } catch (_: Exception) {}
+            }
+            runTimed(5_000, "extractor.release") {
+                try { extractor.release() } catch (_: Exception) {}
+            }
         }
 
         fun nextChunk(): ShortArray? {
@@ -782,8 +809,10 @@ object ExportService {
         var eosStallTries = 0
         val MAX_EOS_STALL_TRIES = 30
 
+        val wallClockDeadline = System.currentTimeMillis() + 8 * 60 * 1000L
         try {
-            while (!sawEncoderEOS && !cancelFlag.get()) {
+            while (!sawEncoderEOS && !cancelFlag.get() &&
+                   System.currentTimeMillis() < wallClockDeadline) {
                 // Safety net: at the minimum tempo (0.25) the stretched output
                 // is at most 4x the source duration. If we ever exceed 5x, a
                 // feed bug is looping (e.g. flush returning the same tail) —
@@ -994,9 +1023,14 @@ object ExportService {
             onProgress?.invoke(0.99f)
         } finally {
             source.close()
-            if (muxerStarted) try { muxer.stop() } catch (_: Exception) {}
-            try { muxer.release() } catch (_: Exception) {}
-            try { encoder.stop(); encoder.release() } catch (_: Exception) {}
+            // encoder.stop()/muxer.stop() are well-known to hang on Xiaomi/MIUI
+            // firmware when the codec never emitted its EOS output. Bound each
+            // call so the export thread recovers instead of freezing until
+            // MainViewModel's 10-minute withTimeout.
+            if (muxerStarted) runTimed(10_000, "muxer.stop") { muxer.stop() }
+            runTimed(5_000, "muxer.release") { muxer.release() }
+            runTimed(15_000, "encoder.stop") { encoder.stop() }
+            runTimed(15_000, "encoder.release") { encoder.release() }
             onProgress?.invoke(1.0f)
         }
     }
@@ -1029,7 +1063,8 @@ object ExportService {
             var wavChunksProcessed = 0
             var prevTail = ShortArray(0)
 
-            while (!cancelFlag.get()) {
+            val wallClockDeadline = System.currentTimeMillis() + 8 * 60 * 1000L
+            while (!cancelFlag.get() && System.currentTimeMillis() < wallClockDeadline) {
                 val chunk = source.nextChunk()
                 var processed: ShortArray? = null
                 if (chunk != null && chunk.isNotEmpty()) {
