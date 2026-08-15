@@ -36,6 +36,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) { 
     private val _allSongs = MutableStateFlow<List<AudioTrack>>(emptyList())
     val allSongs: StateFlow<List<AudioTrack>> = _allSongs.asStateFlow()
 
+    /**
+     * Distinguishes the reasons the song list can be empty so the UI can show
+     * the right thing: a spinner while scanning, a "grant permission" prompt
+     * when access is denied, or the genuine "no music on device" empty state.
+     */
+    private val _libraryState = MutableStateFlow(LibraryState.LOADING)
+    val libraryState: StateFlow<LibraryState> = _libraryState.asStateFlow()
+
     /** C.2: per-track mood classifications (keyed by MediaStore AudioTrack.id),
      *  populated by AudioEngine as each track's FFT precompute completes. */
     val moodTags: StateFlow<Map<Long, MoodTag>> = audioEngine.moodTags
@@ -186,13 +194,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) { 
     fun loadSongs() {
         if (!hasAudioPermission()) {
             _allSongs.value = emptyList()
+            _libraryState.value = LibraryState.PERMISSION_DENIED
             return
         }
+        _libraryState.value = LibraryState.LOADING
         viewModelScope.launch {
             val songs = withContext(Dispatchers.IO) {
                 AudioQueryHelper.queryAllSongs(getApplication())
             }
             _allSongs.value = songs
+            _libraryState.value = if (songs.isEmpty()) LibraryState.EMPTY else LibraryState.LOADED
         }
     }
 

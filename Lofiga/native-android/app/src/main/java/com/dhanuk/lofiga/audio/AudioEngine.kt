@@ -287,8 +287,11 @@ class AudioEngine(private val context: Context) {
         }
     }
 
-    private var pendingInitFft: () -> Unit = {}
-    private var pendingErrorPrefix: String = "Failed to load track"
+    // Written from the load path and read back inside ExoPlayer's listener
+    // callbacks (which fire on the application main looper). @Volatile
+    // guarantees the callback thread sees the latest values without tearing.
+    @Volatile private var pendingInitFft: () -> Unit = {}
+    @Volatile private var pendingErrorPrefix: String = "Failed to load track"
 
     /** Creates the single ExoPlayer instance reused across track loads. The
      *  Media3 session stays bound to this player for the app's lifetime;

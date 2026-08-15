@@ -33,7 +33,7 @@ object AdManager {
     // Play/AdMob policy-safe cooldowns (per user spec):
     //  - Interstitial: at most once every 2 minutes, and only on explicit tab switches.
     //  - Rewarded: strictly user-initiated, at most once every 3 minutes.
-    const val MIN_INTERSTITIAL_INTERVAL = 60_000L
+    const val MIN_INTERSTITIAL_INTERVAL = 120_000L
     private const val MIN_REWARDED_INTERVAL = 180_000L
     private const val MAX_FAILED_LOADS = 3
     private const val BANNER_REFRESH_INTERVAL_MS = 60_000L

@@ -119,6 +119,9 @@ fun LofigaMainApp(
                     onMixSelected = { path, name ->
                         viewModel.loadTrackFromFile(path, name)
                         navigateTo(2)
+                    },
+                    onRequestPermission = {
+                        (context.findActivity() as? com.dhanuk.lofiga.MainActivity)?.requestPermissionsFromUi()
                     }
                 )
                 1 -> LibraryScreen(
@@ -126,6 +129,9 @@ fun LofigaMainApp(
                     onSongSelected = { track ->
                         viewModel.loadTrack(track)
                         navigateTo(2)
+                    },
+                    onRequestPermission = {
+                        (context.findActivity() as? com.dhanuk.lofiga.MainActivity)?.requestPermissionsFromUi()
                     }
                 )
                 2 -> PlayerScreen(

@@ -46,3 +46,9 @@ data class SavedConfig(
     val savedAt: Long = System.currentTimeMillis(),
     val values: PresetValues = PresetValues()
 )
+
+/**
+ * The loading/availability state of the on-device music library. Lets the UI
+ * tell apart "still scanning", "permission not granted", and "genuinely empty".
+ */
+enum class LibraryState { LOADING, LOADED, EMPTY, PERMISSION_DENIED }

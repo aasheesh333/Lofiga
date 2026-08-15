@@ -21,6 +21,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.dhanuk.lofiga.model.AudioTrack
+import com.dhanuk.lofiga.model.LibraryState
 import com.dhanuk.lofiga.model.MoodTag
 import com.dhanuk.lofiga.ui.MainViewModel
 import com.dhanuk.lofiga.ui.components.*
@@ -44,6 +45,7 @@ enum class MoodFilterOption(val label: String, val tag: MoodTag?) {
 fun LibraryScreen(
     viewModel: MainViewModel,
     onSongSelected: (AudioTrack) -> Unit,
+    onRequestPermission: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val colors = LocalAppColors.current
@@ -52,6 +54,7 @@ fun LibraryScreen(
     val searchQuery by viewModel.searchQuery.collectAsState()
     val currentTrack by viewModel.currentTrack.collectAsState()
     val moodTags by viewModel.moodTags.collectAsState()
+    val libraryState by viewModel.libraryState.collectAsState()
 
     var sortOption by remember { mutableStateOf(SortOption.DATE_ADDED) }
     var moodFilter by remember { mutableStateOf(MoodFilterOption.ALL) }
@@ -211,48 +214,87 @@ fun LibraryScreen(
                             modifier = Modifier.fillMaxWidth().padding(vertical = 48.dp),
                             contentAlignment = Alignment.Center
                         ) {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                modifier = Modifier.padding(24.dp)
-                            ) {
-                                Surface(
-                                    shape = CircleShape,
-                                    color = IndigoContainer,
-                                    modifier = Modifier.size(88.dp)
+                            // A search with no matches is always a "no results"
+                            // state regardless of library status.
+                            val searching = searchQuery.isNotEmpty()
+                            val showLoading = !searching && libraryState == LibraryState.LOADING
+                            val permissionDenied = !searching && libraryState == LibraryState.PERMISSION_DENIED
+
+                            if (showLoading) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    modifier = Modifier.padding(24.dp)
                                 ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Icon(
-                                            if (searchQuery.isNotEmpty()) Icons.Outlined.SearchOff else Icons.Outlined.LibraryMusic,
-                                            contentDescription = null,
-                                            tint = colors.accent,
-                                            modifier = Modifier.size(36.dp)
-                                        )
-                                    }
+                                    CircularProgressIndicator(color = colors.accent)
+                                    Spacer(Modifier.height(16.dp))
+                                    Text(
+                                        "Scanning your music…",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = colors.textSecondary
+                                    )
                                 }
-                                Spacer(Modifier.height(20.dp))
-                                Text(
-                                    if (searchQuery.isNotEmpty()) "No songs match \"$searchQuery\"" else "No songs yet",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = colors.textPrimary,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                                Spacer(Modifier.height(4.dp))
-                                Text(
-                                    if (searchQuery.isNotEmpty()) "Try a different search" else "Add music files to your device",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = colors.textSecondary,
-                                    textAlign = TextAlign.Center
-                                )
-                                if (searchQuery.isEmpty()) {
-                                    Spacer(Modifier.height(20.dp))
-                                    Button(
-                                        onClick = { viewModel.loadSongs() },
-                                        shape = RoundedCornerShape(24.dp),
-                                        colors = ButtonDefaults.buttonColors(containerColor = Indigo)
+                            } else {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    modifier = Modifier.padding(24.dp)
+                                ) {
+                                    Surface(
+                                        shape = CircleShape,
+                                        color = IndigoContainer,
+                                        modifier = Modifier.size(88.dp)
                                     ) {
-                                        Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
-                                        Spacer(Modifier.width(8.dp))
-                                        Text("Scan Music")
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Icon(
+                                                when {
+                                                    searching -> Icons.Outlined.SearchOff
+                                                    permissionDenied -> Icons.Outlined.Lock
+                                                    else -> Icons.Outlined.LibraryMusic
+                                                },
+                                                contentDescription = null,
+                                                tint = colors.accent,
+                                                modifier = Modifier.size(36.dp)
+                                            )
+                                        }
+                                    }
+                                    Spacer(Modifier.height(20.dp))
+                                    Text(
+                                        when {
+                                            searching -> "No songs match \"$searchQuery\""
+                                            permissionDenied -> "Music access needed"
+                                            else -> "No songs yet"
+                                        },
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = colors.textPrimary,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    Spacer(Modifier.height(4.dp))
+                                    Text(
+                                        when {
+                                            searching -> "Try a different search"
+                                            permissionDenied -> "Grant access to your audio files so Lofiga can find your music"
+                                            else -> "Add music files to your device"
+                                        },
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = colors.textSecondary,
+                                        textAlign = TextAlign.Center
+                                    )
+                                    if (!searching) {
+                                        Spacer(Modifier.height(20.dp))
+                                        Button(
+                                            onClick = {
+                                                if (permissionDenied) onRequestPermission() else viewModel.loadSongs()
+                                            },
+                                            shape = RoundedCornerShape(24.dp),
+                                            colors = ButtonDefaults.buttonColors(containerColor = Indigo)
+                                        ) {
+                                            Icon(
+                                                if (permissionDenied) Icons.Outlined.Lock else Icons.Filled.Refresh,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                            Spacer(Modifier.width(8.dp))
+                                            Text(if (permissionDenied) "Grant Access" else "Scan Music")
+                                        }
                                     }
                                 }
                             }

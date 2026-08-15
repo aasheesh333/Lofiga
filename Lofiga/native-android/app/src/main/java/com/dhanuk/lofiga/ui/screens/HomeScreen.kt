@@ -34,6 +34,7 @@ import coil3.compose.AsyncImage
 import com.dhanuk.lofiga.R
 import com.dhanuk.lofiga.coil.AlbumArtKey
 import com.dhanuk.lofiga.model.AudioTrack
+import com.dhanuk.lofiga.model.LibraryState
 import com.dhanuk.lofiga.model.SavedConfig
 import com.dhanuk.lofiga.ui.MainViewModel
 import com.dhanuk.lofiga.ui.components.*
@@ -51,6 +52,7 @@ fun HomeScreen(
     onEditConfig: (SavedConfig) -> Unit,
     onBrowseAll: () -> Unit,
     onMixSelected: (String, String) -> Unit,
+    onRequestPermission: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val colors = LocalAppColors.current
@@ -58,6 +60,7 @@ fun HomeScreen(
     val allSongs by viewModel.allSongs.collectAsState()
     val recentEdits by viewModel.recentEdits.collectAsState()
     val currentTrack by viewModel.currentTrack.collectAsState()
+    val libraryState by viewModel.libraryState.collectAsState()
     var isRefreshing by remember { mutableStateOf(false) }
 
     // ── Exported mixes (moved from old LibraryScreen) ─────────────────────────
@@ -184,26 +187,61 @@ fun HomeScreen(
                         modifier = Modifier.fillMaxWidth().padding(16.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(
-                                Icons.Outlined.LibraryMusic,
-                                contentDescription = null,
-                                tint = colors.textTertiary,
-                                modifier = Modifier.size(48.dp)
-                            )
-                            Spacer(Modifier.height(12.dp))
-                            Text("No music found", style = MaterialTheme.typography.titleMedium, color = colors.textPrimary)
-                            Spacer(Modifier.height(4.dp))
-                            Text("Add music files to your device", style = MaterialTheme.typography.bodySmall, color = colors.textTertiary)
-                            Spacer(Modifier.height(16.dp))
-                            Button(
-                                onClick = { viewModel.loadSongs() },
-                                shape = RoundedCornerShape(24.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = Indigo)
-                            ) {
-                                Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Spacer(Modifier.width(8.dp))
-                                Text("Scan Music")
+                        when (libraryState) {
+                            LibraryState.LOADING -> {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    CircularProgressIndicator(color = Indigo)
+                                    Spacer(Modifier.height(12.dp))
+                                    Text("Scanning your music…", style = MaterialTheme.typography.bodySmall, color = colors.textTertiary)
+                                }
+                            }
+                            LibraryState.PERMISSION_DENIED -> {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Icon(
+                                        Icons.Outlined.Lock,
+                                        contentDescription = null,
+                                        tint = colors.textTertiary,
+                                        modifier = Modifier.size(48.dp)
+                                    )
+                                    Spacer(Modifier.height(12.dp))
+                                    Text("Music access needed", style = MaterialTheme.typography.titleMedium, color = colors.textPrimary)
+                                    Spacer(Modifier.height(4.dp))
+                                    Text("Grant access to your audio files to find your music", style = MaterialTheme.typography.bodySmall, color = colors.textTertiary, textAlign = TextAlign.Center)
+                                    Spacer(Modifier.height(16.dp))
+                                    Button(
+                                        onClick = onRequestPermission,
+                                        shape = RoundedCornerShape(24.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = Indigo)
+                                    ) {
+                                        Icon(Icons.Outlined.Lock, contentDescription = null, modifier = Modifier.size(18.dp))
+                                        Spacer(Modifier.width(8.dp))
+                                        Text("Grant Access")
+                                    }
+                                }
+                            }
+                            else -> {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Icon(
+                                        Icons.Outlined.LibraryMusic,
+                                        contentDescription = null,
+                                        tint = colors.textTertiary,
+                                        modifier = Modifier.size(48.dp)
+                                    )
+                                    Spacer(Modifier.height(12.dp))
+                                    Text("No music found", style = MaterialTheme.typography.titleMedium, color = colors.textPrimary)
+                                    Spacer(Modifier.height(4.dp))
+                                    Text("Add music files to your device", style = MaterialTheme.typography.bodySmall, color = colors.textTertiary)
+                                    Spacer(Modifier.height(16.dp))
+                                    Button(
+                                        onClick = { viewModel.loadSongs() },
+                                        shape = RoundedCornerShape(24.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = Indigo)
+                                    ) {
+                                        Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                                        Spacer(Modifier.width(8.dp))
+                                        Text("Scan Music")
+                                    }
+                                }
                             }
                         }
                     }

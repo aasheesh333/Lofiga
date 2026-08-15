@@ -59,6 +59,10 @@ class MainActivity : ComponentActivity() {
     private var showPermissionRationale by mutableStateOf(false)
     private var hasRequestedPermissions by mutableStateOf(false)
 
+    /** Invoked after the runtime permission dialog resolves so the UI can
+     *  re-scan the library once audio access is granted. */
+    var onPermissionsResolved: (() -> Unit)? = null
+
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
@@ -66,6 +70,9 @@ class MainActivity : ComponentActivity() {
         if (!allGranted && hasRequestedPermissions) {
             Toast.makeText(this, "Some features may not work without storage access", Toast.LENGTH_LONG).show()
         }
+        // Re-scan regardless: if audio access was granted the library populates;
+        // if denied, loadSongs() flips to the PERMISSION_DENIED state.
+        onPermissionsResolved?.invoke()
     }
 
     private fun requestAudioPermissions() {
@@ -118,6 +125,12 @@ class MainActivity : ComponentActivity() {
         requestAudioPermissions()
     }
 
+    /** Public entry point so Compose UI (e.g. the Library empty state) can
+     *  trigger the runtime audio-permission request directly. */
+    fun requestPermissionsFromUi() {
+        requestAudioPermissions()
+    }
+
     fun skipPermissions() {
         showPermissionRationale = false
     }
@@ -133,6 +146,12 @@ class MainActivity : ComponentActivity() {
         setContent {
             val viewModel: MainViewModel = viewModel()
             val settings by viewModel.settingsManager.settingsFlow.collectAsState(initial = SettingsManager.AppSettings())
+
+            // When the OS permission dialog resolves, refresh the library so the
+            // song list appears immediately after the grant (no manual retry).
+            LaunchedEffect(viewModel) {
+                onPermissionsResolved = { viewModel.loadSongs() }
+            }
 
             LofigaTheme(darkTheme = settings.isDarkMode) {
                 SideEffect {
