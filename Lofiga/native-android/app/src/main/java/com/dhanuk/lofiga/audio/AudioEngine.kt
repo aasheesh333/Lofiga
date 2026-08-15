@@ -1141,9 +1141,24 @@ class AudioEngine(private val context: Context) {
 
             val windowSize = 1024  // power of two (radix-2 FFT requirement)
 
-            // Adaptive hop: aim for ~16 frames/s so a 10-min track → ~9600 frames,
-            // then widen once we approach MAX_FFT_FRAMES so long tracks stay capped.
+            // Duration-aware hop so the ~8000-frame budget spans the WHOLE
+            // track. baseHop = sampleRate/16 ≈ 16 frames/s; a 30-min track
+            // would need 28,800 frames at that rate, so widen the hop until
+            // frameCount stays ≤ MAX_FFT_FRAMES. Without this, frames stopped
+            // ~3 min in and the polling loop held that stale final frame
+            // forever (frozen waveform).
+            val trackDurUs = try {
+                format.getLong(MediaFormat.KEY_DURATION)
+            } catch (_: Exception) { 0L }
             val baseHop = (sampleRate / 16).coerceIn(windowSize, windowSize * 8)
+            val durAwareHop = if (trackDurUs > 0) {
+                val trackSeconds = trackDurUs / 1000000f
+                val hopForBudget = (trackSeconds * sampleRate.toFloat() / MAX_FFT_FRAMES.toFloat())
+                    .toInt()
+                maxOf(baseHop, hopForBudget)
+            } else {
+                baseHop
+            }
 
             // No-progress guard: on some firmware the decoder can stop yielding
             // output without ever flagging EOS, which would spin this loop
@@ -1197,12 +1212,9 @@ class AudioEngine(private val context: Context) {
                         outputBuffer.asShortBuffer().get(shorts)
 
                         val timeMsBase = bufferInfo.presentationTimeUs / 1000
-                        // Adaptive hop: start at baseHop, double it once we're past 3/4 of the frame cap.
-                        val hopSize = if (frameCount < (MAX_FFT_FRAMES * 3) / 4) {
-                            baseHop
-                        } else {
-                            baseHop * 2
-                        }
+                        // Duration-aware hop: single fixed step sized so the
+                        // frame budget covers the entire track (see above).
+                        val hopSize = durAwareHop
 
                         // Walk the output buffer in mono frames: one window is windowSize frames
                         // (each frame = `channels` interleaved shorts).
@@ -1666,11 +1678,18 @@ class AudioEngine(private val context: Context) {
                                 }
 
                                 val bestFrame = precomputedFrames[bestIdx]
-                                // Seeked beyond the last precomputed frame: hold
-                                // the nearest frame rather than jumping to the
-                                // fake animation pattern.
-                                _fftData.value = bestFrame.magnitudes
-                                _waveformData.value = WaveformSnapshot(bestFrame.magnitudes, ++waveformSeq)
+                                // Playback ran past the last precomputed frame by
+                                // more than the animation's "live nearby" margin:
+                                // the waveform would freeze on this stale frame for
+                                // the rest of the track. Hand back to the animated
+                                // pattern (which re-exits the moment real data
+                                // covers the position) instead.
+                                if (_isPlaying.value && pos - bestFrame.timeMs > 2000) {
+                                    startAnimatingWaveform()
+                                } else {
+                                    _fftData.value = bestFrame.magnitudes
+                                    _waveformData.value = WaveformSnapshot(bestFrame.magnitudes, ++waveformSeq)
+                                }
                             } else if (!animatingWaveform && frameCount == 0 && _isPlaying.value) {
                                 startAnimatingWaveform()
                             }
