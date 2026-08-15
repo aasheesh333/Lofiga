@@ -689,9 +689,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) { 
                 }
             } catch (e: TimeoutCancellationException) {
                 // Cancel the still-running pipeline so it deletes the partial
-                // file instead of leaving a corrupt export behind.
+                // file instead of leaving a corrupt export behind. Include the
+                // export black-box so we can see WHERE it stalled (decoder /
+                // encoder EOS / muxer / MediaStore) instead of a generic message.
                 com.dhanuk.lofiga.export.ExportService.cancelExport()
-                _lastExportError.value = "Export timed out after ${EXPORT_TIMEOUT_MS / 60000} minutes\nat withTimeout (MainViewModel.exportTrack)"
+                val diag = com.dhanuk.lofiga.export.ExportService.lastExportDiagnostics()
+                _lastExportError.value = "Export timed out after ${EXPORT_TIMEOUT_MS / 60000} minutes\n$diag"
                 _snackbarMessage.tryEmit("Export timed out - the file may be incomplete")
             } catch (e: Exception) {
                 val msg = "${e.javaClass.simpleName}: ${e.message ?: "(no message)"}"

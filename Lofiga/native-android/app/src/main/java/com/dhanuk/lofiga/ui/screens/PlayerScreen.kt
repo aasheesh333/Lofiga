@@ -7,7 +7,9 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -648,6 +650,7 @@ private fun WaveformVisualizer(viewModel: MainViewModel) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 private fun PresetsRow(
     viewModel: MainViewModel,
@@ -657,6 +660,19 @@ private fun PresetsRow(
     onSavePreset: () -> Unit
 ) {
     val colors = LocalAppColors.current
+    // Custom preset pending deletion (long-press opens a confirm dialog).
+    var presetToDelete by remember { mutableStateOf<CustomPreset?>(null) }
+    presetToDelete?.let { preset ->
+        DeleteConfirmDialog(
+            title = "Delete Preset",
+            message = "Delete \"${preset.name}\"? This cannot be undone.",
+            onConfirm = {
+                viewModel.deleteCustomPreset(preset.id)
+                presetToDelete = null
+            },
+            onDismiss = { presetToDelete = null }
+        )
+    }
     Column {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -711,9 +727,16 @@ private fun PresetsRow(
                 val isSelected = selectedCustomPresetId == preset.id
                 FilterChip(
                     selected = isSelected,
-                    onClick = { viewModel.applyCustomPreset(preset) },
+                    // Tap + long-press handled by the combinedClickable modifier
+                    // below (long-press = delete). Keep onClick a no-op so the
+                    // action isn't fired twice.
+                    onClick = {},
                     label = { Text(preset.name, style = MaterialTheme.typography.labelMedium) },
                     shape = RoundedCornerShape(20.dp),
+                    modifier = Modifier.combinedClickable(
+                        onClick = { viewModel.applyCustomPreset(preset) },
+                        onLongClick = { presetToDelete = preset }
+                    ),
                     colors = FilterChipDefaults.filterChipColors(
                         selectedContainerColor = IndigoContainer,
                         selectedLabelColor = colors.accent,

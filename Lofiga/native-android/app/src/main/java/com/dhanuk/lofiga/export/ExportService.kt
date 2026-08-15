@@ -56,9 +56,44 @@ object ExportService {
         }
     }
 
+    // ── Export black-box diagnostics ────────────────────────────────────────
+    // A stalled export previously produced only a generic "timed out" message
+    // with no clue WHERE it hung (decoder dequeue? encoder EOS? MediaStore?).
+    // This snapshot is updated at every phase/iteration so a timeout can report
+    // the exact stall location. Read by MainViewModel to build the error text.
+    @Volatile private var diagPhase: String = "idle"
+    @Volatile private var diagProgress: Float = 0f
+    @Volatile private var diagFramesEncoded: Long = 0L
+    @Volatile private var diagInputExhausted: Boolean = false
+    @Volatile private var diagEosSignaled: Boolean = false
+    @Volatile private var diagSawEncoderEOS: Boolean = false
+    @Volatile private var diagLastActivityMs: Long = 0L
+    @Volatile private var diagStartMs: Long = 0L
+
+    private fun diag(phase: String) {
+        diagPhase = phase
+        diagLastActivityMs = System.currentTimeMillis()
+    }
+
+    /** Human-readable snapshot of the last/current export, for error surfaces. */
+    fun lastExportDiagnostics(): String {
+        val now = System.currentTimeMillis()
+        val idle = if (diagLastActivityMs > 0) (now - diagLastActivityMs) / 1000 else -1
+        val elapsed = if (diagStartMs > 0) (now - diagStartMs) / 1000 else -1
+        return "phase=$diagPhase, progress=${(diagProgress * 100).toInt()}%, " +
+            "framesEncoded=$diagFramesEncoded, inputExhausted=$diagInputExhausted, " +
+            "eosSignaled=$diagEosSignaled, sawEncoderEOS=$diagSawEncoderEOS, " +
+            "idle=${idle}s, elapsed=${elapsed}s"
+    }
+
     // Chunk size for streaming processing — ~1 second of stereo 44.1kHz 16-bit audio
     private const val CHUNK_FRAMES = 44100
     private const val CHUNK_SHORTS = CHUNK_FRAMES * 2
+
+    // Hard ceiling for the whole pipeline, enforced on a dedicated thread. Kept
+    // safely below MainViewModel's 10-minute withTimeout so the export always
+    // returns a diagnostic error itself instead of the caller's generic timeout.
+    private const val EXPORT_HARD_LIMIT_MS = 9L * 60 * 1000
 
     suspend fun exportTrack(
         context: Context,
@@ -97,6 +132,14 @@ object ExportService {
 
         val outputFile = File(outputDirPath, "${cleanName}_lofi.$format")
 
+        diagStartMs = System.currentTimeMillis()
+        diagProgress = 0f
+        diagFramesEncoded = 0L
+        diagInputExhausted = false
+        diagEosSignaled = false
+        diagSawEncoderEOS = false
+        diag("starting")
+
         try {
             val sourceUri = if (inputPath != null && File(inputPath).exists()) {
                 Uri.fromFile(File(inputPath))
@@ -104,10 +147,41 @@ object ExportService {
                 inputUri
             }
 
-            if (format == "wav") {
-                exportAsWavStreaming(context, sourceUri, preset, outputFile, cancelFlag, monotonicProgress)
-            } else {
-                exportWithMediaCodecStreaming(context, sourceUri, preset, outputFile, format, bitrate, cancelFlag, monotonicProgress)
+            // Hard thread-level ceiling: MediaCodec dequeue calls and MediaStore
+            // I/O can block indefinitely on some firmware (notably MIUI) — a
+            // timeout passed to dequeueOutputBuffer is not honoured once the
+            // codec's internal thread dies. withTimeout() in the caller cannot
+            // interrupt such blocking native calls, so it only throws at the
+            // full 10-minute mark. Running the whole pipeline on a dedicated
+            // thread and abandoning it after 9 minutes guarantees the export
+            // returns (with diagnostics) instead of freezing the UI.
+            val worker = java.util.concurrent.Executors.newSingleThreadExecutor()
+            val future = worker.submit<Unit> {
+                diag("open")
+                if (format == "wav") {
+                    exportAsWavStreaming(context, sourceUri, preset, outputFile, cancelFlag, monotonicProgress)
+                } else {
+                    exportWithMediaCodecStreaming(context, sourceUri, preset, outputFile, format, bitrate, cancelFlag, monotonicProgress)
+                }
+                // MediaStore publish moved inside the bounded worker: insert()
+                // and the copy stream can wedge on a busy MediaProvider.
+                if (!cancelFlag.get() && outputFile.exists()) {
+                    diag("publish")
+                    publishToMediaStore(context, outputFile, format)
+                }
+            }
+            try {
+                future.get(EXPORT_HARD_LIMIT_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
+            } catch (e: java.util.concurrent.TimeoutException) {
+                cancelFlag.set(true)
+                Log.e("ExportService", "Export hard-timeout; ${lastExportDiagnostics()}")
+                worker.shutdownNow() // abandon the stuck native call (thread leaks until process death)
+                if (outputFile.exists()) outputFile.delete()
+                throw RuntimeException("Export stalled (${lastExportDiagnostics()})")
+            } catch (e: java.util.concurrent.ExecutionException) {
+                throw (e.cause ?: e)
+            } finally {
+                worker.shutdown()
             }
 
             if (cancelFlag.get()) {
@@ -115,38 +189,7 @@ object ExportService {
                 return@withContext null
             }
 
-            if (outputFile.exists()) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    val values = ContentValues().apply {
-                        put(MediaStore.Audio.Media.DISPLAY_NAME, outputFile.name)
-                        put(MediaStore.Audio.Media.MIME_TYPE,
-                            if (format == "wav") "audio/wav" else "audio/mp4")
-                        put(MediaStore.Audio.Media.RELATIVE_PATH, "${Environment.DIRECTORY_MUSIC}/Lofiga")
-                        put(MediaStore.Audio.Media.IS_MUSIC, true)
-                    }
-                    val uri = context.contentResolver.insert(
-                        MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, values
-                    )
-                    if (uri != null) {
-                        try {
-                            context.contentResolver.openOutputStream(uri)?.use { out ->
-                                outputFile.inputStream().use { it.copyTo(out) }
-                            }
-                        } catch (e: Exception) {
-                            Log.e("ExportService", "Failed to publish export to MediaStore, removing entry", e)
-                            runCatching { context.contentResolver.delete(uri, null, null) }
-                        }
-                    }
-                } else {
-                    val mime = if (format == "wav") "audio/wav" else "audio/mp4"
-                    android.media.MediaScannerConnection.scanFile(
-                        context,
-                        arrayOf(outputFile.absolutePath),
-                        arrayOf(mime)
-                    ) { _, _ -> }
-                }
-            }
-
+            diag("done")
             return@withContext outputFile.absolutePath
         } catch (e: OutOfMemoryError) {
             Log.e("ExportService", "Export ran out of memory", e)
@@ -161,6 +204,39 @@ object ExportService {
             throw e
         } finally {
             activeExports.remove(exportId)
+        }
+    }
+
+    /** Publishes a finished export file into MediaStore (API 29+) or scans it. */
+    private fun publishToMediaStore(context: Context, outputFile: File, format: String) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val values = ContentValues().apply {
+                put(MediaStore.Audio.Media.DISPLAY_NAME, outputFile.name)
+                put(MediaStore.Audio.Media.MIME_TYPE,
+                    if (format == "wav") "audio/wav" else "audio/mp4")
+                put(MediaStore.Audio.Media.RELATIVE_PATH, "${Environment.DIRECTORY_MUSIC}/Lofiga")
+                put(MediaStore.Audio.Media.IS_MUSIC, true)
+            }
+            val uri = context.contentResolver.insert(
+                MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, values
+            )
+            if (uri != null) {
+                try {
+                    context.contentResolver.openOutputStream(uri)?.use { out ->
+                        outputFile.inputStream().use { it.copyTo(out) }
+                    }
+                } catch (e: Exception) {
+                    Log.e("ExportService", "Failed to publish export to MediaStore, removing entry", e)
+                    runCatching { context.contentResolver.delete(uri, null, null) }
+                }
+            }
+        } else {
+            val mime = if (format == "wav") "audio/wav" else "audio/mp4"
+            android.media.MediaScannerConnection.scanFile(
+                context,
+                arrayOf(outputFile.absolutePath),
+                arrayOf(mime)
+            ) { _, _ -> }
         }
     }
 
@@ -684,8 +760,20 @@ object ExportService {
             var sawInputEOS = false
             var sawOutputEOS = false
 
+            // Per-call deadline: on some firmware the decoder can stop yielding
+            // output while never flagging EOS, spinning this loop forever (the
+            // dequeue timeout parameter is ignored once the codec's thread
+            // dies). Bail after 60s of no progress so the pipeline can finalize
+            // with what it has instead of hanging until the caller's timeout.
+            val callStart = System.currentTimeMillis()
+            var lastProgressMs = callStart
+
             while (accumulated < CHUNK_SHORTS && !sawOutputEOS) {
                 if (cancelFlag.get()) return null
+                if (System.currentTimeMillis() - lastProgressMs > 60_000) {
+                    Log.w("ExportService", "decoder produced no output for 60s; ending stream")
+                    break
+                }
 
                 if (!sawInputEOS) {
                     val inIdx = decoder.dequeueInputBuffer(10000)
@@ -733,6 +821,7 @@ object ExportService {
                             val toCopy = minOf(shortCount, CHUNK_SHORTS - accumulated)
                             System.arraycopy(temp, 0, accumulator, accumulated, toCopy)
                             accumulated += toCopy
+                            lastProgressMs = System.currentTimeMillis()
                         }
                     }
                     decoder.releaseOutputBuffer(decIdx, false)
@@ -813,6 +902,9 @@ object ExportService {
         try {
             while (!sawEncoderEOS && !cancelFlag.get() &&
                    System.currentTimeMillis() < wallClockDeadline) {
+                diag(if (inputExhausted) "encode-eos" else "encode")
+                diagInputExhausted = inputExhausted
+                diagFramesEncoded = totalFramesEncoded
                 // Safety net: at the minimum tempo (0.25) the stretched output
                 // is at most 4x the source duration. If we ever exceed 5x, a
                 // feed bug is looping (e.g. flush returning the same tail) —
@@ -888,6 +980,7 @@ object ExportService {
                             // encode fraction rises in lockstep and stays ahead.
                             val progress = (pts.toFloat() / totalDurationUs.toFloat())
                                 .coerceIn(0f, 1f) * 0.96f
+                            diagProgress = progress
                             onProgress?.invoke(progress)
                         } else {
                             // No duration metadata at all: chunk-count fallback
@@ -902,6 +995,7 @@ object ExportService {
                         try {
                             encoder.queueInputBuffer(inputIdx, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
                             eosSignaled = true
+                            diagEosSignaled = true
                         } catch (_: Exception) {}
                     }
                 } else if (inputExhausted && pendingOffset >= pendingPcm.size && !eosSignaled) {
@@ -913,6 +1007,7 @@ object ExportService {
                     try {
                         encoder.signalEndOfInputStream()
                         eosSignaled = true
+                        diagEosSignaled = true
                     } catch (_: Exception) {}
                 }
 
@@ -952,6 +1047,7 @@ object ExportService {
                     }
                     if (bufInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) {
                         sawEncoderEOS = true
+                        diagSawEncoderEOS = true
                     }
                     encoder.releaseOutputBuffer(outIdx, false)
                     outIdx = encoder.dequeueOutputBuffer(bufInfo, 0)
@@ -984,6 +1080,7 @@ object ExportService {
             val MAX_DRAIN_TRIES = 60
             val drainProgressBase = 0.96f
             val drainProgressSpan = 0.03f
+            diag("drain")
             while (!cancelFlag.get() && drainTries < MAX_DRAIN_TRIES) {
                 drainTries++
                 if ((drainTries % 10) == 0) {
@@ -1022,6 +1119,7 @@ object ExportService {
             // the export sat frozen at 96/99% when muxer.stop/release hiccuped).
             onProgress?.invoke(0.99f)
         } finally {
+            diag("finalize")
             source.close()
             // encoder.stop()/muxer.stop() are well-known to hang on Xiaomi/MIUI
             // firmware when the codec never emitted its EOS output. Bound each
@@ -1065,6 +1163,7 @@ object ExportService {
 
             val wallClockDeadline = System.currentTimeMillis() + 8 * 60 * 1000L
             while (!cancelFlag.get() && System.currentTimeMillis() < wallClockDeadline) {
+                diag("wav-encode")
                 val chunk = source.nextChunk()
                 var processed: ShortArray? = null
                 if (chunk != null && chunk.isNotEmpty()) {
@@ -1103,6 +1202,7 @@ object ExportService {
                     // header is patched in below.
                     val progress = (pts.toFloat() / totalDurationUs.toFloat())
                         .coerceIn(0f, 1f) * 0.97f
+                    diagProgress = progress
                     onProgress?.invoke(progress)
                 } else {
                     onProgress?.invoke((wavChunksProcessed * 0.02f).coerceAtMost(0.9f))

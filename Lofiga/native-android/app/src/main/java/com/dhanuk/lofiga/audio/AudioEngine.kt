@@ -819,18 +819,30 @@ class AudioEngine(private val context: Context) {
 
     fun setBassBoost(strength: Float) {
         pendingBass = strength
-        bassBoost?.let {
+        val fx = bassBoost ?: return
+        // setStrength() is an audiofx binder/IPC call — running it on the UI
+        // thread while dragging the slider causes ANRs (same reason reverb was
+        // moved off-thread). Guard with the effects generation so a released/
+        // rebuilt effect from a track switch isn't touched.
+        val myGen = effectsGeneration
+        scope.launch(Dispatchers.IO) {
+            if (myGen != effectsGeneration) return@launch
             try {
                 val s = (strength * 1000).toInt().coerceIn(0, 1000).toShort()
-                it.setStrength(s)
-                it.enabled = strength > 0.01f
+                fx.setStrength(s)
+                fx.enabled = strength > 0.01f
             } catch (e: Exception) { Log.e("AudioEngine", "BassBoost error: ${e.message}", e) }
         }
     }
 
     fun setTrebleCut(cutoffFactor: Float) {
         pendingTreble = cutoffFactor
-        equalizer?.let { eq ->
+        val eq = equalizer ?: return
+        // Loops over every EQ band doing setBandLevel() IPC per band — must not
+        // run on the UI thread during slider drags (ANR risk).
+        val myGen = effectsGeneration
+        scope.launch(Dispatchers.IO) {
+            if (myGen != effectsGeneration) return@launch
             try {
                 if (cutoffFactor > 0.01f) {
                     val bands = eq.numberOfBands
