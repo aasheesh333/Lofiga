@@ -309,7 +309,11 @@ object ExportService {
                 .filter { it.second > 0.01f }
                 .forEach { (key, vol) ->
                     readAtmospherePcm(context, key, 44100)?.let { pcm ->
-                        layers.add(pcm to (vol * 0.8f * 32768f).toInt())
+                        // 0.6 layer gain (was 0.8): with the music pre-scaled to
+                        // 0.82 in mixAtmosphereChunk this keeps the ambience
+                        // clearly present but well under the music, and matches
+                        // the quieter live-playback balance.
+                        layers.add(pcm to (vol * 0.6f * 32768f).toInt())
                     }
                 }
             atmosphereLayers = layers
@@ -663,8 +667,12 @@ object ExportService {
         state: StreamingEffectState
     ): ShortArray {
         val result = ShortArray(pcm.size)
+        // Give the music a little headroom before summing the ambience so the
+        // combined signal doesn't slam into full-scale and hard-clip (the
+        // post-render "glitch"/distortion). 0.82 leaves ~1.6 dB for layers,
+        // matching the lower per-layer gains used at load time.
         for (i in result.indices) {
-            var sample = pcm[i].toInt()
+            var sample = (pcm[i].toInt() * 0.82f).toInt()
             for (li in layers.indices) {
                 val (layerPcm, scaledVol) = layers[li]
                 val loopSize = layerPcm.size

@@ -173,6 +173,13 @@ class AudioEngine(private val context: Context) {
         )
         // Higher priority for audio effects to ensure they aren't dropped
         private const val EFFECT_PRIORITY = 1
+
+        // Master gain applied to every atmosphere layer during live playback.
+        // The main music track plays at volume 1.0; without this scale a layer
+        // at 0.5 competed with (even buried) the song. 0.6 keeps ambience
+        // present but clearly beneath the music, and mirrors the export's 0.6
+        // layer gain so preview == exported file.
+        private const val ATMOSPHERE_MASTER_SCALE = 0.6f
     }
 
     suspend fun init() {
@@ -834,12 +841,20 @@ class AudioEngine(private val context: Context) {
         scope.launch(Dispatchers.IO) {
             if (myGen != effectsGeneration) return@launch
             try {
+                // Band-level bounds are DEVICE-SPECIFIC. Hardcoding -1500 threw
+                // IllegalArgumentException on hardware whose min gain is higher
+                // (e.g. -1200), which media3 then surfaced as the player's
+                // ERROR_CODE_UNSPECIFIED on every preset change. Clamp to the
+                // range the equalizer actually reports.
+                val levelRange = try { eq.bandLevelRange } catch (_: Exception) { null }
+                val minLevel = levelRange?.getOrNull(0) ?: (-1500).toShort()
                 if (cutoffFactor > 0.01f) {
                     val bands = eq.numberOfBands
                     for (i in 0 until bands) {
                         val freq = eq.getCenterFreq(i.toShort())
                         if (freq > 2_000_000) {
-                            val gain = (-(cutoffFactor * 1500f)).toInt().coerceIn(-1500, 0).toShort()
+                            val desired = (-(cutoffFactor * 1500f)).toInt()
+                            val gain = desired.coerceIn(minLevel.toInt(), 0).toShort()
                             eq.setBandLevel(i.toShort(), gain)
                         } else {
                             eq.setBandLevel(i.toShort(), 0.toShort())
@@ -1522,7 +1537,13 @@ class AudioEngine(private val context: Context) {
         }
         if (player == null) return
         val vol = volume.coerceIn(0f, 1f)
-        val effective = if (isDucked) vol * 0.3f else vol
+        // Master atmosphere scale: the music track plays at volume 1.0, so a
+        // raw layer volume of 0.5 sounded like it was competing with (even
+        // burying) the song. Scaling every layer by ATMOSPHERE_MASTER_SCALE
+        // keeps ambience clearly audible but firmly under the music, and
+        // matches the offline export's 0.6 layer gain so preview == export.
+        val scaled = vol * ATMOSPHERE_MASTER_SCALE
+        val effective = if (isDucked) scaled * 0.3f else scaled
         fadeAtmosphereVolume(key, player, effective)
         // Only start atmosphere when the main track is actively playing.
         // When stopped, the stored volume is kept so syncAtmospheres() will
@@ -1588,7 +1609,7 @@ class AudioEngine(private val context: Context) {
         atmosphereFadeJobs.clear()
         atmospherePlayers.forEach { (key, player) ->
             try {
-                val vol = (atmosphereVolumes[key] ?: 0f).coerceIn(0f, 1f)
+                val vol = (atmosphereVolumes[key] ?: 0f).coerceIn(0f, 1f) * ATMOSPHERE_MASTER_SCALE
                 val effective = if (duck) vol * 0.3f else vol
                 player.setVolume(effective)
                 appliedAtmosphereVolumes[key] = effective
