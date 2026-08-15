@@ -8,6 +8,9 @@ import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import com.dhanuk.lofiga.model.PresetValues
+import androidx.media3.common.C
+import androidx.media3.common.audio.AudioProcessor
+import androidx.media3.common.audio.SonicAudioProcessor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -291,34 +294,28 @@ object ExportService {
         // across chunks (resetting per chunk produced a click every ~1s).
         var atmospherePos: IntArray = IntArray(0)
 
-        // ── Streaming WSOLA state ──────────────────────────────────────────
-        // The time-stretch must be CONTINUOUS across chunks: grains are placed
-        // at GLOBAL positions (g*hopIn input → g*hopOut output), and each
-        // output slice is cut from that global stream. Chunks therefore
-        // overlap seamlessly — previously every chunk restarted grain
-        // alignment from frame 0, which produced a discontinuity (audible
-        // click/dip) at every ~1s boundary.
-        var wsolaCarry: ShortArray = ShortArray(0)   // unconsumed input frames
-        var wsolaGlobalStart: Long = 0L              // global input frame of wsolaCarry[0]
-        var wsolaSlice: Long = 0L                    // next output slice index (44100-frame slices)
-        var wsolaEffTempo: Float = 1f                // tempo actually used by the stretch (tempo/pitchFactor)
-
-        // Output-side overlap carry. Grains whose Hann window extends past the
-        // end of the current output slice MUST be carried into the next slice
-        // together with their window-sum, otherwise the frames near each slice
-        // boundary are normalised by a PARTIAL window sum (~0.02) and get
-        // amplified ~50x — that was the "blown speaker" blast, once per second
-        // (outSliceFrames = CHUNK_FRAMES = 44100 = 1s).
-        var wsolaOutCarry: FloatArray = FloatArray(0)   // interleaved samples
-        var wsolaNormCarry: FloatArray = FloatArray(0)  // per-frame window sum
-        var wsolaOutCarryStart: Long = 0L               // global output frame of carry[0]
-
-        // First grain index NOT yet rendered. Grains that straddle a slice
-        // boundary are already fully accumulated into the carry above, so the
-        // next slice must NOT render them again — doing so double-counts both
-        // the signal and the window sum (norm → 2.0), which halved the volume
-        // and comb-filtered the first ~1800 frames of every slice.
-        var wsolaNextGrain: Long = 0L
+        // ── Time-stretch / pitch (media3 SonicAudioProcessor) ──────────────
+        // The live preview runs the same processor inside ExoPlayer, so the
+        // export's speed/pitch now matches what the user HEARS in preview.
+        // The previous hand-rolled WSOLA overlap-add placed grains at fixed
+        // hopIn positions; whenever hopIn != hopOut the same content got
+        // replayed with a small phase mismatch inside each overlap region,
+        // which comb-filtered the signal (audible as "doubled"/"vibrating"
+        // audio). Sonic's correlation-based grain placement avoids that.
+        val sonic: SonicAudioProcessor? = if (tempo != 1f || pitch != 0f) {
+            try {
+                SonicAudioProcessor().apply {
+                    setSpeed(tempo.coerceIn(0.1f, 8f))
+                    val pitchFactor = Math.pow(2.0, (pitch / 12.0)).toFloat().coerceIn(0.25f, 4f)
+                    setPitch(pitchFactor)
+                    configure(AudioProcessor.AudioFormat(sampleRate, channels, C.ENCODING_PCM_16BIT))
+                }
+            } catch (t: Throwable) {
+                Log.w("ExportService", "Sonic init failed: ${t.javaClass.simpleName}: ${t.message}")
+                null
+            }
+        } else null
+        var sonicEosQueued = false
 
         fun loadAtmospheres(context: Context) {
             val layers = mutableListOf<Pair<ShortArray, Int>>()
@@ -340,8 +337,8 @@ object ExportService {
 
     /**
      * Process a single chunk of PCM through all active effects. Returns null
-     * when the streaming time-stretch is still buffering input (the caller
-     * must keep feeding chunks; no output is produced yet).
+     * when Sonic is still buffering input (the caller must keep feeding
+     * chunks; no output is produced yet).
      */
     private fun processChunk(
         chunk: ShortArray,
@@ -349,12 +346,50 @@ object ExportService {
         sampleRate: Int,
         channels: Int
     ): ShortArray? {
-        if (state.tempo != 1.0f || state.pitch != 0f) {
-            val stretched = applySpeedPitchChunk(chunk, state.tempo, state.pitch, channels, state)
-                ?: return null
-            return finishProcessChunk(stretched, state, channels)
+        val sonic = state.sonic
+        if (sonic != null) {
+            val bytes = ByteBuffer.allocateDirect(chunk.size * 2).order(ByteOrder.LITTLE_ENDIAN)
+            bytes.asShortBuffer().put(chunk)
+            bytes.rewind()
+            sonic.queueInput(bytes)
+            val out = sonic.getOutput()
+            val n = out.remaining()
+            if (n <= 0) return null
+            val shorts = ShortArray(n / 2)
+            out.asShortBuffer().get(shorts)
+            return finishProcessChunk(shorts, state, channels)
         }
         return finishProcessChunk(chunk, state, channels)
+    }
+
+    /**
+     * Drains the tail of the Sonic pipeline once the input is exhausted:
+     * queues end-of-stream and returns the next available output chunk.
+     * Returns null when nothing is left yet (call again) — the caller should
+     * stop once [StreamingEffectState.sonic] reports [AudioProcessor.isEnded].
+     */
+    private fun drainSonicChunk(
+        state: StreamingEffectState,
+        channels: Int
+    ): ShortArray? {
+        val sonic = state.sonic ?: return null
+        if (!state.sonicEosQueued) {
+            sonic.queueEndOfStream()
+            state.sonicEosQueued = true
+        }
+        if (sonic.isEnded()) return null
+        var guard = 0
+        while (guard++ < 5000) {
+            val out = sonic.getOutput()
+            val n = out.remaining()
+            if (n > 0) {
+                val shorts = ShortArray(n / 2)
+                out.asShortBuffer().get(shorts)
+                return shorts
+            }
+            if (sonic.isEnded()) return null
+        }
+        return null
     }
 
     /** Applies delay/reverb/bass/treble + atmosphere mixing to stretched PCM. */
@@ -374,332 +409,6 @@ object ExportService {
         return result
     }
 
-    // Chunk-boundary crossfade REMOVED. It was a band-aid for the WSOLA slice
-    // discontinuity, but it blended the PREVIOUS chunk's last 441 frames
-    // (already written to the file) into the CURRENT chunk's first 441 frames —
-    // two different pieces of audio — adding a 10 ms ghost/flutter every second.
-    // produceWsolaSlice now carries its output overlap (samples + window sums)
-    // across slices, so the stream is continuous by construction.
-
-    private fun applySpeedPitchChunk(
-        pcm: ShortArray,
-        tempo: Float,
-        semitones: Float,
-        channels: Int,
-        state: StreamingEffectState
-    ): ShortArray? {
-        if (tempo == 1.0f && semitones == 0f) return pcm
-
-        val safeTempo = tempo.coerceIn(0.25f, 2.5f)
-        val pitchFactor = Math.pow(2.0, (semitones / 12.0)).toFloat().coerceIn(0.25f, 4.0f)
-
-        // Fold pitch into the stretch: stretch by tempo/pitchFactor, then
-        // resample back by pitchFactor — net duration = tempo-only stretch,
-        // pitch shifted. Keeps the stretch fully inside the streaming WSOLA
-        // (per-chunk pitch resampling would reintroduce seams).
-        val effTempo = if (pitchFactor != 1f) (safeTempo / pitchFactor).coerceIn(0.25f, 2.5f) else safeTempo
-        state.wsolaEffTempo = effTempo
-        var result = timeStretchStreamingFeed(pcm, effTempo, channels, state) ?: return null
-
-        if (pitchFactor != 1f) {
-            val stretchedFrames = result.size / channels
-            result = resampleFramesChunk(
-                result,
-                (stretchedFrames / pitchFactor).toInt().coerceAtLeast(1),
-                channels
-            )
-        }
-        return result
-    }
-
-    /**
-     * Feeds one raw PCM chunk into the streaming WSOLA pipeline. Returns the
-     * next output slice (44100 frames) when enough input has accumulated, or
-     * null when the input is still being buffered (caller must keep feeding).
-     */
-    private fun timeStretchStreamingFeed(
-        pcm: ShortArray,
-        tempo: Float,
-        channels: Int,
-        state: StreamingEffectState
-    ): ShortArray? {
-        val grain = 2048
-        val hopOut = 1024
-        val outSliceFrames = CHUNK_FRAMES
-        val hopIn = hopOut * tempo.toDouble()
-
-        // Append to the carry buffer (input since wsolaGlobalStart).
-        val prev = state.wsolaCarry
-        val combined = ShortArray(prev.size + pcm.size)
-        System.arraycopy(prev, 0, combined, 0, prev.size)
-        System.arraycopy(pcm, 0, combined, prev.size, pcm.size)
-        state.wsolaCarry = combined
-
-        val slice = state.wsolaSlice
-        val outStart = slice * outSliceFrames
-        // Grains g with q_g = g*hopOut whose window [q_g, q_g+grain) intersects
-        // the output slice [outStart, outStart+outSliceFrames). Clamped so
-        // slice 0 starts the stream at grain 0 (no negative grains).
-        val gStart = maxOf(0L, ((outStart - grain) / hopOut) + 1)
-        val gEnd = (outStart + outSliceFrames - 1) / hopOut
-        val inStart = (gStart * hopIn).toLong()
-        val inEnd = (gEnd * hopIn).toLong() + grain
-        val inNeeded = (inEnd - inStart).toInt()
-
-        val carryFrames = state.wsolaCarry.size / channels
-        if (carryFrames < inNeeded) return null // keep buffering
-
-        return produceWsolaSlice(state, channels, slice, gStart, gEnd,
-            inStart, outStart, outSliceFrames, grain, hopOut, hopIn, carryFrames)
-    }
-
-    /**
-     * Called when the input source is exhausted: emits the final partial
-     * output slice from whatever input remains (the file's tail). Returns an
-     * empty array when nothing is left.
-     */
-    private fun timeStretchStreamingFlush(
-        tempo: Float,
-        channels: Int,
-        state: StreamingEffectState
-    ): ShortArray {
-        if (state.wsolaCarry.isEmpty()) {
-            // Input ended exactly on a slice boundary: the pending output
-            // overlap is all that is left. Emit it as a short fade-out instead
-            // of truncating the last ~46 ms mid-waveform.
-            return flushWsolaOutCarry(state, channels)
-        }
-        val grain = 2048
-        val hopOut = 1024
-        val outSliceFrames = CHUNK_FRAMES
-        val hopIn = hopOut * tempo.toDouble()
-
-        val slice = state.wsolaSlice
-        val outStart = slice * outSliceFrames
-        val gStart = maxOf(0L, ((outStart - grain) / hopOut) + 1)
-        val inStart = (gStart * hopIn).toLong()
-        val carryFrames = state.wsolaCarry.size / channels
-        val relInStart = (inStart - state.wsolaGlobalStart).toInt()
-
-        // Too little input left even for one grain — resample the remainder.
-        if (carryFrames - relInStart < grain) {
-            val availFrames = (carryFrames - relInStart).coerceAtLeast(0)
-            if (availFrames <= 0) return ShortArray(0)
-            val avail = ShortArray(availFrames * channels)
-            System.arraycopy(state.wsolaCarry, relInStart * channels, avail, 0, avail.size)
-            // CONSUME the remainder: a repeated flush must return empty so the
-            // feed loop marks inputExhausted and the pipeline finalizes.
-            // Previously this branch left wsolaCarry untouched (and never
-            // advanced wsolaSlice), so flush returned the SAME resampled tail
-            // forever — the export encoded that tail endlessly and hung at 96%
-            // until MainViewModel's 10-minute withTimeout fired.
-            state.wsolaCarry = ShortArray(0)
-            state.wsolaGlobalStart = inStart
-            state.wsolaSlice++
-            val tail = resampleFramesChunk(avail, (availFrames / tempo).toInt().coerceAtLeast(1), channels)
-            // Prepend the pending output overlap so the join to this resampled
-            // remainder is continuous rather than a hard cut.
-            val head = flushWsolaOutCarry(state, channels)
-            if (head.isEmpty()) return tail
-            val merged = ShortArray(head.size + tail.size)
-            System.arraycopy(head, 0, merged, 0, head.size)
-            System.arraycopy(tail, 0, merged, head.size, tail.size)
-            return merged
-        }
-
-        // Largest grain that fits in the remaining input.
-        val gEndNominal = (outStart + outSliceFrames - 1) / hopOut
-        var gEnd = gStart
-        while (gEnd <= gEndNominal &&
-            (gEnd * hopIn).toLong() - inStart + grain <= carryFrames) {
-            gEnd++
-        }
-        gEnd--
-        if (gEnd < gStart) return ShortArray(0)
-
-        val outLen = ((gEnd * hopOut) - outStart + grain).toInt().coerceAtLeast(1)
-        val sliceLen = outLen.coerceAtMost(outSliceFrames)
-        return produceWsolaSlice(state, channels, slice, gStart, gEnd,
-            inStart, outStart, sliceLen, grain, hopOut, hopIn, carryFrames)
-    }
-
-    /**
-     * Emits the pending output-overlap carry as final audio and clears it.
-     *
-     * The carry holds grain tails whose Hann window was never completed by a
-     * following grain, so its window sum ramps down towards 0. Normalising by
-     * that ramp would amplify the tail back to full scale (the same 50x blast
-     * the carry was introduced to fix), so the ramp is deliberately LEFT IN:
-     * it becomes a ~46 ms fade-out at the very end of the export, which is the
-     * musically correct ending for a truncated overlap-add stream.
-     */
-    private fun flushWsolaOutCarry(
-        state: StreamingEffectState,
-        channels: Int
-    ): ShortArray {
-        val carryOut = state.wsolaOutCarry
-        val carryNorm = state.wsolaNormCarry
-        state.wsolaOutCarry = FloatArray(0)
-        state.wsolaNormCarry = FloatArray(0)
-        if (carryNorm.isEmpty()) return ShortArray(0)
-
-        // Trim frames that carry no energy at all (window sum ~0).
-        var last = carryNorm.size - 1
-        while (last >= 0 && carryNorm[last] < 1e-4f) last--
-        if (last < 0) return ShortArray(0)
-        val frames = last + 1
-
-        val result = ShortArray(frames * channels)
-        for (f in 0 until frames) {
-            // Divide by 1.0 (not by the ramp) → natural fade-out.
-            for (c in 0 until channels) {
-                val v = carryOut[f * channels + c].toInt()
-                result[f * channels + c] = v.coerceIn(-32768, 32767).toShort()
-            }
-        }
-        return result
-    }
-
-    private fun produceWsolaSlice(
-        state: StreamingEffectState,
-        channels: Int,
-        slice: Long,
-        gStart: Long,
-        gEnd: Long,
-        inStart: Long,
-        outStart: Long,
-        outLen: Int,
-        grain: Int,
-        hopOut: Int,
-        hopIn: Double,
-        carryFrames: Int
-    ): ShortArray {
-        val carry = state.wsolaCarry
-        // Accumulate into a buffer that is `grain` frames LONGER than the slice
-        // we emit. Grains whose Hann window runs past the slice end land in that
-        // tail and are carried into the next slice instead of being truncated.
-        //
-        // This is the "blown speaker" fix: previously the window was cut at
-        // outLen, so the last frames of every slice had only a partial
-        // window-sum in `norm` (often ~0.02). Dividing by that tiny value
-        // multiplied those samples by ~50x, producing a full-scale blast at
-        // every slice boundary — i.e. once per second, since
-        // outSliceFrames = CHUNK_FRAMES = 44100.
-        val accLen = outLen + grain
-        val out = FloatArray(accLen * channels)
-        val norm = FloatArray(accLen)
-        val window = FloatArray(grain) { i ->
-            (0.5 - 0.5 * Math.cos(2.0 * Math.PI * i / (grain - 1))).toFloat()
-        }
-
-        // Fold in the overlap left by the previous slice, aligned by its global
-        // output position (the flush path can emit a short slice, so carry[0]
-        // does not always land exactly on this slice's outStart).
-        val prevOut = state.wsolaOutCarry
-        val prevNorm = state.wsolaNormCarry
-        if (prevNorm.isNotEmpty()) {
-            val offset = (state.wsolaOutCarryStart - outStart).toInt()
-            if (offset >= 0 && offset < accLen) {
-                val copyFrames = minOf(prevNorm.size, accLen - offset)
-                for (f in 0 until copyFrames) {
-                    val dstF = offset + f
-                    norm[dstF] += prevNorm[f]
-                    val srcBase = f * channels
-                    val dstBase = dstF * channels
-                    for (c in 0 until channels) {
-                        out[dstBase + c] += prevOut[srcBase + c]
-                    }
-                }
-            }
-            // offset out of range → the carry belongs to a discarded region;
-            // dropping it is correct (and safer than misaligning it).
-        }
-
-        // Grains below wsolaNextGrain straddled the previous slice boundary and
-        // are ALREADY fully accumulated in the carry folded in above. Rendering
-        // them again would add their signal and window a second time (norm → 2),
-        // which halves the level and comb-filters the first ~grain frames of
-        // every slice. Start at the first grain that has never been rendered.
-        val firstG = maxOf(gStart, state.wsolaNextGrain)
-        for (g in firstG..gEnd) {
-            val baseIn = ((g * hopIn).toLong() - inStart).toInt() // within carry
-            if (baseIn < 0) continue                              // input already dropped
-            if (baseIn + grain > carryFrames) continue // should not happen when input is sufficient
-            val q = ((g * hopOut) - outStart).toInt() // within out; may be negative
-            val kStart = if (q < 0) -q else 0
-            val kEnd = minOf(grain, accLen - q)
-            if (kEnd <= kStart) continue
-            for (k in kStart until kEnd) {
-                val w = window[k]
-                val src = (baseIn + k) * channels
-                val dst = (q + k) * channels
-                for (c in 0 until channels) {
-                    out[dst + c] += carry[src + c].toFloat() * w
-                }
-                norm[q + k] += w
-            }
-        }
-        state.wsolaNextGrain = maxOf(state.wsolaNextGrain, gEnd + 1)
-
-        // Emit only the frames whose overlap is complete (the first outLen).
-        val result = ShortArray(outLen * channels)
-        for (f in 0 until outLen) {
-            // Floor the divisor: at the very start of the stream the window
-            // legitimately ramps from 0, and dividing by that would explode the
-            // first few frames. Flooring turns it into a short, inaudible
-            // fade-in instead.
-            val n = maxOf(norm[f], 0.35f)
-            for (c in 0 until channels) {
-                val v = (out[f * channels + c] / n).toInt()
-                result[f * channels + c] = v.coerceIn(-32768, 32767).toShort()
-            }
-        }
-
-        // Keep the unfinished tail (and its window sums) for the next slice.
-        val tailFrames = accLen - outLen
-        val tailOut = FloatArray(tailFrames * channels)
-        val tailNorm = FloatArray(tailFrames)
-        System.arraycopy(out, outLen * channels, tailOut, 0, tailFrames * channels)
-        System.arraycopy(norm, outLen, tailNorm, 0, tailFrames)
-        state.wsolaOutCarry = tailOut
-        state.wsolaNormCarry = tailNorm
-        state.wsolaOutCarryStart = outStart + outLen
-
-        // Drop consumed input: everything before the next slice's inStart.
-        val nextGStart = maxOf(0L, ((slice * CHUNK_FRAMES + CHUNK_FRAMES - grain) / hopOut) + 1)
-        val nextInStart = (nextGStart * hopIn).toLong()
-        val dropFrames = (nextInStart - state.wsolaGlobalStart).toInt().coerceIn(0, carryFrames)
-        val keptShorts = carry.size - dropFrames * channels
-        if (keptShorts > 0) {
-            state.wsolaCarry = carry.copyOfRange(dropFrames * channels, carry.size)
-        } else {
-            state.wsolaCarry = ShortArray(0)
-        }
-        state.wsolaGlobalStart = nextInStart
-        state.wsolaSlice++
-        return result
-    }
-
-    private fun resampleFramesChunk(pcm: ShortArray, targetFrames: Int, channels: Int): ShortArray {
-        val inFrames = pcm.size / channels
-        if (targetFrames == inFrames || targetFrames <= 0) return pcm
-        val output = ShortArray(targetFrames * channels)
-        val step = inFrames.toFloat() / targetFrames.toFloat()
-        for (frame in 0 until targetFrames) {
-            val srcPos = frame * step
-            val srcFrame = srcPos.toInt().coerceIn(0, inFrames - 2)
-            val frac = srcPos - srcFrame
-            val baseIn = srcFrame * channels
-            val baseOut = frame * channels
-            for (ch in 0 until channels) {
-                val cur = pcm[baseIn + ch].toInt()
-                val next = pcm[baseIn + channels + ch].toInt()
-                val sample = (cur * (1f - frac) + next * frac).toInt()
-                output[baseOut + ch] = sample.coerceIn(-32768, 32767).toShort()
-            }
-        }
-        return output
-    }
 
     private fun applyCombinedEffectsChunk(
         pcm: ShortArray,
@@ -1034,8 +743,8 @@ object ExportService {
         var chunksProcessed = 0
         var pendingPcm = ShortArray(0)
         var pendingOffset = 0
-        // True once the source is exhausted AND the final WSOLA flush came back
-        // empty: the feed has nothing left to produce.
+        // True once the source is exhausted AND Sonic has finished draining:
+        // the pipeline has nothing left to produce.
         var inputExhausted = false
         var eosSignaled = false
         // Consecutive empty output polls after EOS was queued. Encoders on some
@@ -1064,24 +773,30 @@ object ExportService {
                     inputExhausted = true
                 }
                 // 1) Ensure pendingPcm holds data to encode. Feed raw chunks to
-                //    the streaming pipeline until it emits an output slice (it
-                //    buffers input until a full WSOLA slice can be produced) or
-                //    the input is exhausted (final flush).
+                //    the Sonic pipeline until it emits an output chunk or the
+                //    input is exhausted (final drain).
                 if (pendingOffset >= pendingPcm.size) {
                     var produced = false
                     while (!produced) {
                         if (cancelFlag.get()) break
                         val chunk = source.nextChunk()
                         if (chunk == null || chunk.isEmpty()) {
-                            // Input exhausted: flush the final partial slice.
-                            val flushed = timeStretchStreamingFlush(effectState.wsolaEffTempo, 2, effectState)
-                            if (flushed.isNotEmpty()) {
-                                pendingPcm = finishProcessChunk(flushed, effectState, 2)
+                            // Input exhausted: drain Sonic's buffered tail. Once
+                            // it reports isEnded there is nothing left.
+                            val sonic = effectState.sonic
+                            if (sonic == null || sonic.isEnded()) {
+                                inputExhausted = true
+                                break
+                            }
+                            val drained = drainSonicChunk(effectState, 2)
+                            if (drained != null) {
+                                pendingPcm = finishProcessChunk(drained, effectState, 2)
                                 pendingOffset = 0
                                 chunksProcessed++
                                 produced = true
                             } else {
-                                inputExhausted = true
+                                // Sonic still producing its final block — hand
+                                // back to the encoder loop and retry next pass.
                                 break
                             }
                         } else {
@@ -1323,15 +1038,19 @@ object ExportService {
                 }
                 if (processed == null) {
                     if (chunk == null) {
-                        // Input exhausted: flush the final partial slice.
-                        val flushed = timeStretchStreamingFlush(effectState.wsolaEffTempo, 2, effectState)
-                        if (flushed.isNotEmpty()) {
-                            processed = finishProcessChunk(flushed, effectState, 2)
+                        // Input exhausted: drain Sonic's buffered tail. Once it
+                        // reports isEnded there is nothing left to write.
+                        val sonic = effectState.sonic
+                        if (sonic == null || sonic.isEnded()) break
+                        val drained = drainSonicChunk(effectState, 2)
+                        if (drained != null) {
+                            processed = finishProcessChunk(drained, effectState, 2)
                         } else {
-                            break
+                            // Sonic still producing its final block — retry.
+                            continue
                         }
                     } else {
-                        // Streaming stretch still buffering — keep feeding.
+                        // Sonic still buffering — keep feeding.
                         continue
                     }
                 }
