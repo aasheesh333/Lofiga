@@ -610,8 +610,17 @@ object ExportService {
     ): ShortArray {
         val output = ShortArray(pcm.size)
 
+        // Pre-attenuate the dry signal proportionally to how much bass boost is
+        // applied so the boosted low end has room to grow WITHOUT slamming the
+        // ceiling. The live path uses a hardware BassBoost shelf (gentle); the
+        // old offline gain of 2.5x with no headroom pushed bass-heavy material
+        // way past full-scale, and the hard clip at the end turned that into
+        // the "bold"/glitchy distortion the user hears. 1.0 - 0.35*strength
+        // leaves headroom that matches the added low-end energy.
+        val dryGain = 1f - 0.35f * state.bassStrength.coerceIn(0f, 1f)
+
         for (i in pcm.indices) {
-            var sample = pcm[i].toFloat() / 32768f
+            var sample = (pcm[i].toFloat() / 32768f) * dryGain
             val ch = i and 1
 
             // Delay
@@ -632,14 +641,16 @@ object ExportService {
                 sample = drySample * (1 - state.reverbWet * 0.5f) + wetSample * state.reverbWet * 0.5f
             }
 
-            // Bass
+            // Bass — gain lowered 2.5f -> 1.2f to match the gentle hardware
+            // BassBoost shelf used in live preview (was far more aggressive
+            // offline, the main source of the export sounding "bolder").
             if (state.bassStrength > 0.01f) {
                 if (ch == 0) {
                     state.bassLpL = state.bassAlpha * state.bassLpL + (1 - state.bassAlpha) * sample
-                    sample += state.bassStrength * 2.5f * state.bassLpL
+                    sample += state.bassStrength * 1.2f * state.bassLpL
                 } else {
                     state.bassLpR = state.bassAlpha * state.bassLpR + (1 - state.bassAlpha) * sample
-                    sample += state.bassStrength * 2.5f * state.bassLpR
+                    sample += state.bassStrength * 1.2f * state.bassLpR
                 }
             }
 
@@ -654,10 +665,31 @@ object ExportService {
                 }
             }
 
-            output[i] = (sample * 32768f).toInt().coerceIn(-32768, 32767).toShort()
+            // Soft limiter instead of a hard clip: samples inside ~[-0.8,0.8]
+            // pass through linearly; beyond that they roll off along a tanh
+            // curve toward ±1.0. A hard coerceIn() flattens peaks into a
+            // square edge (clicks/glitch); the soft knee keeps loud transients
+            // smooth, removing the post-render distortion.
+            output[i] = (softLimit(sample) * 32768f).toInt().coerceIn(-32768, 32767).toShort()
         }
 
         return output
+    }
+
+    /**
+     * Soft-knee limiter. Linear within ±[THRESH]; above it, the excess is
+     * compressed through tanh so the signal asymptotically approaches ±1.0
+     * without the abrupt flat-top a hard clip produces.
+     */
+    private fun softLimit(x: Float): Float {
+        val thresh = 0.8f
+        val ax = kotlin.math.abs(x)
+        if (ax <= thresh) return x
+        val sign = if (x >= 0f) 1f else -1f
+        val over = ax - thresh
+        val range = 1f - thresh
+        // tanh maps [0,inf) -> [0,1); scale so the knee is continuous at thresh.
+        return sign * (thresh + range * kotlin.math.tanh(over / range))
     }
 
     private fun mixAtmosphereChunk(
@@ -672,17 +704,20 @@ object ExportService {
         // post-render "glitch"/distortion). 0.82 leaves ~1.6 dB for layers,
         // matching the lower per-layer gains used at load time.
         for (i in result.indices) {
-            var sample = (pcm[i].toInt() * 0.82f).toInt()
+            var sample = (pcm[i].toInt() * 0.82f)
             for (li in layers.indices) {
                 val (layerPcm, scaledVol) = layers[li]
                 val loopSize = layerPcm.size
                 if (loopSize > 0) {
                     val pos = state.atmospherePos[li]
-                    sample += (layerPcm[pos % loopSize].toInt() * scaledVol) shr 15
+                    sample += ((layerPcm[pos % loopSize].toInt() * scaledVol) shr 15).toFloat()
                     state.atmospherePos[li] = pos + 1
                 }
             }
-            result[i] = sample.coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
+            // Same soft-knee limiter as the effects stage so any overshoot from
+            // summing layers rolls off smoothly instead of clicking.
+            result[i] = (softLimit(sample / 32768f) * 32768f)
+                .toInt().coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
         }
         return result
     }

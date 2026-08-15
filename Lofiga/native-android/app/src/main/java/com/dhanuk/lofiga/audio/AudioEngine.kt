@@ -814,6 +814,17 @@ class AudioEngine(private val context: Context) {
     // runtime player error. The coroutine bails when it sees a stale gen.
     private var effectsGeneration = 0
 
+    // Serializes native audiofx mutations (setStrength/setBandLevel/setPreset)
+    // against releaseEffects()/initEffects(). The generation guard alone left a
+    // race window: a setter coroutine could pass the gen check, then release()
+    // ran on another thread and freed the native effect, then the coroutine's
+    // native call hit a released object — throwing (AIOOBE / IllegalState from
+    // the binder on some MIUI firmware) which media3 surfaced as the
+    // intermittent ERROR_CODE_UNSPECIFIED "after a while". Holding this lock for
+    // both the mutation and the release closes that window; re-checking the gen
+    // INSIDE the lock ensures a setter that lost the race bails cleanly.
+    private val effectsLock = Any()
+
     fun setBassBoost(strength: Float) {
         pendingBass = strength
         val fx = bassBoost ?: return
@@ -823,12 +834,14 @@ class AudioEngine(private val context: Context) {
         // rebuilt effect from a track switch isn't touched.
         val myGen = effectsGeneration
         scope.launch(Dispatchers.IO) {
-            if (myGen != effectsGeneration) return@launch
-            try {
-                val s = (strength * 1000).toInt().coerceIn(0, 1000).toShort()
-                fx.setStrength(s)
-                fx.enabled = strength > 0.01f
-            } catch (e: Exception) { Log.e("AudioEngine", "BassBoost error: ${e.message}", e) }
+            synchronized(effectsLock) {
+                if (myGen != effectsGeneration || bassBoost !== fx) return@synchronized
+                try {
+                    val s = (strength * 1000).toInt().coerceIn(0, 1000).toShort()
+                    fx.setStrength(s)
+                    fx.enabled = strength > 0.01f
+                } catch (t: Throwable) { Log.e("AudioEngine", "BassBoost error: ${t.javaClass.simpleName}: ${t.message}", t) }
+            }
         }
     }
 
@@ -839,36 +852,38 @@ class AudioEngine(private val context: Context) {
         // run on the UI thread during slider drags (ANR risk).
         val myGen = effectsGeneration
         scope.launch(Dispatchers.IO) {
-            if (myGen != effectsGeneration) return@launch
-            try {
-                // Band-level bounds are DEVICE-SPECIFIC. Hardcoding -1500 threw
-                // IllegalArgumentException on hardware whose min gain is higher
-                // (e.g. -1200), which media3 then surfaced as the player's
-                // ERROR_CODE_UNSPECIFIED on every preset change. Clamp to the
-                // range the equalizer actually reports.
-                val levelRange = try { eq.bandLevelRange } catch (_: Exception) { null }
-                val minLevel = levelRange?.getOrNull(0) ?: (-1500).toShort()
-                if (cutoffFactor > 0.01f) {
-                    val bands = eq.numberOfBands
-                    for (i in 0 until bands) {
-                        val freq = eq.getCenterFreq(i.toShort())
-                        if (freq > 2_000_000) {
-                            val desired = (-(cutoffFactor * 1500f)).toInt()
-                            val gain = desired.coerceIn(minLevel.toInt(), 0).toShort()
-                            eq.setBandLevel(i.toShort(), gain)
-                        } else {
+            synchronized(effectsLock) {
+                if (myGen != effectsGeneration || equalizer !== eq) return@synchronized
+                try {
+                    // Band-level bounds are DEVICE-SPECIFIC. Hardcoding -1500 threw
+                    // IllegalArgumentException on hardware whose min gain is higher
+                    // (e.g. -1200), which media3 then surfaced as the player's
+                    // ERROR_CODE_UNSPECIFIED on every preset change. Clamp to the
+                    // range the equalizer actually reports.
+                    val levelRange = try { eq.bandLevelRange } catch (_: Throwable) { null }
+                    val minLevel = levelRange?.getOrNull(0) ?: (-1500).toShort()
+                    if (cutoffFactor > 0.01f) {
+                        val bands = eq.numberOfBands
+                        for (i in 0 until bands) {
+                            val freq = eq.getCenterFreq(i.toShort())
+                            if (freq > 2_000_000) {
+                                val desired = (-(cutoffFactor * 1500f)).toInt()
+                                val gain = desired.coerceIn(minLevel.toInt(), 0).toShort()
+                                eq.setBandLevel(i.toShort(), gain)
+                            } else {
+                                eq.setBandLevel(i.toShort(), 0.toShort())
+                            }
+                        }
+                        eq.enabled = true
+                    } else {
+                        val bands = eq.numberOfBands
+                        for (i in 0 until bands) {
                             eq.setBandLevel(i.toShort(), 0.toShort())
                         }
+                        eq.enabled = false
                     }
-                    eq.enabled = true
-                } else {
-                    val bands = eq.numberOfBands
-                    for (i in 0 until bands) {
-                        eq.setBandLevel(i.toShort(), 0.toShort())
-                    }
-                    eq.enabled = false
-                }
-            } catch (e: Exception) { Log.e("AudioEngine", "TrebleCut error: ${e.message}", e) }
+                } catch (t: Throwable) { Log.e("AudioEngine", "TrebleCut error: ${t.javaClass.simpleName}: ${t.message}", t) }
+            }
         }
     }
 
@@ -888,25 +903,27 @@ class AudioEngine(private val context: Context) {
             // Reverb changes are IPC calls. Running them on UI thread causes instant ANR when dragging sliders!
             val myGen = effectsGeneration
             scope.launch(Dispatchers.IO) {
-                try {
-                    if (myGen != effectsGeneration) return@launch  // effects released/rebuilt meanwhile
-                    val combined = (reverbWet + delayWet * 1.0f).coerceIn(0f, 1f)
-                    val wasEnabled = r.enabled
-                    val shouldEnable = combined > 0.01f
-                    if (wasEnabled != shouldEnable) r.enabled = shouldEnable
-                    
-                    if (shouldEnable) {
-                        r.preset = when {
-                            combined < 0.06f -> PresetReverb.PRESET_NONE
-                            combined < 0.15f -> PresetReverb.PRESET_SMALLROOM
-                            combined < 0.30f -> PresetReverb.PRESET_MEDIUMROOM
-                            combined < 0.55f -> PresetReverb.PRESET_LARGEHALL
-                            else -> PresetReverb.PRESET_PLATE
+                synchronized(effectsLock) {
+                    try {
+                        if (myGen != effectsGeneration || reverb !== r) return@synchronized  // effects released/rebuilt meanwhile
+                        val combined = (reverbWet + delayWet * 1.0f).coerceIn(0f, 1f)
+                        val wasEnabled = r.enabled
+                        val shouldEnable = combined > 0.01f
+                        if (wasEnabled != shouldEnable) r.enabled = shouldEnable
+
+                        if (shouldEnable) {
+                            r.preset = when {
+                                combined < 0.06f -> PresetReverb.PRESET_NONE
+                                combined < 0.15f -> PresetReverb.PRESET_SMALLROOM
+                                combined < 0.30f -> PresetReverb.PRESET_MEDIUMROOM
+                                combined < 0.55f -> PresetReverb.PRESET_LARGEHALL
+                                else -> PresetReverb.PRESET_PLATE
+                            }
                         }
-                    }
-                    // ExoPlayer has no setAuxEffectSendLevel; the reverb preset above
-                    // is the effective control. (MediaPlayer-only workaround removed.)
-                } catch (e: Exception) { android.util.Log.e("AudioEngine", "Reverb error: ${e.message}", e) }
+                        // ExoPlayer has no setAuxEffectSendLevel; the reverb preset above
+                        // is the effective control. (MediaPlayer-only workaround removed.)
+                    } catch (t: Throwable) { android.util.Log.e("AudioEngine", "Reverb error: ${t.javaClass.simpleName}: ${t.message}", t) }
+                }
             }
         }
     }
@@ -1714,12 +1731,14 @@ class AudioEngine(private val context: Context) {
     }
 
     private fun releaseEffects() {
-        effectsGeneration++  // any in-flight setReverbAndDelay() coroutine bails
-        reverb?.release()
-        bassBoost?.release()
-        equalizer?.release()
-        reverb = null
-        bassBoost = null
-        equalizer = null
+        synchronized(effectsLock) {
+            effectsGeneration++  // any in-flight setReverbAndDelay() coroutine bails
+            reverb?.release()
+            bassBoost?.release()
+            equalizer?.release()
+            reverb = null
+            bassBoost = null
+            equalizer = null
+        }
     }
 }

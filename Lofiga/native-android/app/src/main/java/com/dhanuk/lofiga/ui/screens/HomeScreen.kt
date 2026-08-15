@@ -510,6 +510,20 @@ private fun RecentEditItem(
     onDelete: () -> Unit
 ) {
     val colors = LocalAppColors.current
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+
+    if (showDeleteConfirm) {
+        DeleteConfirmDialog(
+            title = "Delete remix?",
+            message = "Delete \"${edit.fileName}\"? This cannot be undone.",
+            onConfirm = {
+                showDeleteConfirm = false
+                onDelete()
+            },
+            onDismiss = { showDeleteConfirm = false }
+        )
+    }
+
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -546,7 +560,7 @@ private fun RecentEditItem(
                 )
                 Text("Saved recently", style = MaterialTheme.typography.bodySmall, color = colors.textTertiary)
             }
-            IconButton(onClick = onDelete) {
+            IconButton(onClick = { showDeleteConfirm = true }) {
                 Icon(Icons.Outlined.Delete, contentDescription = "Delete", tint = colors.textTertiary, modifier = Modifier.size(20.dp))
             }
         }
