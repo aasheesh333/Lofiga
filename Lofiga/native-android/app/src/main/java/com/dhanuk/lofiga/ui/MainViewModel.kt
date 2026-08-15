@@ -240,7 +240,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) { 
         if (success) {
             _currentTrack.value = track
             pushSessionArtwork(track)
-            _currentTrackIndex.value = filteredSongs.value.indexOf(track)
+            // Match by MediaStore id (structural AudioTrack equality can miss if
+            // metadata differs), falling back to reference equality. Keeping the
+            // index accurate is what makes next/previous step through the list
+            // instead of snapping back to song[0].
+            _currentTrackIndex.value = filteredSongs.value.indexOfFirst {
+                (it.id == track.id && track.id != 0L) || it == track
+            }
             applyPresetOnLoad()
         } else {
             _snackbarMessage.tryEmit(audioEngine.error.value ?: "Failed to load track")

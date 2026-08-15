@@ -626,26 +626,13 @@ class AudioEngine(private val context: Context) {
             _error.value = "No track loaded"
             return
         }
-        try {
-            if (_isPlaying.value) {
-                player.pause()
-                _isPlaying.value = false
-                positionJob?.cancel()
-                pauseAtmospheres()
-                onPlaybackStateChanged?.invoke(false)
-            } else {
-                if (player.playbackState == Player.STATE_ENDED) {
-                    player.seekTo(0)
-                }
-                player.play()
-                _isPlaying.value = true
-                startPositionPolling()
-                syncAtmospheres()
-                onPlaybackStateChanged?.invoke(true)
-            }
-        } catch (e: Exception) {
-            _error.value = "Play/Pause error: ${e.message}"
-            Log.e("AudioEngine", "Playback error: ${e.message}", e)
+        // Resume path must go through play() so it re-acquires audio focus
+        // (after a permanent focus loss) and re-applies stored tempo/pitch
+        // params. Only the pause branch is handled inline.
+        if (_isPlaying.value) {
+            pause()
+        } else {
+            play()
         }
     }
 
@@ -1123,8 +1110,18 @@ class AudioEngine(private val context: Context) {
             // then widen once we approach MAX_FFT_FRAMES so long tracks stay capped.
             val baseHop = (sampleRate / 16).coerceIn(windowSize, windowSize * 8)
 
+            // No-progress guard: on some firmware the decoder can stop yielding
+            // output without ever flagging EOS, which would spin this loop
+            // forever on the background dispatcher (battery/CPU drain, leaked
+            // coroutine). Bail after 30s without any output buffer.
+            var lastOutputMs = System.currentTimeMillis()
+
             while (!sawOutputEOS) {
                 if (myGen != fftGeneration) break   // a newer load arrived — abandon this decode
+                if (System.currentTimeMillis() - lastOutputMs > 30_000) {
+                    Log.w("AudioEngine", "FFT decode stalled (no output 30s); aborting visualization decode")
+                    break
+                }
                 if (!sawInputEOS) {
                     val inputIndex = codec.dequeueInputBuffer(5000)
                     if (inputIndex >= 0) {
@@ -1150,6 +1147,7 @@ class AudioEngine(private val context: Context) {
                 val outputIndex = codec.dequeueOutputBuffer(bufferInfo, 5000)
                 if (outputIndex == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) continue
                 if (outputIndex >= 0) {
+                    lastOutputMs = System.currentTimeMillis()
                     if ((bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
                         sawOutputEOS = true
                     }

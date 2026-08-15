@@ -39,6 +39,7 @@ import com.dhanuk.lofiga.ui.MainViewModel
 import com.dhanuk.lofiga.ui.components.*
 import com.dhanuk.lofiga.ui.theme.*
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
@@ -222,6 +223,7 @@ fun HomeScreen(
                         fileName = file.name,
                         filePath = file.absolutePath,
                         onPlay = { onMixSelected(file.absolutePath, file.name) },
+                        onDeleted = { exportedFiles = exportedFiles.filterNot { it.absolutePath == file.absolutePath } },
                         context = context
                     )
                 }
@@ -346,9 +348,11 @@ private fun MixItem(
     fileName: String,
     filePath: String,
     onPlay: () -> Unit,
+    onDeleted: () -> Unit,
     context: android.content.Context
 ) {
     val colors = LocalAppColors.current
+    val scope = rememberCoroutineScope()
     var showMenu by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
 
@@ -357,8 +361,14 @@ private fun MixItem(
             title = "Delete Mix",
             message = "Delete \"$fileName\"? This cannot be undone.",
             onConfirm = {
-                File(filePath).delete()
                 showDeleteConfirm = false
+                // File I/O off the main thread; drop from the list on success.
+                scope.launch {
+                    val deleted = withContext(Dispatchers.IO) {
+                        try { File(filePath).delete() } catch (_: Exception) { false }
+                    }
+                    if (deleted) onDeleted()
+                }
             },
             onDismiss = { showDeleteConfirm = false }
         )
@@ -416,18 +426,26 @@ private fun MixItem(
                         text = { Text("Share") },
                         onClick = {
                             showMenu = false
-                            try {
-                                val file = File(filePath)
-                                if (file.exists()) {
-                                    val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-                                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                                        type = "audio/*"
-                                        putExtra(Intent.EXTRA_STREAM, uri)
-                                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                    }
-                                    context.startActivity(Intent.createChooser(shareIntent, "Share track"))
+                            scope.launch {
+                                val uri = withContext(Dispatchers.IO) {
+                                    try {
+                                        val file = File(filePath)
+                                        if (file.exists())
+                                            FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+                                        else null
+                                    } catch (_: Exception) { null }
                                 }
-                            } catch (_: Exception) {}
+                                if (uri != null) {
+                                    try {
+                                        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                            type = "audio/*"
+                                            putExtra(Intent.EXTRA_STREAM, uri)
+                                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                        }
+                                        context.startActivity(Intent.createChooser(shareIntent, "Share track"))
+                                    } catch (_: Exception) {}
+                                }
+                            }
                         },
                         leadingIcon = { Icon(Icons.Outlined.Share, contentDescription = null, modifier = Modifier.size(18.dp)) }
                     )
