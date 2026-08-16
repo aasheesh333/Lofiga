@@ -697,6 +697,10 @@ class AudioEngine(private val context: Context) {
                 player.pause()
             }
             _isPlaying.value = false
+            // Stop the fake-waveform animation loop too — otherwise it keeps
+            // animating after pause (it only checks `animatingWaveform`), which
+            // is exactly the "wave keeps moving after pause" bug.
+            animatingWaveform = false
             positionJob?.cancel()
             pauseAtmospheres()
             onPlaybackStateChanged?.invoke(false)
@@ -760,6 +764,7 @@ class AudioEngine(private val context: Context) {
             } catch (_: Exception) {}
         }
         _position.value = 0
+        animatingWaveform = false   // same as pause(): kill the fake-wave loop
         positionJob?.cancel()
         abandonAudioFocus()
         onPlaybackStateChanged?.invoke(false)
@@ -1016,7 +1021,11 @@ class AudioEngine(private val context: Context) {
             animatingWaveform = true
             try {
                 var phase = 0f
-                while (animatingWaveform && isActive) {
+                // Also tied to _isPlaying: guards the pause race where this
+                // coroutine's delayed `animatingWaveform = true` re-arms the
+                // flag AFTER pause() cleared it (animation loop would then run
+                // forever since the polling loop is cancelled on pause).
+                while (animatingWaveform && _isPlaying.value && isActive) {
                     // Hand back to the position-polling loop the moment real FFT
                     // data covers the current position, so the fake pattern can
                     // never outlive the real one (previously it ran forever once
