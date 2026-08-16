@@ -1030,39 +1030,62 @@ class AudioEngine(private val context: Context) {
                     // data covers the current position, so the fake pattern can
                     // never outlive the real one (previously it ran forever once
                     // a seek started it, freezing the waveform on fake data).
-                    val liveNearby = synchronized(framesLock) {
+                    // Also returns the NEAREST real frame as an anchor when the
+                    // background decode is still behind playback.
+                    val (liveNearby, anchor) = synchronized(framesLock) {
                         val frames = precomputedFrames
-                        if (frames.isEmpty()) return@synchronized false
-                        // Read from the position StateFlow (written by the
-                        // main-thread polling loop) — accessing the ExoPlayer
-                        // from this Dispatchers.Default coroutine throws
-                        // IllegalStateException (player accessed on wrong
-                        // thread).
                         val pos = _position.value
-                        if (pos < 0) return@synchronized false
-                        var left = 0
-                        var right = frames.size - 1
-                        var best = frames[0]
-                        while (left <= right) {
-                            val mid = (left + right) / 2
-                            if (frames[mid].timeMs <= pos) {
-                                best = frames[mid]
-                                left = mid + 1
+                        if (frames.isEmpty() || pos < 0) {
+                            false to null
+                        } else {
+                            // Read from the position StateFlow (written by the
+                            // main-thread polling loop) — accessing the ExoPlayer
+                            // from this Dispatchers.Default coroutine throws
+                            // IllegalStateException (player accessed on wrong
+                            // thread).
+                            var left = 0
+                            var right = frames.size - 1
+                            var best = frames[0]
+                            while (left <= right) {
+                                val mid = (left + right) / 2
+                                if (frames[mid].timeMs <= pos) {
+                                    best = frames[mid]
+                                    left = mid + 1
+                                } else {
+                                    right = mid - 1
+                                }
+                            }
+                            if (pos - best.timeMs <= 1500) {
+                                true to null
                             } else {
-                                right = mid - 1
+                                false to best
                             }
                         }
-                        pos - best.timeMs <= 1500
                     }
                     if (liveNearby) {
                         animatingWaveform = false
                         return@launch
                     }
-                    // Produce a clearly-visible animated pattern while waiting for FFT.
                     phase += 0.18f
-                    val animated = List(16) { i ->
-                        val base = 0.10f + 0.35f * (kotlin.math.sin(phase + i * 0.55f) * 0.5f + 0.5f)
-                        base.coerceIn(0f, 1f)
+                    // The fallback pattern: when real FFT data exists but the
+                    // background decode hasn't caught up to the playback
+                    // position yet, use the song's OWN latest spectrum as an
+                    // anchor and pulse it gently — the wave still looks like
+                    // the song instead of an unrelated generic sine (the
+                    // "turns generic after a while" bug). Plain sine only when
+                    // no frames have been computed at all.
+                    val animated: List<Float> = if (anchor != null) {
+                        val mags = anchor.magnitudes
+                        List(mags.size.coerceAtLeast(1)) { i ->
+                            val base = mags.getOrNull(i) ?: 0f
+                            val mod = 0.8f + 0.25f * kotlin.math.sin(phase * 1.6f + i * 0.8f).toFloat()
+                            (base * mod + 0.04f).coerceIn(0f, 1f)
+                        }
+                    } else {
+                        List(16) { i ->
+                            val base = 0.10f + 0.35f * (kotlin.math.sin(phase + i * 0.55f) * 0.5f + 0.5f)
+                            base.coerceIn(0f, 1f)
+                        }
                     }
                     synchronized(framesLock) {
                         if (animatingWaveform) {

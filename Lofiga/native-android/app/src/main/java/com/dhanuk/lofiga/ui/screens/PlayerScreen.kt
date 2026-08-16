@@ -9,6 +9,7 @@ import android.content.Intent
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -725,31 +726,35 @@ private fun PresetsRow(
             }
             customPresets.forEach { preset ->
                 val isSelected = selectedCustomPresetId == preset.id
-                FilterChip(
-                    selected = isSelected,
-                    // Tap + long-press handled by the combinedClickable modifier
-                    // below (long-press = delete). Keep onClick a no-op so the
-                    // action isn't fired twice.
-                    onClick = {},
-                    label = { Text(preset.name, style = MaterialTheme.typography.labelMedium) },
-                    shape = RoundedCornerShape(20.dp),
-                    modifier = Modifier.combinedClickable(
-                        onClick = { viewModel.applyCustomPreset(preset) },
-                        onLongClick = { presetToDelete = preset }
-                    ),
-                    colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = IndigoContainer,
-                        selectedLabelColor = colors.accent,
-                        containerColor = colors.surface,
-                        labelColor = colors.textPrimary
-                    ),
-                    border = FilterChipDefaults.filterChipBorder(
-                        borderColor = colors.outline,
-                        selectedBorderColor = colors.accent.copy(alpha = 0.3f),
-                        enabled = true,
-                        selected = isSelected
+                // Custom chip: NOT a FilterChip. FilterChip consumes the tap
+                // gesture itself (even with a no-op onClick), so the outer
+                // combinedClickable's onClick never fired — tap applied nothing
+                // and long-press delete was the only gesture that worked. A
+                // plain Box chip passes taps/long-press straight through, so
+                // apply (tap) and delete (long-press) both fire reliably.
+                // Visually matches the sibling FilterChips.
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(if (isSelected) IndigoContainer else colors.surface)
+                        .border(
+                            width = 1.dp,
+                            color = if (isSelected) colors.accent.copy(alpha = 0.3f) else colors.outline,
+                            shape = RoundedCornerShape(20.dp)
+                        )
+                        .combinedClickable(
+                            onClick = { viewModel.applyCustomPreset(preset) },
+                            onLongClick = { presetToDelete = preset }
+                        )
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        preset.name,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = if (isSelected) colors.accent else colors.textPrimary
                     )
-                )
+                }
             }
         }
     }
