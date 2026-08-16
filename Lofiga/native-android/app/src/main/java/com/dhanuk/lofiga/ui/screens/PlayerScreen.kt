@@ -684,7 +684,13 @@ private fun PresetsRow(
                 Icon(Icons.Outlined.AutoAwesome, contentDescription = null, tint = colors.textPrimary, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(6.dp))
                 Text("Presets", style = MaterialTheme.typography.labelMedium, color = colors.textTertiary, fontWeight = FontWeight.SemiBold)
-                if (currentPreset == LofiPreset.Custom) {
+                // Save is offered only for DIRTY custom values: any slider
+                // tweak flips currentPreset to Custom and clears
+                // selectedCustomPresetId. Applying ANY preset (built-in or
+                // custom) — including right after saving a new custom preset —
+                // makes the loaded values match a known preset, so the chip
+                // stays hidden until the user touches a value again.
+                if (currentPreset == LofiPreset.Custom && selectedCustomPresetId == null) {
                     Spacer(Modifier.width(8.dp))
                     AssistChip(
                         onClick = onSavePreset,
@@ -708,7 +714,18 @@ private fun PresetsRow(
                 FilterChip(
                     selected = currentPreset == preset,
                     onClick = { viewModel.applyPreset(preset) },
-                    label = { Text(preset.displayName, style = MaterialTheme.typography.labelMedium) },
+                    label = {
+                        // Long built-in preset names could push the row past
+                        // its bounds before scroll kicked in; cap the width
+                        // and ellipsize.
+                        Text(
+                            preset.displayName,
+                            style = MaterialTheme.typography.labelMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.widthIn(max = 140.dp)
+                        )
+                    },
                     shape = RoundedCornerShape(20.dp),
                     colors = FilterChipDefaults.filterChipColors(
                         selectedContainerColor = IndigoContainer,
@@ -749,10 +766,16 @@ private fun PresetsRow(
                         .padding(horizontal = 16.dp, vertical = 10.dp),
                     contentAlignment = Alignment.Center
                 ) {
+                    // Same guard as built-in chips: without maxLines + width
+                    // cap, long names made the chip tall/wide and the row
+                    // overflowed onto the section above.
                     Text(
                         preset.name,
                         style = MaterialTheme.typography.labelMedium,
-                        color = if (isSelected) colors.accent else colors.textPrimary
+                        color = if (isSelected) colors.accent else colors.textPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.widthIn(max = 140.dp)
                     )
                 }
             }
