@@ -103,7 +103,7 @@ jobs:
           APK=${{ github.workspace }}/Lofiga/native-android/app/build/outputs/apk/release/app-release.apk
           ZIPALIGN=$(ls "$ANDROID_SDK_ROOT"/build-tools/*/zipalign 2>/dev/null | sort -V | tail -1)
           echo "=== 16KB alignment check (Android 15+ page-size requirement) ==="
-          "$ZIPALIGN" -c -P 16 "$APK" && echo "OK: native libs are 16KB-aligned" || { echo "FAIL: native libs not aligned to 16KB"; exit 1; }
+          "$ZIPALIGN" -c -P 16 4 "$APK" && echo "OK: native libs are 16KB-aligned" || { echo "FAIL: native libs not aligned to 16KB"; exit 1; }
 
       - name: Upload AAB Artifact
         uses: actions/upload-artifact@v4
