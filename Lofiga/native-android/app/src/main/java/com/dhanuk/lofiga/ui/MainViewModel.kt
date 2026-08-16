@@ -505,6 +505,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) { 
 
     fun saveCurrentConfig() {
         val track = _currentTrack.value ?: return
+        // Only add to "Your Remixes" when the user actually adjusted effect
+        // or atmosphere values. Just applying a preset (built-in or custom)
+        // should NOT create a remix entry.
+        if (_currentPreset.value != LofiPreset.Custom || _selectedCustomPresetId.value != null) {
+            _snackbarMessage.tryEmit("Adjust an effect or atmosphere slider first")
+            return
+        }
         viewModelScope.launch {
             repository.saveConfig(
                 SavedConfig(
