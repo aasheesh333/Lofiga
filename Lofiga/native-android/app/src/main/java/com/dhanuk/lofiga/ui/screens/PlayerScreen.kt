@@ -119,33 +119,17 @@ fun PlayerScreen(
                 }
             }
             viewModel.clearExportedFilePath()
-            // Post-export ad (replaces the old "remove ads" popup): an auto
-            // rewarded ad pays the user 15 minutes of ad-free listening — no
-            // prompt, it just runs. Gated so that >= 2 minutes pass between
-            // any two ad impressions; skipped entirely while an ad-free
-            // window is active. If the rewarded ad is unavailable (fill or
-            // load failure), fall back to an interstitial for this slot.
+            // Post-export ad (replaces the old "remove ads" popup): a plain
+            // auto interstitial — pure ad revenue, no reward attached. It
+            // intentionally does NOT unlock ad-free: ad-free time is earned
+            // ONLY from the Settings screen ("Watch ad to unlock ad-free",
+            // 15 minutes per rewarded ad). Gated so that >= 2 minutes pass
+            // between any two ad impressions; skipped entirely while an
+            // ad-free window is active.
             fun showPostExportAds() {
                 if (AdManager.isAdFree.value) return
                 if (System.currentTimeMillis() - AdManager.lastAdShownMs() < AdManager.MIN_INTERSTITIAL_INTERVAL) return
-                context.findActivity()?.let { act ->
-                    AdManager.showRewarded(
-                        activity = act,
-                        bypassCooldown = true,
-                        onRewarded = { AdManager.grantAdFree(15 * 60 * 1000L) },
-                        onDismissed = {
-                            // No reward earned: fall back to the interstitial for
-                            // this single slot ONLY when the rewarded ad itself
-                            // never showed (fill/load failure = lastAdShownMs
-                            // unchanged). If the user closed it early, no extra ad.
-                            if (!AdManager.isAdFree.value &&
-                                System.currentTimeMillis() - AdManager.lastAdShownMs() >= AdManager.MIN_INTERSTITIAL_INTERVAL
-                            ) {
-                                context.findActivity()?.let { a -> AdManager.showInterstitial(a) {} }
-                            }
-                        }
-                    )
-                }
+                context.findActivity()?.let { act -> AdManager.showInterstitial(act) {} }
             }
             showPostExportAds()
         }

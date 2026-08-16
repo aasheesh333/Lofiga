@@ -159,11 +159,11 @@ fun SettingsScreen(
             // ════════════════════════════════════════════════════════════════════
             SettingsSection("ADS") {
                 ActionRow(
-                    title = if (isAdFree) "Ad-free active" else "Remove ads for 30 minutes",
+                    title = if (isAdFree) "Ad-free active" else "Watch ad to unlock ad-free",
                     subtitle = if (isAdFree) {
-                        "Ads are hidden. Watch 2 ads to extend by 30 min."
+                        "Ads are hidden. Each rewarded ad adds 15 more minutes."
                     } else {
-                        "Watch 2 short ads to remove ads for 30 minutes"
+                        "Each rewarded ad you watch unlocks 15 minutes of ad-free listening"
                     }
                 ) {
                     TextButton(
