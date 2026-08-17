@@ -1,0 +1,44 @@
+name: Sign Verify Package (OPPO/Vivo)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  sign-verify:
+    name: Sign empty verify package with release key
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: "zulu"
+          java-version: "17"
+
+      - name: Decode Keystore
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > release.keystore
+
+      - name: Download empty signature package
+        run: |
+          curl -sL -o OppoSignVerify.apk "https://developers.oppomobile.com/static/files/OppoSignVerify.apk"
+          ls -la OppoSignVerify.apk
+
+      - name: Sign with release key
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          KEY_ALIAS: "mykey"
+        run: |
+          jarsigner -keystore release.keystore \
+            -storepass "$KEYSTORE_PASSWORD" \
+            -keypass "$KEY_PASSWORD" \
+            -sigalg SHA256withRSA -digestalg SHA-256 \
+            OppoSignVerify.apk "$KEY_ALIAS"
+          jarsigner -verify -certs OppoSignVerify.apk | head -5
+
+      - name: Upload signed package
+        uses: actions/upload-artifact@v4
+        with:
+          name: OppoSignVerify-signed
+          path: OppoSignVerify.apk
