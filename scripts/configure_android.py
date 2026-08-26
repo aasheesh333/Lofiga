@@ -26,9 +26,11 @@ try:
         content = re.sub(r'minSdkVersion\s*flutter.minSdkVersion', 'minSdkVersion 24', content)
         content = re.sub(r'targetSdkVersion\s*flutter.targetSdkVersion', 'targetSdkVersion 35', content)
 
-    # Append Signing Config
-    # Check if we already appended (basic check)
-    if 'signingConfigs {' not in content or 'storeFile = file("../../release.keystore")' not in content:
+    # Append Signing Config only if the project has none already
+    # (app/build.gradle.kts already defines signingConfigs backed by
+    # android/key.properties; appending a second block breaks Gradle with
+    # "SigningConfig with name 'release' already exists").
+    if 'signingConfigs {' not in content:
         print("Appending signing config...")
         
         content_kotlin = '''

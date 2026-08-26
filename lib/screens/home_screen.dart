@@ -97,28 +97,21 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       bool permissionStatus = false;
       
       if (Platform.isAndroid) {
-        // 1. Check all forms of storage permission
-        if (await Permission.audio.isGranted || 
-            await Permission.manageExternalStorage.isGranted || 
+        // MediaStore (on_audio_query) needs READ_MEDIA_AUDIO on Android 13+
+        // or READ_EXTERNAL_STORAGE on Android 12 and below.
+        if (await Permission.audio.isGranted ||
             await Permission.storage.isGranted) {
           permissionStatus = true;
         } else {
-          // 2. Request Audio Permission for Android 13+
+          // 1. Ask for the granular audio permission (Android 13+).
           final audioStatus = await Permission.audio.request();
           if (audioStatus.isGranted) {
             permissionStatus = true;
           } else {
-            // 3. Request All Storage (manageExternalStorage) for Android 11-12
-            // This will open a settings toggle page on Android 11+ and might do a system popup on Android 10-
-            final manageStatus = await Permission.manageExternalStorage.request();
-            if (manageStatus.isGranted) {
+            // 2. Fallback to scoped-storage read permission (Android 12 and below).
+            final storageStatus = await Permission.storage.request();
+            if (storageStatus.isGranted) {
               permissionStatus = true;
-            } else {
-              // 4. Fallback to normal storage request (for Android 10 and below, or emulators)
-              final storageStatus = await Permission.storage.request();
-              if (storageStatus.isGranted) {
-                permissionStatus = true;
-              }
             }
           }
         }

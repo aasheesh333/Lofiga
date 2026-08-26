@@ -9,7 +9,7 @@ on:
 
 jobs:
   build:
-    name: Build All Platforms
+    name: Build Android Release (APK + AAB)
     runs-on: ubuntu-latest
     timeout-minutes: 60
 
@@ -44,26 +44,43 @@ jobs:
       - name: Install Dependencies
         run: flutter pub get
 
-      - name: Setup Keystore (Android)
+      # Sign with the real upload keystore (same key already registered on
+      # Google Play). app/build.gradle.kts reads android/key.properties.
+      - name: Decode Keystore & Configure Signing
         run: |
-          keytool -genkeypair -v -keystore release.keystore \
-            -alias lofiga -keyalg RSA -keysize 2048 -validity 10000 \
-            -storepass lofiga2024 -keypass lofiga2024 \
-            -dname "CN=Lofiga,O=Lofiga,C=US"
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > "$GITHUB_WORKSPACE/android/release.keystore"
+          cat > "$GITHUB_WORKSPACE/android/key.properties" <<EOF
+          storeFile=$GITHUB_WORKSPACE/android/release.keystore
+          storePassword=${{ secrets.KEYSTORE_PASSWORD }}
+          keyAlias=mykey
+          keyPassword=${{ secrets.KEY_PASSWORD }}
+          EOF
+          keytool -list -keystore "$GITHUB_WORKSPACE/android/release.keystore" \
+            -storepass "${{ secrets.KEYSTORE_PASSWORD }}" | head -8
 
       - name: Make Gradlew Executable
         run: chmod +x android/gradlew
 
-      - name: Configure Android Signing & SDK Versions
+      - name: Configure Android SDK Versions
+        run: python3 scripts/configure_android.py
 
-        run: |
-          python3 scripts/configure_android.py
-
-      - name: Build APK (Demo Signed)
+      - name: Build APK (Signed)
         run: flutter build apk --release
 
       - name: Build AAB (Signed)
         run: flutter build appbundle --release
+
+      - name: Verify Signing Certificate
+        run: |
+          APK=build/app/outputs/flutter-apk/app-release.apk
+          "$ANDROID_HOME"/build-tools/*/apksigner verify --print-certs "$APK" 2>/dev/null \
+            | grep -i "SHA-256" || jarsigner -verify -certs "$APK" | head -10
+
+      - name: Verify 16KB Page-Size Alignment
+        run: |
+          APK=build/app/outputs/flutter-apk/app-release.apk
+          ZIPALIGN=$(ls "$ANDROID_HOME"/build-tools/*/zipalign 2>/dev/null | sort -V | tail -1)
+          "$ZIPALIGN" -c -P 16 4 "$APK" && echo "OK: 16KB-aligned" || { echo "FAIL: not 16KB-aligned"; exit 1; }
 
       - name: Upload Android APK
         uses: actions/upload-artifact@v4
@@ -76,69 +93,3 @@ jobs:
         with:
           name: app-release.aab
           path: build/app/outputs/bundle/release/app-release.aab
-
-      - name: Build iOS (IPA - No CodeSign)
-        # Note: 'flutter build ios' requires MacOS.
-        # Since we are on ubuntu-latest, we cannot build iOS app directly using xcodebuild.
-        # However, we can try to use 'flutter build ios --release --no-codesign' if tools allow,
-        # BUT xcodebuild is not available on Linux.
-        # FIX: We must use a matrix or separate job for iOS if we want IPA.
-        # For this single job on Linux, we can only build Android.
-        # I will split the jobs.
-        run: echo "Skipping iOS on Linux runner"
-
-  build-ios:
-    name: Build iOS IPA
-    runs-on: macos-latest
-    timeout-minutes: 60
-
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version: "3.x"
-          channel: "stable"
-          cache: true
-
-      - name: Cache pub dependencies
-        uses: actions/cache@v4
-        with:
-          path: ~/.pub-cache
-          key: ${{ runner.os }}-pub-${{ hashFiles('**/pubspec.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-pub-
-
-      - name: Install Dependencies
-        run: flutter pub get
-
-      - name: Update Pod Specs
-        working-directory: ios
-        run: |
-          pod repo update
-
-      - name: Configure iOS Project for No-CodeSign Build
-        run: |
-          # Use Python to safely modify project.pbxproj to silence signing errors
-          python3 scripts/configure_ios.py
-
-      - name: Build iOS (No Codesign)
-        run: |
-          export CODE_SIGNING_ALLOWED=NO
-          export CODE_SIGNING_REQUIRED=NO
-          export CODE_SIGN_IDENTITY=""
-          flutter build ios --release --no-codesign
-
-      - name: Package IPA
-        run: |
-          mkdir Payload
-          mv build/ios/iphoneos/Runner.app Payload/
-          zip -r App.ipa Payload
-
-      - name: Upload iOS Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: App.ipa
-          path: App.ipa
